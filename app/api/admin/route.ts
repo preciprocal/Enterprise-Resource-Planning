@@ -43,13 +43,45 @@ function isAuthorised(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!isAuthorised(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
-  try {
-    const snap  = await getDb().collection("users").get();
-    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return NextResponse.json({ users });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+
+  const action = req.nextUrl.searchParams.get("action") ?? "users";
+
+  // ── users ──────────────────────────────────────────────────────────────────
+  if (action === "users") {
+    try {
+      const snap  = await getDb().collection("users").get();
+      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return NextResponse.json({ users });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
   }
+
+  // ── analytics — fetch real behavioural data from Firestore ─────────────────
+  if (action === "analytics") {
+    try {
+      const db = getDb();
+
+      // Run all collection fetches in parallel
+      const [interviewsSnap, feedbackSnap, resumesSnap, transcriptsSnap] = await Promise.all([
+        db.collection("interviews").orderBy("createdAt", "desc").get(),
+        db.collection("feedback").orderBy("createdAt", "desc").get(),
+        db.collection("resumes").orderBy("createdAt", "desc").get(),
+        db.collection("transcripts").orderBy("createdAt", "desc").get(),
+      ]);
+
+      const interviews  = interviewsSnap.docs.map(d  => ({ id: d.id,  ...d.data() }));
+      const feedbacks   = feedbackSnap.docs.map(d    => ({ id: d.id,  ...d.data() }));
+      const resumes     = resumesSnap.docs.map(d     => ({ id: d.id,  ...d.data() }));
+      const transcripts = transcriptsSnap.docs.map(d => ({ id: d.id,  ...d.data() }));
+
+      return NextResponse.json({ interviews, feedbacks, resumes, transcripts });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
 }
 
 // ─── POST — multiplex actions ─────────────────────────────────────────────────

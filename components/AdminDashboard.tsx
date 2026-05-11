@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
 import { User, AnalyticsData, USAGE_FIELDS, CODE_REFS, useIsMobile } from "./admin/admin-shared";
 import OverviewTab  from "./admin/OverviewTab";
 import UsersTab     from "./admin/UsersTab";
@@ -56,7 +56,8 @@ export default function AdminDashboard() {
   const [planF,    setPlanF]    = useState("all");
   const [sortF,    setSortF]    = useState("createdAt");
   const [sortD,    setSortD]    = useState<"asc" | "desc">("desc");
-  const [showRefs, setShowRefs] = useState(false);
+  const [showRefs,   setShowRefs]   = useState(false);
+  const [loadError,  setLoadError]  = useState("");
 
   // ── Filtered list ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -143,27 +144,18 @@ export default function AdminDashboard() {
   // ── Load users ────────────────────────────────────────────────────────────
   const loadUsers = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const secret = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
       const res = await fetch("/api/admin?action=users", {
         headers: secret ? { "x-admin-secret": secret } : {},
         cache: "no-store",
       });
-      if (res.ok) {
-        const { users: data } = await res.json() as { users: User[] };
-        setUsers(data);
-      } else {
-        // Fallback: read directly from Firebase client SDK
-        const snap = await getDocs(collection(getDb(), "users"));
-        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
-      }
-    } catch {
-      try {
-        const snap = await getDocs(collection(getDb(), "users"));
-        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
-      } catch (e2) {
-        alert("Firebase error: " + (e2 as Error).message);
-      }
+      const json = await res.json() as { users?: User[]; error?: string };
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setUsers(json.users ?? []);
+    } catch (e) {
+      setLoadError((e as Error).message);
     }
     setLoading(false);
   }, []);
@@ -183,7 +175,8 @@ export default function AdminDashboard() {
         body: JSON.stringify({ id, data: rest }),
       });
       if (!res.ok) {
-        await updateDoc(doc(getDb(), "users", id), { ...rest, updatedAt: new Date().toISOString() });
+        const errJson = await res.json() as { error?: string };
+        throw new Error(errJson.error ?? `HTTP ${res.status}`);
       }
       setUsers(p => p.map(u => (u.id === id ? { ...editUser } : u)));
       setMsg("✓ Saved");
@@ -316,6 +309,20 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Error banner */}
+        {loadError && (
+          <div className="shrink-0 mx-4 my-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-3">
+            <svg width="14" height="14" fill="none" stroke="#F43F5E" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-semibold text-rose-700">Failed to load users: </span>
+              <span className="text-sm text-rose-600">{loadError}</span>
+            </div>
+            <button onClick={loadUsers} className="shrink-0 text-xs font-semibold text-rose-700 border border-rose-300 bg-white rounded-md px-2.5 py-1 cursor-pointer hover:bg-rose-50">
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Page content */}
         <div className="flex-1 flex overflow-hidden">
           {nav === "overview"  && <OverviewTab  analytics={analytics} users={users} loading={loading} />}
@@ -331,7 +338,7 @@ export default function AdminDashboard() {
             />
           )}
           {nav === "stripe"    && <StripeTab    analytics={analytics} users={users} loading={loading} />}
-          {nav === "analytics" && <AnalyticsTab analytics={analytics} users={users} loading={loading} />}
+          {nav === "analytics" && <AnalyticsTab users={users} loading={loading} />}
         </div>
       </div>
 
