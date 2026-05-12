@@ -8,13 +8,12 @@ import {
   inputCls, selectCls,
 } from "./admin-shared";
 
-interface Props { analytics: AnalyticsData | null; users: User[]; loading: boolean; }
+interface Props { analytics: AnalyticsData | null; users: User[]; loading: boolean; token?: string; }
 
-function apiCall(action: string, payload: Record<string, unknown>) {
-  const secret = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
+function apiCall(action: string, payload: Record<string, unknown>, token = "") {
   return fetch("/api/admin", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(secret ? { "x-admin-secret": secret } : {}) },
+    headers: { "Content-Type": "application/json", ...(token ? { "x-admin-secret": token } : {}) },
     body: JSON.stringify({ action, ...payload }),
   });
 }
@@ -31,7 +30,7 @@ function ToastBanner({ toast }: { toast: Toast | null }) {
   );
 }
 
-function PlanEditorPanel({ user, onSaved, isMobile }: { user: User; onSaved:(u:User)=>void; isMobile:boolean }) {
+function PlanEditorPanel({ user, onSaved, isMobile, token = "" }: { user: User; onSaved:(u:User)=>void; isMobile:boolean; token?: string }) {
   const sub = user.subscription ?? {};
   const [priceId,setPriceId]         = useState(() => {
     // Try to match current plan, fall back to Pro Monthly so banner starts informative
@@ -55,7 +54,7 @@ function PlanEditorPanel({ user, onSaved, isMobile }: { user: User; onSaved:(u:U
       if (periodEnd)   sd.periodEnd   = fromDateInput(periodEnd);
       if (trialEnd)    sd.trialEnd    = fromDateInput(trialEnd);
       if (cancelEoP)   sd.cancelAtPeriodEnd = true;
-      const res  = await apiCall("stripe_update", { id: user.id, stripeData: sd });
+      const res  = await apiCall("stripe_update", { id: user.id, stripeData: sd }, token);
       const json = await res.json() as { success?:boolean; error?:string; subscription?:Record<string,unknown> };
       if (!res.ok || json.error) throw new Error(json.error ?? "Unknown error");
       onSaved({ ...user, subscription: { ...user.subscription, ...json.subscription } });
@@ -109,7 +108,7 @@ function PlanEditorPanel({ user, onSaved, isMobile }: { user: User; onSaved:(u:U
   );
 }
 
-function CouponPanel({ user, onDone }: { user:User; onDone:(m:string)=>void }) {
+function CouponPanel({ user, onDone, token = "" }: { user:User; onDone:(m:string)=>void; token?: string }) {
   const [code,setCode]       = useState("");
   const [working,setWorking] = useState(false);
   const [err,setErr]         = useState("");
@@ -117,7 +116,7 @@ function CouponPanel({ user, onDone }: { user:User; onDone:(m:string)=>void }) {
     if (!code.trim()) { setErr("Enter a coupon or promo code"); return; }
     setWorking(true); setErr("");
     try {
-      const res  = await apiCall("apply_coupon", { id: user.id, couponCode: code.trim() });
+      const res  = await apiCall("apply_coupon", { id: user.id, couponCode: code.trim() }, token);
       const json = await res.json() as { success?:boolean; error?:string; applied?:string };
       if (!res.ok || json.error) throw new Error(json.error ?? "Unknown error");
       onDone(`Coupon "${json.applied}" applied`); setCode("");
@@ -145,7 +144,7 @@ function CouponPanel({ user, onDone }: { user:User; onDone:(m:string)=>void }) {
   );
 }
 
-function ContactPanel({ user, onDone }: { user:User; onDone:(m:string)=>void }) {
+function ContactPanel({ user, onDone, token = "" }: { user:User; onDone:(m:string)=>void; token?: string }) {
   const email = user.email ?? "";
   const name  = user.name  ?? "there";
 
@@ -267,7 +266,7 @@ Or simply reply to this email with your thoughts. I read every response personal
     if (!subject.trim()||!body.trim()) { setErr("Subject and body are required"); return; }
     setWorking(true); setErr("");
     try {
-      const res  = await apiCall("contact_email", { id:user.id, subject, body, toEmail:email, toName:name });
+      const res  = await apiCall("contact_email", { id:user.id, subject, body, toEmail:email, toName:name }, token);
       const json = await res.json() as { success?:boolean; error?:string; draft?:boolean };
       if (!res.ok||json.error) throw new Error(json.error??"Unknown error");
       onDone(json.draft ? "Email drafted (add RESEND_API_KEY to send)" : `Email sent to ${email}`);
@@ -360,7 +359,7 @@ Or simply reply to this email with your thoughts. I read every response personal
   );
 }
 
-export default function StripeTab({ analytics, users, loading }: Props) {
+export default function StripeTab({ analytics, users, loading, token = "" }: Props) {
   const isMobile = useIsMobile();
   const [search,setSearch]             = useState("");
   const [planFilter,setPlanFilter]     = useState("all");
@@ -540,9 +539,9 @@ export default function StripeTab({ analytics, users, loading }: Props) {
                 ))}
               </div>
               <Card>
-                {activePanel==="plan"    && <><CardTitle>Change Plan & Dates</CardTitle><PlanEditorPanel user={selectedUser} onSaved={u=>{setSelectedUser(u);showToast("Plan updated in Stripe + Firebase");}} isMobile={isMobile} /></>}
-                {activePanel==="coupon"  && <><CardTitle>Apply Discount Coupon</CardTitle><CouponPanel user={selectedUser} onDone={msg=>showToast(msg)} /></>}
-                {activePanel==="contact" && <><CardTitle>Contact User</CardTitle><ContactPanel user={selectedUser} onDone={msg=>showToast(msg)} /></>}
+                {activePanel==="plan"    && <><CardTitle>Change Plan & Dates</CardTitle><PlanEditorPanel user={selectedUser} onSaved={u=>{setSelectedUser(u);showToast("Plan updated in Stripe + Firebase");}} isMobile={isMobile} token={token} /></>}
+                {activePanel==="coupon"  && <><CardTitle>Apply Discount Coupon</CardTitle><CouponPanel user={selectedUser} onDone={msg=>showToast(msg)} token={token} /></>}
+                {activePanel==="contact" && <><CardTitle>Contact User</CardTitle><ContactPanel user={selectedUser} onDone={msg=>showToast(msg)} token={token} /></>}
               </Card>
               <Card>
                 <CardTitle>Current Subscription</CardTitle>

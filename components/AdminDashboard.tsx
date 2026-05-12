@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
+
+// Module-level cache — survives tab switches, cleared on manual Refresh
+let _usersCache: import("./admin/admin-shared").User[] | null = null;
+let _cacheTime = 0;
+const CACHE_TTL = 60_000; // 1 minute
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { User, AnalyticsData, USAGE_FIELDS, CODE_REFS, useIsMobile } from "./admin/admin-shared";
@@ -44,7 +49,7 @@ const NAV = [
 ];
 
 // ═════════════════════════════════════════════════════════════════════════════
-export default function AdminDashboard() {
+export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: () => void; token?: string }) {
   const isMobile = useIsMobile();
 
   const [nav,      setNav]      = useState("overview");
@@ -142,23 +147,30 @@ export default function AdminDashboard() {
   }, [users]);
 
   // ── Load users ────────────────────────────────────────────────────────────
-  const loadUsers = useCallback(async () => {
+  const loadUsers = useCallback(async (force = false) => {
+    // Serve from cache if fresh and not a forced refresh
+    if (!force && _usersCache && Date.now() - _cacheTime < CACHE_TTL) {
+      setUsers(_usersCache);
+      return;
+    }
     setLoading(true);
     setLoadError("");
     try {
-      const secret = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
       const res = await fetch("/api/admin?action=users", {
-        headers: secret ? { "x-admin-secret": secret } : {},
+        headers: token ? { "x-admin-secret": token } : {},
         cache: "no-store",
       });
       const json = await res.json() as { users?: User[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      setUsers(json.users ?? []);
+      const data = json.users ?? [];
+      _usersCache = data;
+      _cacheTime  = Date.now();
+      setUsers(data);
     } catch (e) {
       setLoadError((e as Error).message);
     }
     setLoading(false);
-  }, []);
+  }, [token]);
 
   // Auto-load on mount
   useState(() => { void loadUsers(); });
@@ -168,10 +180,9 @@ export default function AdminDashboard() {
     setSaving(true); setMsg("");
     try {
       const { id, ...rest } = editUser;
-      const secret = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
       const res = await fetch("/api/admin", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(secret ? { "x-admin-secret": secret } : {}) },
+        headers: { "Content-Type": "application/json", ...(token ? { "x-admin-secret": token } : {}) },
         body: JSON.stringify({ id, data: rest }),
       });
       if (!res.ok) {
@@ -274,7 +285,7 @@ export default function AdminDashboard() {
             </button>
           )}
 
-          <button onClick={loadUsers} disabled={loading}
+          <button onClick={() => { _usersCache = null; void loadUsers(true); }} disabled={loading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-600 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
             <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
               style={{ animation: loading ? "spin .7s linear infinite" : "none" }}>
@@ -286,6 +297,17 @@ export default function AdminDashboard() {
           <span className="hidden sm:inline-flex text-[11px] bg-green-50 text-green-700 px-2.5 py-1 rounded-full font-semibold border border-green-200 shrink-0">
             {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}
           </span>
+
+          {/* Logout */}
+          <button onClick={() => { sessionStorage.removeItem("admin_token"); onLogout?.(); }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-500 cursor-pointer hover:bg-gray-50 hover:text-rose-500 hover:border-rose-200 transition-colors shrink-0">
+            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            {!isMobile && "Logout"}
+          </button>
         </div>
 
         {/* Code refs drawer */}
@@ -317,7 +339,7 @@ export default function AdminDashboard() {
               <span className="text-sm font-semibold text-rose-700">Failed to load users: </span>
               <span className="text-sm text-rose-600">{loadError}</span>
             </div>
-            <button onClick={loadUsers} className="shrink-0 text-xs font-semibold text-rose-700 border border-rose-300 bg-white rounded-md px-2.5 py-1 cursor-pointer hover:bg-rose-50">
+            <button onClick={() => { _usersCache = null; void loadUsers(true); }} className="shrink-0 text-xs font-semibold text-rose-700 border border-rose-300 bg-white rounded-md px-2.5 py-1 cursor-pointer hover:bg-rose-50">
               Retry
             </button>
           </div>
@@ -337,8 +359,8 @@ export default function AdminDashboard() {
               saving={saving}   msg={msg}
             />
           )}
-          {nav === "stripe"    && <StripeTab    analytics={analytics} users={users} loading={loading} />}
-          {nav === "analytics" && <AnalyticsTab users={users} loading={loading} />}
+          {nav === "stripe"    && <StripeTab    analytics={analytics} users={users} loading={loading} token={token} />}
+          {nav === "analytics" && <AnalyticsTab users={users} loading={loading} token={token} />}
         </div>
       </div>
 

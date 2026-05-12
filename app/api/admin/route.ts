@@ -8,19 +8,24 @@ import Stripe from "stripe";
 
 // ─── Firebase Admin ───────────────────────────────────────────────────────────
 
-function getAdminApp(): App {
-  const existing = getApps().find(a => a.name === "adm-server");
-  if (existing) return existing;
-  return initializeApp({
-    credential: cert({
-      projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-      privateKey:  process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    }),
-  }, "adm-server");
-}
+// Module-level singletons — survive across requests in the same Node.js process
+let _app: App | null = null;
+let _db: ReturnType<typeof getFirestore> | null = null;
 
-const getDb = () => getFirestore(getAdminApp());
+function getDb() {
+  if (_db) return _db;
+  if (!_app) {
+    _app = getApps().find(a => a.name === "adm-server") ?? initializeApp({
+      credential: cert({
+        projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+        privateKey:  process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+    }, "adm-server");
+  }
+  _db = getFirestore(_app);
+  return _db;
+}
 
 // ─── Stripe ───────────────────────────────────────────────────────────────────
 
@@ -50,8 +55,30 @@ export async function GET(req: NextRequest) {
   if (action === "users") {
     try {
       const snap  = await getDb().collection("users").get();
-      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      return NextResponse.json({ users });
+      // Only send fields the dashboard actually uses — avoids huge payloads
+      const users = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id:           d.id,
+          name:         data.name,
+          email:        data.email,
+          provider:     data.provider,
+          isAdmin:      data.isAdmin,
+          createdAt:    data.createdAt,
+          updatedAt:    data.updatedAt,
+          lastLogin:    data.lastLogin,
+          lastContactedAt:    data.lastContactedAt,
+          lastContactSubject: data.lastContactSubject,
+          subscription: data.subscription,
+          usage:        data.usage,
+        };
+      });
+      return NextResponse.json({ users }, {
+        headers: {
+          // Cache for 30s on the edge, revalidate in background
+          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        },
+      });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -62,20 +89,41 @@ export async function GET(req: NextRequest) {
     try {
       const db = getDb();
 
-      // Run all collection fetches in parallel
-      const [interviewsSnap, feedbackSnap, resumesSnap, transcriptsSnap] = await Promise.all([
-        db.collection("interviews").orderBy("createdAt", "desc").get(),
-        db.collection("feedback").orderBy("createdAt", "desc").get(),
-        db.collection("resumes").orderBy("createdAt", "desc").get(),
-        db.collection("transcripts").orderBy("createdAt", "desc").get(),
+      // Fetch only the fields AnalyticsTab actually uses — real field names from the codebase
+      const [interviewsSnap, feedbackSnap, resumesSnap, plansSnap] = await Promise.all([
+        // interviews: userId, role, type, techstack, company, status, finalized, createdAt, score
+        db.collection("interviews")
+          .select("userId","role","type","techstack","company","status","finalized","createdAt","score","level","duration")
+          .limit(1000).get(),
+
+        // feedback: userId, interviewId, totalScore, categoryScores, createdAt
+        db.collection("feedback")
+          .select("userId","interviewId","totalScore","categoryScores","createdAt")
+          .limit(1000).get(),
+
+        // resumes: userId, jobTitle, companyName, status, score, createdAt
+        db.collection("resumes")
+          .select("userId","jobTitle","companyName","status","score","createdAt")
+          .limit(1000).get(),
+
+        // interviewPlans: userId, createdAt (planner usage)
+        db.collection("interviewPlans")
+          .select("userId","createdAt","status")
+          .limit(500).get(),
       ]);
 
-      const interviews  = interviewsSnap.docs.map(d  => ({ id: d.id,  ...d.data() }));
-      const feedbacks   = feedbackSnap.docs.map(d    => ({ id: d.id,  ...d.data() }));
-      const resumes     = resumesSnap.docs.map(d     => ({ id: d.id,  ...d.data() }));
-      const transcripts = transcriptsSnap.docs.map(d => ({ id: d.id,  ...d.data() }));
+      const pick = (snap: FirebaseFirestore.QuerySnapshot) =>
+        snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      return NextResponse.json({ interviews, feedbacks, resumes, transcripts });
+      return NextResponse.json(
+        {
+          interviews:  pick(interviewsSnap),
+          feedbacks:   pick(feedbackSnap),
+          resumes:     pick(resumesSnap),
+          plans:       pick(plansSnap),
+        },
+        { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } }
+      );
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }

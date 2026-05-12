@@ -1,45 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import AdminDashboard from "@/components/AdminDashboard";
+import { useState, useEffect } from "react";
 
-type AuthState = "checking" | "authed" | "unauthed";
-
-export default function Home() {
-  // Lazy initialiser runs once on client — no effect needed
-  const [auth, setAuth] = useState<AuthState>(() => {
-    if (typeof window === "undefined") return "checking";
-    return sessionStorage.getItem("admin_token") ? "authed" : "unauthed";
-  });
-  const token = typeof window !== "undefined" ? sessionStorage.getItem("admin_token") ?? "" : "";
-
-  // ── Checking (brief flash while sessionStorage is read) ───────────────────
-  if (auth === "checking") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-7 h-7 rounded-full border-[2.5px] border-gray-200 border-t-indigo-500 animate-spin" />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  // ── Not logged in — show inline login form ────────────────────────────────
-  if (auth === "unauthed") {
-    return <LoginGate onSuccess={() => setAuth("authed")} />;
-  }
-
-  // ── Logged in — show dashboard ────────────────────────────────────────────
-  return <AdminDashboard token={token} onLogout={() => {
-    sessionStorage.removeItem("admin_token");
-    setAuth("unauthed");
-  }} />;
-}
-
-// ─── Inline login gate (no redirect, no router) ───────────────────────────────
-function LoginGate({ onSuccess }: { onSuccess: () => void }) {
+export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
+  const [shake,    setShake]    = useState(false);
+
+  // Read ?from= lazily — safe because this only runs on the client
+  const from = typeof window !== "undefined"
+    ? (new URLSearchParams(window.location.search).get("from") ?? "/")
+    : "/";
+
+  // Auto-focus on mount
+  useEffect(() => {
+    document.getElementById("pw-input")?.focus();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,14 +30,15 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ password }),
       });
-      const json = await res.json() as { success?: boolean; token?: string; error?: string };
+      const json = await res.json() as { success?: boolean; error?: string };
 
-      if (res.ok && json.token) {
-        sessionStorage.setItem("admin_token", json.token);
-        onSuccess();
+      if (res.ok && json.success) {
+        window.location.href = from;
       } else {
         setError(json.error ?? "Invalid password");
         setPassword("");
+        setShake(true);
+        setTimeout(() => setShake(false), 600);
       }
     } catch {
       setError("Network error — please try again");
@@ -77,7 +55,12 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; }
         body { margin: 0; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes shake {
+          0%,100% { transform: translateX(0); }
+          20%,60%  { transform: translateX(-6px); }
+          40%,80%  { transform: translateX(6px); }
+        }
+        .shake { animation: shake 0.45s ease; }
       `}</style>
 
       <div className="w-full max-w-sm">
@@ -92,32 +75,34 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
             </svg>
           </div>
           <h1 className="text-[22px] font-extrabold text-gray-900 tracking-tight">Preciprocal</h1>
-          <p className="text-[11px] font-semibold text-gray-400 mt-1 uppercase" style={{ letterSpacing: "0.12em" }}>
+          <p className="text-[11px] font-semibold text-gray-400 mt-1 uppercase tracking-[0.12em]">
             Admin Dashboard
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-7">
-          <h2 className="text-[15px] font-bold text-gray-900 mb-1">Sign in to continue</h2>
-          <p className="text-xs text-gray-400 mb-6">Restricted to authorised admins only.</p>
+        <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-7 ${shake ? "shake" : ""}`}>
+          <div className="mb-5">
+            <h2 className="text-[15px] font-bold text-gray-900">Sign in to continue</h2>
+            <p className="text-xs text-gray-400 mt-1">This dashboard is restricted to authorised admins only.</p>
+          </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
             <div>
               <label
-                htmlFor="pw"
+                htmlFor="pw-input"
                 className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
                 Admin Password
               </label>
               <input
-                id="pw"
+                id="pw-input"
                 type="password"
                 value={password}
                 onChange={e => { setPassword(e.target.value); setError(""); }}
                 placeholder="••••••••••••"
                 autoComplete="current-password"
-                autoFocus
-                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-indigo-400 transition-all placeholder:text-gray-300"
+                spellCheck={false}
+                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 bg-white outline-none transition-all placeholder:text-gray-300"
                 style={{ fontFamily: "inherit" }}
               />
             </div>
@@ -136,7 +121,7 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
             <button
               type="submit"
               disabled={loading || !password.trim()}
-              className="w-full py-2.5 rounded-xl text-sm font-bold text-white border-none cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-2.5 rounded-xl text-sm font-bold text-white border-none cursor-pointer flex items-center justify-center gap-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
               style={{ background: "linear-gradient(135deg,#6366F1,#8B5CF6)" }}>
               {loading ? (
                 <>
