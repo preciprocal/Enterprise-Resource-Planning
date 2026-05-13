@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
+import Image from "next/image";
 
 // Module-level cache — survives tab switches, cleared on manual Refresh
 let _usersCache: import("./admin/admin-shared").User[] | null = null;
@@ -222,15 +223,18 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
         <aside className="w-[200px] bg-white border-r border-gray-100 flex flex-col shrink-0 h-screen sticky top-0">
           {/* Logo */}
           <div className="px-4 py-[18px] border-b border-gray-100 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: "linear-gradient(135deg,#6366F1,#8B5CF6)" }}>
-              <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="2.2" viewBox="0 0 24 24">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-              </svg>
+            <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0 bg-white flex items-center justify-center">
+              <Image
+                src="/logo.png"
+                alt="Preciprocal"
+                width={28}
+                height={28}
+                priority
+                style={{ objectFit: "contain", width: "100%", height: "100%" }}
+              />
             </div>
             <div>
               <div className="text-[13px] font-extrabold text-gray-900 tracking-tight leading-tight">Preciprocal</div>
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Admin</div>
             </div>
           </div>
 
