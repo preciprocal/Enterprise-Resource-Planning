@@ -44,7 +44,7 @@ function isAuthorised(req: NextRequest): boolean {
   return req.headers.get("x-admin-secret") === secret;
 }
 
-// ─── GET — list users ─────────────────────────────────────────────────────────
+// ─── GET — list users + analytics ─────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   if (!isAuthorised(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
@@ -55,7 +55,6 @@ export async function GET(req: NextRequest) {
   if (action === "users") {
     try {
       const snap  = await getDb().collection("users").get();
-      // Only send fields the dashboard actually uses — avoids huge payloads
       const users = snap.docs.map(d => {
         const data = d.data();
         return {
@@ -74,42 +73,36 @@ export async function GET(req: NextRequest) {
         };
       });
       return NextResponse.json({ users }, {
-        headers: {
-          // Cache for 30s on the edge, revalidate in background
-          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
-        },
+        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" },
       });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
   }
 
-  // ── analytics — fetch real behavioural data from Firestore ─────────────────
+  // ── analytics — raw behavioural data from Firestore ────────────────────────
   if (action === "analytics") {
     try {
       const db = getDb();
 
-      // Fetch only the fields AnalyticsTab actually uses — real field names from the codebase
+      // Limits bumped — analytics needs more history for cohorts / retention.
+      // If your collections grow past these, switch to nightly snapshot writes.
       const [interviewsSnap, feedbackSnap, resumesSnap, plansSnap] = await Promise.all([
-        // interviews: userId, role, type, techstack, company, status, finalized, createdAt, score
         db.collection("interviews")
           .select("userId","role","type","techstack","company","status","finalized","createdAt","score","level","duration")
-          .limit(1000).get(),
+          .limit(5000).get(),
 
-        // feedback: userId, interviewId, totalScore, categoryScores, createdAt
         db.collection("feedback")
           .select("userId","interviewId","totalScore","categoryScores","createdAt")
-          .limit(1000).get(),
+          .limit(5000).get(),
 
-        // resumes: userId, jobTitle, companyName, status, score, createdAt
         db.collection("resumes")
           .select("userId","jobTitle","companyName","status","score","createdAt")
-          .limit(1000).get(),
+          .limit(5000).get(),
 
-        // interviewPlans: userId, createdAt (planner usage)
         db.collection("interviewPlans")
           .select("userId","createdAt","status")
-          .limit(500).get(),
+          .limit(2000).get(),
       ]);
 
       const pick = (snap: FirebaseFirestore.QuerySnapshot) =>
@@ -124,6 +117,24 @@ export async function GET(req: NextRequest) {
         },
         { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } }
       );
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── analytics-snapshot — precomputed metrics (placeholder for nightly job) ─
+  // For now this is a passthrough that reads from `analytics_snapshots` if
+  // available, else returns 404 so the client falls back to client-side compute.
+  if (action === "analytics_snapshot") {
+    try {
+      const db = getDb();
+      const doc = await db.collection("analytics_snapshots").doc("latest").get();
+      if (!doc.exists) {
+        return NextResponse.json({ error: "No snapshot available" }, { status: 404 });
+      }
+      return NextResponse.json(doc.data(), {
+        headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+      });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -216,12 +227,10 @@ export async function POST(req: NextRequest) {
           subscriptionEndsAt: new Date((upd.current_period_end ?? 0) * 1000).toISOString(),
         };
       } else if (sd.priceId && sd.priceId !== "__free__") {
-        // ── No existing subscription: create one in Stripe from scratch ──────
         const userData2 = userDoc.data() as Record<string, unknown>;
         const userEmail = userData2.email as string | undefined;
         const userName  = userData2.name  as string | undefined;
 
-        // Step 1: get or create a Stripe customer
         let custId = sub.stripeCustomerId as string | undefined;
         if (!custId) {
           const customer = await stripe.customers.create({
@@ -232,7 +241,6 @@ export async function POST(req: NextRequest) {
           custId = customer.id;
         }
 
-        // Step 2: create the subscription
         const createParams: Record<string, unknown> = {
           customer: custId,
           items:    [{ price: sd.priceId }],
@@ -258,7 +266,6 @@ export async function POST(req: NextRequest) {
         if (sd.trialEnd) updatedSub.trialEndsAt = new Date(sd.trialEnd).toISOString();
 
       } else {
-        // Free plan or no priceId — Firebase only
         updatedSub = { plan: sd.plan ?? sub.plan };
       }
 
@@ -293,7 +300,6 @@ export async function POST(req: NextRequest) {
       try {
         const promoCodes = await stripe.promotionCodes.list({ code: couponCode, active: true, limit: 1 });
         if (promoCodes.data.length > 0) {
-          // coupon field is string (coupon ID) in Stripe v17+ SDK types
           const promo = promoCodes.data[0];
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const couponField = (promo as any).coupon;
@@ -303,10 +309,9 @@ export async function POST(req: NextRequest) {
               ? couponField
               : couponCode;
         }
-      } catch { /* fall through — use input directly as coupon ID */ }
+      } catch { /* fall through */ }
 
       if (subId) {
-        // Use discounts array (Stripe v17+); fall back via cast for older SDK types
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await stripe.subscriptions.update(subId, { discounts: [{ coupon: couponId }] } as any);
       } else {
@@ -330,7 +335,7 @@ export async function POST(req: NextRequest) {
 
   // ── 4. Contact user via email ─────────────────────────────────────────────
   if (action === "contact_email") {
-    const { subject, body: emailBody, toEmail, toName } = body as {
+    const { subject, body: emailBody, toEmail, toName: _toName } = body as {
       subject: string; body: string; toEmail: string; toName?: string;
     };
     if (!subject || !emailBody || !toEmail) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 
 // Module-level cache — survives tab switches, cleared on manual Refresh
 let _usersCache: import("./admin/admin-shared").User[] | null = null;
@@ -12,7 +12,7 @@ import { User, AnalyticsData, USAGE_FIELDS, CODE_REFS, useIsMobile } from "./adm
 import OverviewTab  from "./admin/OverviewTab";
 import UsersTab     from "./admin/UsersTab";
 import StripeTab    from "./admin/StripeTab";
-import AnalyticsTab from "./admin/AnalyticsTab";
+import AnalyticsTab   from "./admin/AnalyticsTab";
 
 // ─── Firebase client SDK (standalone — no @/client dependency) ────────────────
 function getDb() {
@@ -147,36 +147,43 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
   }, [users]);
 
   // ── Load users ────────────────────────────────────────────────────────────
-  const loadUsers = useCallback(async (force = false) => {
-    // Serve from cache if fresh and not a forced refresh
-    if (!force && _usersCache && Date.now() - _cacheTime < CACHE_TTL) {
-      setUsers(_usersCache);
-      return;
-    }
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await fetch("/api/admin?action=users", {
+  // Wrapped in queueMicrotask so synchronous setState calls (cache hit branch,
+  // setLoading) don't fire inside the useEffect body — React 19's strict-effect
+  // rule flags that as "calling setState synchronously within an effect".
+  const loadUsers = useCallback((force = false) => {
+    queueMicrotask(() => {
+      // Serve from cache if fresh and not a forced refresh
+      if (!force && _usersCache && Date.now() - _cacheTime < CACHE_TTL) {
+        setUsers(_usersCache);
+        return;
+      }
+      setLoading(true);
+      setLoadError("");
+      fetch("/api/admin?action=users", {
         headers: token ? { "x-admin-secret": token } : {},
         cache: "no-store",
-      });
-      const json = await res.json() as { users?: User[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      const data = json.users ?? [];
-      _usersCache = data;
-      _cacheTime  = Date.now();
-      setUsers(data);
-    } catch (e) {
-      setLoadError((e as Error).message);
-    }
-    setLoading(false);
+      })
+        .then(res => res.json() as Promise<{ users?: User[]; error?: string }>)
+        .then(json => {
+          if (!json.users) throw new Error(json.error ?? "No data");
+          const data = json.users;
+          _usersCache = data;
+          _cacheTime  = Date.now();
+          setUsers(data);
+          setLoading(false);
+        })
+        .catch((e: Error) => {
+          setLoadError(e.message);
+          setLoading(false);
+        });
+    });
   }, [token]);
 
-  // Auto-load on mount
-  useState(() => { void loadUsers(); });
+  // Auto-load after mount
+  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   // ── Save user ─────────────────────────────────────────────────────────────
-  const saveUser = useCallback(async (editUser: User) => {
+  const saveUser = useCallback<(editUser: User) => Promise<void>>(async (editUser) => {
     setSaving(true); setMsg("");
     try {
       const { id, ...rest } = editUser;
@@ -196,7 +203,7 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
       setMsg("✗ " + (e as Error).message);
     }
     setSaving(false);
-  }, []);
+  }, [token]);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -266,7 +273,7 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
         <div className="bg-white border-b border-gray-100 px-4 md:px-6 h-[52px] flex items-center gap-3 shrink-0">
           <div className="flex-1 min-w-0">
             <div className="text-[17px] font-extrabold text-gray-900 tracking-tight">
-              {{ overview: "Overview", users: "Users", stripe: "Stripe", analytics: "Analytics" }[nav]}
+              {({"overview":"Overview","users":"Users","stripe":"Stripe","analytics":"Analytics"} as Record<string,string>)[nav]}
             </div>
             {analytics && !isMobile && (
               <div className="text-[11px] text-gray-400">
@@ -347,7 +354,7 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
 
         {/* Page content */}
         <div className="flex-1 flex overflow-hidden">
-          {nav === "overview"  && <OverviewTab  analytics={analytics} users={users} loading={loading} />}
+          {nav === "overview"  && <OverviewTab  analytics={analytics} users={users} loading={loading} token={token} />}
           {nav === "users"     && (
             <UsersTab
               users={users} filtered={filtered} loading={loading} analytics={analytics}
@@ -360,7 +367,7 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
             />
           )}
           {nav === "stripe"    && <StripeTab    analytics={analytics} users={users} loading={loading} token={token} />}
-          {nav === "analytics" && <AnalyticsTab users={users} loading={loading} token={token} />}
+          {nav === "analytics"  && <AnalyticsTab  users={users} loading={loading} token={token} />}
         </div>
       </div>
 
