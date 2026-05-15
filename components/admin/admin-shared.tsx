@@ -2,6 +2,9 @@
 "use client";
 
 import { useState, useEffect, ReactNode } from "react";
+import { BarChart as MuiBarChart }  from "@mui/x-charts/BarChart";
+import { PieChart  as MuiPieChart } from "@mui/x-charts/PieChart";
+import { LineChart as MuiLineChart } from "@mui/x-charts/LineChart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,89 +64,30 @@ export const PRICE_IDS_MAP: Record<string, { plan: string; billing: string; pric
   "price_1TFjwCQSkS83MGF9xH1bdc1o": { plan: "pro",     billing: "Monthly", price: "$9.99/mo",     label: "Pro Monthly"    },
   "price_1TFjykQSkS83MGF9oczwiyNo": { plan: "pro",     billing: "Annual",  price: "$95.88/yr",    label: "Pro Annual"     },
   "price_1TFjzWQSkS83MGF9YCP7CBk3": { plan: "premium", billing: "Monthly", price: "$24.99/mo",    label: "Premium Monthly"},
-  "price_1TFk0EQSkS83MGF9pPfRehCO": { plan: "premium", billing: "Annual",  price: "$239.88/yr",   label: "Premium Annual" },
+  "price_1TFk0EQSkS83MGF9PfRehCO":  { plan: "premium", billing: "Annual",  price: "$239.88/yr",   label: "Premium Annual" },
 };
-
-// ─── Plan features (matches pricing page) ────────────────────────────────────
 
 export const PLAN_FEATURES: Record<string, { features: string[]; price: string; annualPrice: string; tagline: string; cta: string; popular?: boolean; customPricing?: boolean; securityFeatures?: string[] }> = {
   free: {
     tagline: "Get started and feel the value.",
-    price: "$0",
-    annualPrice: "$0",
-    cta: "Current plan",
-    features: [
-      "2 resume analyses / month",
-      "3 cover letters / month",
-      "1 mock interview / month",
-      "1 LinkedIn optimisation / month",
-      "1 interview debrief / month",
-      "1 cold outreach message / month",
-      "1 find contacts / month",
-      "Job tracker (5 jobs)",
-      "Chrome extension (limited)",
-      "Basic analytics",
-    ],
+    price: "$0", annualPrice: "$0", cta: "Current plan",
+    features: ["2 resume analyses / month","3 cover letters / month","1 mock interview / month","1 LinkedIn optimisation / month","1 interview debrief / month","1 cold outreach message / month","1 find contacts / month","Job tracker (5 jobs)","Chrome extension (limited)","Basic analytics"],
   },
   pro: {
     tagline: "Everything an active job seeker needs.",
-    price: "$9.99/mo",
-    annualPrice: "$95.88/yr",
-    cta: "Start Pro",
-    popular: true,
-    features: [
-      "10 resume analyses / month",
-      "20 cover letters / month",
-      "Unlimited mock interviews",
-      "5 LinkedIn optimisations / month",
-      "5 interview debriefs / month",
-      "5 cold outreach messages / month",
-      "5 find contacts / month",
-      "5 active study plans",
-      "Job tracker (30 jobs)",
-      "Chrome extension (full)",
-      "Resume editor + PDF & Word export",
-      "Recruiter eye simulation",
-      "Full analytics dashboard",
-      "Priority AI responses",
-      "Students: 1 month free — no card needed",
-    ],
+    price: "$9.99/mo", annualPrice: "$95.88/yr", cta: "Start Pro", popular: true,
+    features: ["10 resume analyses / month","20 cover letters / month","Unlimited mock interviews","5 LinkedIn optimisations / month","5 interview debriefs / month","5 cold outreach messages / month","5 find contacts / month","5 active study plans","Job tracker (30 jobs)","Chrome extension (full)","Resume editor + PDF & Word export","Recruiter eye simulation","Full analytics dashboard","Priority AI responses","Students: 1 month free — no card needed"],
   },
   premium: {
     tagline: "Unlimited access for serious candidates.",
-    price: "$24.99/mo",
-    annualPrice: "$239.88/yr",
-    cta: "Start Premium",
-    features: [
-      "Unlimited everything",
-      "Company-specific interview prep",
-      "AI interview coach + deep analysis",
-      "Post-interview improvement roadmap",
-      "All Pro features included",
-      "Priority support (24hr SLA)",
-      "Early access to new features",
-    ],
+    price: "$24.99/mo", annualPrice: "$239.88/yr", cta: "Start Premium",
+    features: ["Unlimited everything","Company-specific interview prep","AI interview coach + deep analysis","Post-interview improvement roadmap","All Pro features included","Priority support (24hr SLA)","Early access to new features"],
   },
   enterprise: {
     tagline: "For teams, hiring pipelines & organisations.",
-    price: "Custom",
-    annualPrice: "Custom",
-    cta: "Contact us",
-    customPricing: true,
-    features: [
-      "Everything in Premium",
-      "Unlimited seats across your org",
-      "Custom AI interview tracks per role",
-      "Dedicated account manager",
-      "Flexible invoice billing",
-    ],
-    securityFeatures: [
-      "End-to-end encryption · Google Cloud secured",
-      "No data selling · Your data stays yours",
-      "GDPR & CCPA ready · Full privacy compliance",
-      "Custom DPA available · On request for universities",
-      "Pricing based on team size & needs",
-    ],
+    price: "Custom", annualPrice: "Custom", cta: "Contact us", customPricing: true,
+    features: ["Everything in Premium","Unlimited seats across your org","Custom AI interview tracks per role","Dedicated account manager","Flexible invoice billing"],
+    securityFeatures: ["End-to-end encryption · Google Cloud secured","No data selling · Your data stays yours","GDPR & CCPA ready · Full privacy compliance","Custom DPA available · On request for universities","Pricing based on team size & needs"],
   },
 };
 
@@ -169,52 +113,11 @@ export const USAGE_FIELDS: { key: keyof Usage; label: string; color: string }[] 
   { key: "jobTrackerUsed",            label: "Job Tracker",   color: "#F97316" },
 ];
 
-// Limits: -1 = unlimited. Matches pricing page exactly.
 export const LIMITS: Record<string, Record<string, number>> = {
-  free: {
-    resumesUsed:               2,   // 2 resume analyses / month
-    coverLettersUsed:          3,   // 3 cover letters / month
-    studyPlansUsed:            0,   // not included
-    interviewsUsed:            1,   // 1 mock interview / month
-    interviewDebriefsUsed:     1,   // 1 interview debrief / month
-    linkedinOptimisationsUsed: 1,   // 1 LinkedIn optimisation / month
-    coldOutreachUsed:          1,   // 1 cold outreach message / month
-    findContactsUsed:          1,   // 1 find contacts / month
-    jobTrackerUsed:            5,   // Job tracker (5 jobs)
-  },
-  pro: {
-    resumesUsed:               10,  // 10 resume analyses / month
-    coverLettersUsed:          20,  // 20 cover letters / month
-    studyPlansUsed:            5,   // 5 active study plans
-    interviewsUsed:            -1,  // Unlimited mock interviews
-    interviewDebriefsUsed:     5,   // 5 interview debriefs / month
-    linkedinOptimisationsUsed: 5,   // 5 LinkedIn optimisations / month
-    coldOutreachUsed:          5,   // 5 cold outreach messages / month
-    findContactsUsed:          5,   // 5 find contacts / month
-    jobTrackerUsed:            30,  // Job tracker (30 jobs)
-  },
-  premium: {
-    resumesUsed:               -1,  // Unlimited everything
-    coverLettersUsed:          -1,
-    studyPlansUsed:            -1,
-    interviewsUsed:            -1,
-    interviewDebriefsUsed:     -1,
-    linkedinOptimisationsUsed: -1,
-    coldOutreachUsed:          -1,
-    findContactsUsed:          -1,
-    jobTrackerUsed:            -1,
-  },
-  enterprise: {
-    resumesUsed:               -1,  // Unlimited everything
-    coverLettersUsed:          -1,
-    studyPlansUsed:            -1,
-    interviewsUsed:            -1,
-    interviewDebriefsUsed:     -1,
-    linkedinOptimisationsUsed: -1,
-    coldOutreachUsed:          -1,
-    findContactsUsed:          -1,
-    jobTrackerUsed:            -1,
-  },
+  free:       { resumesUsed:2, coverLettersUsed:3, studyPlansUsed:0, interviewsUsed:1, interviewDebriefsUsed:1, linkedinOptimisationsUsed:1, coldOutreachUsed:1, findContactsUsed:1, jobTrackerUsed:5 },
+  pro:        { resumesUsed:10, coverLettersUsed:20, studyPlansUsed:5, interviewsUsed:-1, interviewDebriefsUsed:5, linkedinOptimisationsUsed:5, coldOutreachUsed:5, findContactsUsed:5, jobTrackerUsed:30 },
+  premium:    { resumesUsed:-1, coverLettersUsed:-1, studyPlansUsed:-1, interviewsUsed:-1, interviewDebriefsUsed:-1, linkedinOptimisationsUsed:-1, coldOutreachUsed:-1, findContactsUsed:-1, jobTrackerUsed:-1 },
+  enterprise: { resumesUsed:-1, coverLettersUsed:-1, studyPlansUsed:-1, interviewsUsed:-1, interviewDebriefsUsed:-1, linkedinOptimisationsUsed:-1, coldOutreachUsed:-1, findContactsUsed:-1, jobTrackerUsed:-1 },
 };
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -268,8 +171,6 @@ export function daysAgo(s?: string) {
   } catch { return "—"; }
 }
 
-// ─── Shared input classes ─────────────────────────────────────────────────────
-
 export const inputCls  = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 font-[inherit]";
 export const selectCls = inputCls + " cursor-pointer";
 
@@ -293,23 +194,13 @@ export function Avatar({ name, size = 36 }: { name?: string; size?: number }) {
   );
 }
 
-// ─── Chip ─────────────────────────────────────────────────────────────────────
-
 export function Chip({ label, className = "" }: { label: string; className?: string }) {
-  return (
-    <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded whitespace-nowrap ${className}`}>
-      {label}
-    </span>
-  );
+  return <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded whitespace-nowrap ${className}`}>{label}</span>;
 }
-
-// ─── StatusDot ────────────────────────────────────────────────────────────────
 
 export function StatusDot({ color }: { color: string }) {
   return <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />;
 }
-
-// ─── MetricCard ───────────────────────────────────────────────────────────────
 
 export function MetricCard({ label, value, color = "#111827", sub }: { label: string; value: ReactNode; color?: string; sub?: string }) {
   return (
@@ -321,7 +212,7 @@ export function MetricCard({ label, value, color = "#111827", sub }: { label: st
   );
 }
 
-// ─── HBar ─────────────────────────────────────────────────────────────────────
+// ─── HBar (unchanged — it's a progress bar, not a chart) ─────────────────────
 
 export function HBar({ pct, color = "#6366F1", height = 6 }: { pct: number; color?: string; height?: number }) {
   return (
@@ -331,58 +222,160 @@ export function HBar({ pct, color = "#6366F1", height = 6 }: { pct: number; colo
   );
 }
 
-// ─── Donut ────────────────────────────────────────────────────────────────────
+// ─── Shared MUI chart sx overrides ───────────────────────────────────────────
 
-export function Donut({ segments, size = 80, label }: { segments: { color: string; value: number }[]; size?: number; label?: string }) {
-  const r = 32, cx = 50, cy = 50, circ = 2 * Math.PI * r;
-  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
-  const arcs = segments.map((s, i) => {
-    const pre = segments.slice(0, i).reduce((a, seg) => a + seg.value, 0);
-    return { color: s.color, dash: (s.value / total) * circ, off: -(pre / total) * circ };
-  });
+const CHART_SX = {
+  fontFamily: "'Inter',-apple-system,sans-serif",
+  "& .MuiChartsAxis-line":          { stroke: "#F3F4F6" },
+  "& .MuiChartsAxis-tick":          { stroke: "#F3F4F6" },
+  "& .MuiChartsGrid-line":          { stroke: "#F3F4F6", strokeDasharray: "4 4" },
+  "& .MuiChartsTooltip-root":       { fontFamily: "inherit", fontSize: 12, borderRadius: 8, boxShadow: "0 4px 24px rgba(0,0,0,0.10)" },
+  "& .MuiChartsTooltip-table":      { fontFamily: "inherit" },
+  "& .MuiChartsLegend-label":       { fontFamily: "inherit", fontSize: 11 },
+  "& text":                          { fontFamily: "'Inter',-apple-system,sans-serif !important" },
+} as const;
+
+const TICK_STYLE = { fontSize: 9, fill: "#9CA3AF", fontFamily: "'Inter',-apple-system,sans-serif" } as const;
+
+// ─── BarChart — MUI X powered ─────────────────────────────────────────────────
+
+export function BarChart({
+  data, color = "#6366F1", h = 80,
+}: {
+  data: { l: string; v: number }[];
+  color?: string;
+  h?: number;
+}) {
+  if (!data?.length) return null;
   return (
-    <svg viewBox="0 0 100 100" style={{ width: size, height: size, flexShrink: 0 }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F3F4F6" strokeWidth="10" />
-      {arcs.map((a, i) => (
-        <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={a.color} strokeWidth="10"
-          strokeDasharray={`${a.dash} ${circ-a.dash}`} strokeDashoffset={a.off}
-          style={{ transform:"rotate(-90deg)", transformOrigin:"50% 50%" }} />
-      ))}
-      {label && <text x="50" y="50" textAnchor="middle" dominantBaseline="central" fontSize="14" fontWeight="800" fill="#111827">{label}</text>}
-    </svg>
+    <MuiBarChart
+      height={h + 40}
+      series={[{
+        data: data.map(d => d.v),
+        color,
+        valueFormatter: (v: number | null) => String(v ?? 0),
+      }]}
+      xAxis={[{
+        data: data.map(d => d.l),
+        scaleType: "band",
+        tickLabelStyle: TICK_STYLE,
+        tickSize: 0,
+      }]}
+      yAxis={[{
+        tickLabelStyle: { ...TICK_STYLE, fill: "#D1D5DB" },
+        tickSize: 0,
+      }]}
+      margin={{ top: 8, bottom: 28, left: 32, right: 4 }}
+      borderRadius={4}
+      grid={{ horizontal: true }}
+      sx={{ ...CHART_SX, width: "100% !important" }}
+      skipAnimation={false}
+    />
   );
 }
 
-// ─── BarChart ─────────────────────────────────────────────────────────────────
+// ─── Donut — MUI X PieChart powered ──────────────────────────────────────────
 
-export function BarChart({ data, color = "#6366F1", h = 80 }: { data: { l: string; v: number }[]; color?: string; h?: number }) {
-  if (!data?.length) return null;
-  const max = Math.max(...data.map(d => d.v), 1);
-  const labelH = 14;
-  const barArea = h - labelH;
+export function Donut({
+  segments, size = 80, label,
+}: {
+  segments: { color: string; value: number; label?: string }[];
+  size?: number;
+  label?: string;
+}) {
+  const validSegments = segments.filter(s => s.value > 0);
+  if (!validSegments.length) return null;
+
   return (
-    <div className="flex items-end overflow-hidden w-full" style={{ gap: 2, height: h }}>
-      {data.map((d, i) => (
-        <div key={i} className="flex flex-col items-center min-w-0" style={{ flex: 1, gap: 0 }}>
-          <div title={`${d.l}: ${d.v}`} style={{ width:"100%", height: Math.max(2, Math.round((d.v/max)*barArea)), background: d.v===0 ? "#F3F4F6" : color, borderRadius:"3px 3px 0 0", opacity: d.v===0 ? 0.4 : 1, flexShrink: 0 }} />
-          <div className="flex items-center justify-center overflow-hidden w-full" style={{ height: labelH }}>
-            <span className="text-[8px] text-gray-400 text-center truncate block w-full leading-none">{d.l}</span>
-          </div>
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <MuiPieChart
+        series={[{
+          data: validSegments.map((s, i) => ({ id: i, value: s.value, color: s.color, label: s.label })),
+          innerRadius: size * 0.28,
+          outerRadius: size * 0.44,
+          cx: size / 2 - 4,
+          cy: size / 2 - 4,
+          paddingAngle: 2,
+          cornerRadius: 2,
+          highlightScope: { fade: "global", highlight: "item" },
+        }]}
+        width={size}
+        height={size}
+        slots={{ legend: () => null }}
+        margin={{ top: 0, bottom: 0, left: 0, right: 0 }}
+        sx={{ ...CHART_SX, outline: "none" }}
+        skipAnimation={false}
+      />
+      {label && (
+        <div style={{
+          position: "absolute", top: "50%", left: "50%",
+          transform: "translate(-60%, -50%)",
+          fontSize: size * 0.16, fontWeight: 800, color: "#111827",
+          pointerEvents: "none", lineHeight: 1, letterSpacing: "-0.02em",
+        }}>
+          {label}
         </div>
-      ))}
+      )}
     </div>
+  );
+}
+
+// ─── LineChart — MUI X powered ────────────────────────────────────────────────
+
+export function LineChart({
+  data, labels, color = "#6366F1", h = 120, area = false, smooth = true,
+}: {
+  data: number[][];          // one array per series
+  labels: string[];          // x-axis labels
+  colors?: string[];
+  color?: string;
+  h?: number;
+  area?: boolean;
+  smooth?: boolean;
+}) {
+  if (!data?.length || !labels?.length) return null;
+  const colors = ["#6366F1","#10B981","#F59E0B","#EC4899","#0EA5E9","#8B5CF6"];
+  return (
+    <MuiLineChart
+      height={h + 40}
+      series={data.map((d, i) => ({
+        data: d,
+        color: data.length === 1 ? color : colors[i % colors.length],
+        area,
+        curve: smooth ? "catmullRom" : "linear",
+        showMark: false,
+        valueFormatter: (v: number | null) => String(v ?? 0),
+      }))}
+      xAxis={[{
+        data: labels,
+        scaleType: "band",
+        tickLabelStyle: TICK_STYLE,
+        tickSize: 0,
+      }]}
+      yAxis={[{
+        tickLabelStyle: { ...TICK_STYLE, fill: "#D1D5DB" },
+        tickSize: 0,
+      }]}
+      margin={{ top: 8, bottom: 28, left: 32, right: 4 }}
+      grid={{ horizontal: true }}
+      sx={{
+        ...CHART_SX,
+        width: "100% !important",
+        "& .MuiAreaElement-root": { fillOpacity: 0.12 },
+        "& .MuiLineElement-root": { strokeWidth: 2 },
+        "& .MuiMarkElement-root": { display: "none" },
+      }}
+      skipAnimation={false}
+    />
   );
 }
 
 // ─── FRow ─────────────────────────────────────────────────────────────────────
 
 export interface FRowProps {
-  label: string;
-  value?: string | number | boolean | null;
-  mono?: boolean;
-  copyable?: boolean;
-  badgeLabel?: string;
-  badgeClassName?: string;
+  label: string; value?: string | number | boolean | null;
+  mono?: boolean; copyable?: boolean;
+  badgeLabel?: string; badgeClassName?: string;
 }
 
 export function FRow({ label, value, mono, copyable, badgeLabel, badgeClassName }: FRowProps) {
@@ -405,8 +398,6 @@ export function FRow({ label, value, mono, copyable, badgeLabel, badgeClassName 
   );
 }
 
-// ─── CodeRef ──────────────────────────────────────────────────────────────────
-
 export function CodeRef({ k }: { k: string }) {
   const r = CODE_REFS[k];
   if (!r) return null;
@@ -422,7 +413,15 @@ export function CodeRef({ k }: { k: string }) {
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
 
-export function Spinner() {
+export function Spinner({ size }: { size?: number } = {}) {
+  if (size) {
+    return (
+      <div
+        className="rounded-full border-[2px] border-gray-200 border-t-indigo-500 animate-spin shrink-0"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <div className="flex-1 w-full flex flex-col items-center justify-center gap-3 min-h-[240px]">
       <div className="w-7 h-7 rounded-full border-[2.5px] border-gray-200 border-t-indigo-500 animate-spin" />
@@ -431,19 +430,13 @@ export function Spinner() {
   );
 }
 
-// ─── SL — section label ───────────────────────────────────────────────────────
-
 export function SL({ children }: { children: ReactNode }) {
   return <div className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-2.5">{children}</div>;
 }
 
-// ─── Card ─────────────────────────────────────────────────────────────────────
-
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`bg-white border border-gray-100 rounded-xl p-4 md:p-5 ${className}`}>{children}</div>;
 }
-
-// ─── CardTitle ────────────────────────────────────────────────────────────────
 
 export function CardTitle({ children }: { children: ReactNode }) {
   return <div className="text-[15px] font-extrabold text-gray-900 tracking-tight mb-4">{children}</div>;

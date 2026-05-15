@@ -8,7 +8,6 @@ import Stripe from "stripe";
 
 // ─── Firebase Admin ───────────────────────────────────────────────────────────
 
-// Module-level singletons — survive across requests in the same Node.js process
 let _app: App | null = null;
 let _db: ReturnType<typeof getFirestore> | null = null;
 
@@ -44,7 +43,7 @@ function isAuthorised(req: NextRequest): boolean {
   return req.headers.get("x-admin-secret") === secret;
 }
 
-// ─── GET — list users + analytics ─────────────────────────────────────────────
+// ─── GET — multiplex actions ──────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   if (!isAuthorised(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
@@ -73,36 +72,33 @@ export async function GET(req: NextRequest) {
         };
       });
       return NextResponse.json({ users }, {
-        headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" },
+        headers: {
+          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        },
       });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
   }
 
-  // ── analytics — raw behavioural data from Firestore ────────────────────────
+  // ── analytics ─────────────────────────────────────────────────────────────
   if (action === "analytics") {
     try {
       const db = getDb();
 
-      // Limits bumped — analytics needs more history for cohorts / retention.
-      // If your collections grow past these, switch to nightly snapshot writes.
       const [interviewsSnap, feedbackSnap, resumesSnap, plansSnap] = await Promise.all([
         db.collection("interviews")
           .select("userId","role","type","techstack","company","status","finalized","createdAt","score","level","duration")
-          .limit(5000).get(),
-
+          .limit(1000).get(),
         db.collection("feedback")
           .select("userId","interviewId","totalScore","categoryScores","createdAt")
-          .limit(5000).get(),
-
+          .limit(1000).get(),
         db.collection("resumes")
           .select("userId","jobTitle","companyName","status","score","createdAt")
-          .limit(5000).get(),
-
+          .limit(1000).get(),
         db.collection("interviewPlans")
           .select("userId","createdAt","status")
-          .limit(2000).get(),
+          .limit(500).get(),
       ]);
 
       const pick = (snap: FirebaseFirestore.QuerySnapshot) =>
@@ -122,21 +118,36 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── analytics-snapshot — precomputed metrics (placeholder for nightly job) ─
-  // For now this is a passthrough that reads from `analytics_snapshots` if
-  // available, else returns 404 so the client falls back to client-side compute.
-  if (action === "analytics_snapshot") {
+  // ── logs ───────────────────────────────────────────────────────────────────
+  if (action === "logs") {
     try {
-      const db = getDb();
-      const doc = await db.collection("analytics_snapshots").doc("latest").get();
-      if (!doc.exists) {
-        return NextResponse.json({ error: "No snapshot available" }, { status: 404 });
-      }
-      return NextResponse.json(doc.data(), {
-        headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
-      });
+      const db     = getDb();
+      const userId = req.nextUrl.searchParams.get("userId");
+      const type   = req.nextUrl.searchParams.get("type");
+      const limit  = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "500"), 1000);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query: any = db.collection("logs").orderBy("timestamp", "desc").limit(limit);
+      if (userId) query = query.where("userId", "==", userId);
+      if (type)   query = query.where("type",   "==", type);
+
+      const snap = await query.get() as FirebaseFirestore.QuerySnapshot;
+      const logs = snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      return NextResponse.json(
+        { logs },
+        { headers: { "Cache-Control": "private, no-store" } }
+      );
     } catch (err) {
-      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+      // Return empty array rather than 500 if collection doesn't exist yet
+      const msg = (err as Error).message;
+      if (msg.includes("NOT_FOUND") || msg.includes("no index") || msg.includes("collection")) {
+        return NextResponse.json({ logs: [] });
+      }
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
   }
 
@@ -153,8 +164,34 @@ export async function POST(req: NextRequest) {
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const action = (body.action as string) ?? "update";
-  const id     = body.id as string;
-  if (!id) return NextResponse.json({ error: "Missing user id" }, { status: 400 });
+
+  // ── 0. Write log entry ────────────────────────────────────────────────────
+  // Call from your main app on login, action, etc.
+  // e.g. await fetch('/api/admin', { method:'POST', headers:{..., 'x-admin-secret': ADMIN_SECRET},
+  //        body: JSON.stringify({ action:'write_log', log: { userId, type:'login', ... } }) })
+  if (action === "write_log") {
+    const log = body.log as Record<string, unknown>;
+    if (!log || !log.userId || !log.type) {
+      return NextResponse.json({ error: "Missing log.userId or log.type" }, { status: 400 });
+    }
+    try {
+      const entry = {
+        ...log,
+        timestamp: log.timestamp ?? new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      };
+      const ref = await getDb().collection("logs").add(entry);
+      return NextResponse.json({ success: true, id: ref.id });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  // Remaining POST actions require a user id
+  const id = body.id as string;
+  if (!id && action !== "write_log") {
+    return NextResponse.json({ error: "Missing user id" }, { status: 400 });
+  }
 
   // ── 1. Plain Firestore update ──────────────────────────────────────────────
   if (action === "update") {
@@ -195,11 +232,10 @@ export async function POST(req: NextRequest) {
           proration_behavior: "always_invoice",
         };
 
-        if (sd.trialEnd)                   updateParams.trial_end           = Math.floor(new Date(sd.trialEnd).getTime() / 1000);
-        if (sd.cancelAtPeriodEnd !== undefined) updateParams.cancel_at_period_end = sd.cancelAtPeriodEnd;
+        if (sd.trialEnd)                       updateParams.trial_end              = Math.floor(new Date(sd.trialEnd).getTime() / 1000);
+        if (sd.cancelAtPeriodEnd !== undefined) updateParams.cancel_at_period_end  = sd.cancelAtPeriodEnd;
 
         const updated = await stripe.subscriptions.update(subId, updateParams);
-
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const u = updated as any;
         updatedSub = {
@@ -247,14 +283,13 @@ export async function POST(req: NextRequest) {
           payment_behavior: "default_incomplete",
           expand: ["latest_invoice.payment_intent"],
         };
-        if (sd.trialEnd)          createParams.trial_end          = Math.floor(new Date(sd.trialEnd).getTime() / 1000);
+        if (sd.trialEnd)          createParams.trial_end           = Math.floor(new Date(sd.trialEnd).getTime() / 1000);
         if (sd.cancelAtPeriodEnd) createParams.cancel_at_period_end = true;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const created = await (stripe.subscriptions.create as any)(createParams);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const c = created as any;
-
         updatedSub = {
           stripeCustomerId:     custId,
           stripeSubscriptionId: c.id,
@@ -264,7 +299,6 @@ export async function POST(req: NextRequest) {
           currentPeriodEnd:     new Date((c.current_period_end   ?? 0) * 1000).toISOString(),
         };
         if (sd.trialEnd) updatedSub.trialEndsAt = new Date(sd.trialEnd).toISOString();
-
       } else {
         updatedSub = { plan: sd.plan ?? sub.plan };
       }
@@ -305,9 +339,7 @@ export async function POST(req: NextRequest) {
           const couponField = (promo as any).coupon;
           couponId = typeof couponField === "object" && couponField?.id
             ? (couponField.id as string)
-            : typeof couponField === "string"
-              ? couponField
-              : couponCode;
+            : typeof couponField === "string" ? couponField : couponCode;
         }
       } catch { /* fall through */ }
 
@@ -335,7 +367,7 @@ export async function POST(req: NextRequest) {
 
   // ── 4. Contact user via email ─────────────────────────────────────────────
   if (action === "contact_email") {
-    const { subject, body: emailBody, toEmail, toName: _toName } = body as {
+    const { subject, body: emailBody, toEmail, toName } = body as {
       subject: string; body: string; toEmail: string; toName?: string;
     };
     if (!subject || !emailBody || !toEmail) {
