@@ -126,7 +126,7 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
       .then(() => {
         setLoading(true);
         setLoadError("");
-        return fetch("/api/admin?action=users", { headers:token?{"x-admin-secret":token}:{}, cache:"no-store" });
+        return fetch("/api/admin?action=users", { headers:token?{"x-firebase-token":token}:{}, cache:"no-store" });
       })
       .then(res => res.json() as Promise<{users?:User[];error?:string}>)
       .then(json => {
@@ -143,7 +143,7 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
     setSaving(true); setMsg("");
     try {
       const { id, ...rest } = editUser;
-      const res = await fetch("/api/admin", { method:"POST", headers:{"Content-Type":"application/json",...(token?{"x-admin-secret":token}:{})}, body:JSON.stringify({id,data:rest}) });
+      const res = await fetch("/api/admin", { method:"POST", headers:{"Content-Type":"application/json",...(token?{"x-firebase-token":token}:{})}, body:JSON.stringify({id,data:rest}) });
       if (!res.ok) { const e=await res.json() as {error?:string}; throw new Error(e.error??`HTTP ${res.status}`); }
       setUsers(p => p.map(u => u.id===id?{...editUser}:u));
       setMsg("✓ Saved"); setTimeout(()=>setMsg(""),2500);
@@ -166,10 +166,8 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
       {!isMobile && (
         <aside className="w-[200px] bg-white border-r border-gray-100 flex flex-col shrink-0 h-screen sticky top-0">
           <div className="px-4 py-[18px] border-b border-gray-100 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{background:"linear-gradient(135deg,#6366F1,#8B5CF6)"}}>
-              <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            </div>
-            <div><div className="text-[13px] font-extrabold text-gray-900 tracking-tight leading-tight">Preciprocal</div><div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Admin</div></div>
+            <img src="/logo.png" alt="Preciprocal" className="w-7 h-7 rounded-lg object-cover shrink-0" />
+            <div className="text-[13px] font-extrabold text-gray-900 tracking-tight leading-tight">Preciprocal</div>
           </div>
           <nav className="p-2 flex-1 overflow-y-auto">
             {NAV_GROUPS.map(({g,ids}) => (

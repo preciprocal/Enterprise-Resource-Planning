@@ -61,7 +61,7 @@ export default function AnalyticsTab({ users, loading, token = "" }: Props) {
       setError(null);
       try {
         const res = await fetch("/api/admin?action=analytics", {
-          headers: token ? { "x-admin-secret": token } : undefined,
+          headers: token ? { "x-firebase-token": token } : undefined,
         });
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const json = await res.json();

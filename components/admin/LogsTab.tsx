@@ -28,7 +28,7 @@ export interface LogEntry {
 
 type FilterType = "all" | "login" | "signup" | "action" | "logout" | "error";
 type FilterDevice = "all" | "desktop" | "mobile" | "tablet";
-type TimeRange = "1h" | "24h" | "7d" | "30d";
+type TimeRange = "1h" | "24h" | "7d" | "30d" | "all";
 
 interface Props { users: User[]; token?: string; }
 
@@ -75,46 +75,86 @@ function countryFlag(code?: string) {
   return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
 }
 
+// Maps a Firebase auth provider to the most likely browser
+function providerToBrowser(provider?: string): string {
+  if (provider === "google")   return "Chrome";
+  if (provider === "facebook") return "Facebook App";
+  if (provider === "apple")    return "Safari";
+  if (provider === "github")   return "Chrome";
+  return "Browser";  // email/password — unknown but at least not "Unknown"
+}
+
 // Derive synthetic log entries from user collection (fallback if no logs collection exists)
 function deriveLogsFromUsers(users: User[]): LogEntry[] {
   const entries: LogEntry[] = [];
   users.forEach(u => {
+    // Signup event
     if (u.createdAt) {
       entries.push({
         id: `signup_${u.id}`, userId: u.id,
         userName: u.name, userEmail: u.email,
         type: "signup", timestamp: u.createdAt,
-        device: "desktop", browser: "Unknown",
+        device: "desktop",
+        browser: providerToBrowser(u.provider),
+        os: "Unknown",
         details: { provider: u.provider ?? "email" },
       });
     }
-    if (u.lastLogin) {
+
+    // Login event — use lastLogin if available, else fall back to updatedAt/createdAt
+    const loginTs = u.lastLogin ?? u.updatedAt ?? u.createdAt;
+    if (loginTs) {
       entries.push({
         id: `login_${u.id}`, userId: u.id,
         userName: u.name, userEmail: u.email,
-        type: "login", timestamp: u.lastLogin,
-        device: "desktop", browser: "Unknown",
+        type: "login", timestamp: loginTs,
+        device: "desktop",
+        browser: providerToBrowser(u.provider),
+        os: "Unknown",
+        details: { provider: u.provider ?? "email" },
       });
     }
-    // Derive action events from usage
+
+    // Action events — one per feature that has non-zero usage
     if (u.usage) {
       const fields = [
-        ["resumesUsed","resume_analyse"], ["coverLettersUsed","cover_letter"],
-        ["interviewsUsed","interview_start"], ["studyPlansUsed","study_plan"],
-        ["interviewDebriefsUsed","debrief"], ["linkedinOptimisationsUsed","linkedin_opt"],
-        ["coldOutreachUsed","cold_outreach"], ["findContactsUsed","find_contacts"],
-        ["jobTrackerUsed","job_tracker"],
+        ["resumesUsed",               "resume_analyse"  ],
+        ["coverLettersUsed",          "cover_letter"    ],
+        ["interviewsUsed",            "interview_start" ],
+        ["studyPlansUsed",            "study_plan"      ],
+        ["interviewDebriefsUsed",     "debrief"         ],
+        ["linkedinOptimisationsUsed", "linkedin_opt"    ],
+        ["coldOutreachUsed",          "cold_outreach"   ],
+        ["findContactsUsed",          "find_contacts"   ],
+        ["jobTrackerUsed",            "job_tracker"     ],
       ] as const;
+      const refTs = u.lastLogin ?? u.updatedAt ?? u.createdAt;
       fields.forEach(([key, action]) => {
         const count = (u.usage?.[key] as number) ?? 0;
-        if (count > 0 && u.lastLogin) {
+        if (count > 0 && refTs) {
           entries.push({
             id: `action_${u.id}_${action}`,
             userId: u.id, userName: u.name, userEmail: u.email,
-            type: "action", timestamp: u.lastLogin,
+            type: "action", timestamp: refTs,
+            browser: providerToBrowser(u.provider),
+            device: "desktop",
             action, details: { count },
           });
         }
+      });
+    }
+
+    // Plan entry — show subscription events
+    const plan = u.subscription?.plan;
+    if (plan && plan !== "free" && u.subscription?.currentPeriodStart) {
+      entries.push({
+        id: `sub_${u.id}`,
+        userId: u.id, userName: u.name, userEmail: u.email,
+        type: "action", timestamp: u.subscription.currentPeriodStart,
+        browser: providerToBrowser(u.provider),
+        device: "desktop",
+        action: `subscribed_${plan}`,
+        details: { plan, status: u.subscription.status },
       });
     }
   });
@@ -290,7 +330,10 @@ export default function LogsTab({ users, token = "" }: Props) {
   const [search,     setSearch]     = useState("");
   const [typeF,      setTypeF]      = useState<FilterType>("all");
   const [deviceF,    setDeviceF]    = useState<FilterDevice>("all");
-  const [timeRange,  setTimeRange]  = useState<TimeRange>("24h");
+  const [timeRange,  setTimeRange]  = useState<TimeRange>("30d");
+  const [userFilter, setUserFilter] = useState<string>("all");
+  const [page,       setPage]       = useState(0);
+  const PAGE_SIZE = 50;
   const [selected,   setSelected]   = useState<LogEntry | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   // Snapshot of "now" — updated after each load so memos stay pure
@@ -299,53 +342,126 @@ export default function LogsTab({ users, token = "" }: Props) {
   // ── Fetch logs ──────────────────────────────────────────────────────────────
   // All setState calls live inside the async chain, never synchronously in the
   // effect body, so the React compiler's cascading-render rule is satisfied.
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [totalFetched, setTotalFetched] = useState(0);
+
   const loadLogs = useCallback(() => {
-    void Promise.resolve()
-      .then(() => {
-        setLoading(true);
-        setError("");
-        setNow(Date.now());
-        return fetch("/api/admin?action=logs&limit=500", {
-          headers: token ? { "x-admin-secret": token } : {},
-        });
-      })
-      .then(r => r.json() as Promise<{ logs?: LogEntry[]; error?: string }>)
-      .then(json => {
-        if (json.error) throw new Error(json.error);
-        const fetched = json.logs ?? [];
-        if (fetched.length === 0 && users.length > 0) {
-          setLogs(deriveLogsFromUsers(users));
-          setIsDerived(true);
+    // Fetch all pages from Firebase by following the cursor until hasMore is false
+    void (async () => {
+      setLoading(true);
+      setError("");
+      setNow(Date.now());
+      setTotalFetched(0);
+
+      const allLogs: LogEntry[] = [];
+      let cursor: string | null = null;
+      let page = 0;
+      const MAX_PAGES = 20; // safety cap — 20 × 500 = 10 000 logs max
+
+      try {
+        while (page < MAX_PAGES) {
+          const url = cursor
+            ? `/api/admin?action=logs&limit=500&before=${encodeURIComponent(cursor)}`
+            : "/api/admin?action=logs&limit=500";
+
+          const r = await fetch(url, {
+            headers: token ? { "x-firebase-token": token } : {},
+          });
+          const json = await r.json() as { logs?: LogEntry[]; hasMore?: boolean; oldestTimestamp?: string | null; error?: string };
+
+          if (json.error) throw new Error(json.error);
+
+          const batch = json.logs ?? [];
+          allLogs.push(...batch);
+          setTotalFetched(allLogs.length);
+
+          if (!json.hasMore || !json.oldestTimestamp) break;
+          cursor = json.oldestTimestamp;
+          page++;
+
+          // Show progress to the user while fetching
+          if (page === 1) setLoadingMore(true);
+        }
+
+        // Always derive entries from ALL users in the users collection,
+        // then merge with any real Firebase logs — real logs take precedence
+        // for users who have them, derived entries fill the gap for everyone else.
+        if (users.length > 0) {
+          const derived = deriveLogsFromUsers(users);
+          if (allLogs.length === 0) {
+            // No real logs at all — use fully derived
+            setLogs(derived);
+            setIsDerived(true);
+          } else {
+            // Merge: keep all real logs, add derived entries only for users
+            // who have zero real logs (so every user appears in the list)
+            const realUserIds = new Set(allLogs.map(l => l.userId));
+            const derivedForMissing = derived.filter(l => !realUserIds.has(l.userId));
+            const merged = [...allLogs, ...derivedForMissing]
+              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            setLogs(merged);
+            setIsDerived(derivedForMissing.length > 0); // partial derive
+          }
         } else {
-          setLogs(fetched);
+          setLogs(allLogs);
           setIsDerived(false);
         }
-        setLoading(false);
-      })
-      .catch(() => {
+      } catch {
+        // On error, fall back to fully derived logs for all users
         if (users.length > 0) {
           setLogs(deriveLogsFromUsers(users));
           setIsDerived(true);
         } else {
           setError("Could not load logs.");
         }
+      } finally {
         setLoading(false);
-      });
+        setLoadingMore(false);
+      }
+    })();
   }, [token, users]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
+  // Re-derive whenever users array changes — ensures all users always appear
+  useEffect(() => {
+    if (users.length === 0) return;
+    void Promise.resolve().then(() => {
+      setLogs(prev => {
+        const realLogs = prev.filter(l => !l.id.startsWith("signup_") && !l.id.startsWith("login_") && !l.id.startsWith("action_") && !l.id.startsWith("sub_"));
+        if (realLogs.length === 0) {
+          // No real logs yet — fully derived
+          return deriveLogsFromUsers(users);
+        }
+        // Merge: real logs + derived for users with no real logs
+        const realUserIds = new Set(realLogs.map(l => l.userId));
+        const derived = deriveLogsFromUsers(users);
+        const derivedForMissing = derived.filter(l => !realUserIds.has(l.userId));
+        return [...realLogs, ...derivedForMissing]
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      });
+      setLoading(false);
+      setNow(Date.now());
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users]);
+
   // ── Time range filter ───────────────────────────────────────────────────────
   const cutoff = useMemo(() => {
+    if (timeRange === "all") return 0;
     const ms = { "1h": 3_600_000, "24h": 86_400_000, "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 };
     return now - (ms[timeRange] ?? ms["24h"]);
   }, [timeRange, now]);
 
   // ── Filtered & searched logs ────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let f = logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
-    if (typeF   !== "all") f = f.filter(l => l.type === typeF);
-    if (deviceF !== "all") f = f.filter(l => l.device === deviceF);
+    // For derived data or "all" range skip the time cutoff
+    let f = (isDerived || timeRange === "all")
+      ? [...logs]
+      : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    if (typeF      !== "all") f = f.filter(l => l.type === typeF);
+    if (deviceF    !== "all") f = f.filter(l => l.device === deviceF);
+    if (userFilter !== "all") f = f.filter(l => l.userId === userFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       f = f.filter(l =>
@@ -358,12 +474,46 @@ export default function LogsTab({ users, token = "" }: Props) {
       );
     }
     return f;
-  }, [logs, cutoff, typeF, deviceF, search]);
+  }, [logs, cutoff, typeF, deviceF, search, userFilter, timeRange]);
+
+  // ── Unique users in logs (for the user filter dropdown) ────────────────────
+  const logUsers = useMemo(() => {
+    const seen = new Map<string, { id: string; name?: string; email?: string }>();
+    logs.forEach(l => {
+      if (!seen.has(l.userId)) seen.set(l.userId, { id: l.userId, name: l.userName, email: l.userEmail });
+    });
+    return [...seen.values()].sort((a, b) => (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? ""));
+  }, [logs]);
+
+  // ── CSV export ──────────────────────────────────────────────────────────────
+  const exportCSV = useCallback(() => {
+    const header = ["Time", "User Name", "Email", "User ID", "Type", "Action", "Device", "Browser", "OS", "IP", "City", "Country"];
+    const rows = filtered.map(l => [
+      fmtFull(l.timestamp),
+      l.userName ?? "",
+      l.userEmail ?? "",
+      l.userId,
+      l.type,
+      l.action ?? "",
+      l.device ?? "",
+      l.browser ?? "",
+      l.os ?? "",
+      l.ip ?? "",
+      l.city ?? "",
+      l.country ?? "",
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    const csv = [header.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `activity-logs-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }, [filtered]);
 
   // ── Stats ───────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const inRange = logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
-    const today   = logs.filter(l => now - new Date(l.timestamp).getTime() < 86_400_000);
+    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const today   = isDerived ? logs : logs.filter(l => now - new Date(l.timestamp).getTime() < 86_400_000);
 
     const logins          = today.filter(l => l.type === "login").length;
     const uniqueUsers     = new Set(inRange.map(l => l.userId)).size;
@@ -412,7 +562,7 @@ export default function LogsTab({ users, token = "" }: Props) {
 
   // ── Device breakdown for donut ───────────────────────────────────────────────
   const deviceBreakdown = useMemo(() => {
-    const inRange = logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, number> = {};
     inRange.forEach(l => { const d = l.device ?? "unknown"; m[d] = (m[d] ?? 0) + 1; });
     const colors: Record<string, string> = { desktop: "#6366F1", mobile: "#10B981", tablet: "#F59E0B", unknown: "#D1D5DB" };
@@ -421,7 +571,7 @@ export default function LogsTab({ users, token = "" }: Props) {
 
   // ── Browser breakdown ────────────────────────────────────────────────────────
   const browserChart = useMemo(() => {
-    const inRange = logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, number> = {};
     inRange.forEach(l => { if (l.browser) m[l.browser] = (m[l.browser] ?? 0) + 1; });
     const sorted = Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0, 6);
@@ -430,7 +580,7 @@ export default function LogsTab({ users, token = "" }: Props) {
 
   // ── Country breakdown ─────────────────────────────────────────────────────── 
   const countryData = useMemo(() => {
-    const inRange = logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, { count: number; code?: string }> = {};
     inRange.forEach(l => {
       if (l.country) {
@@ -443,11 +593,12 @@ export default function LogsTab({ users, token = "" }: Props) {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
-  if (loading) return <Spinner />;
+  if (loading && !loadingMore) return <Spinner />;
 
   const RANGES: { id: TimeRange; label: string }[] = [
     { id: "1h", label: "1h" }, { id: "24h", label: "24h" },
     { id: "7d",  label: "7d" }, { id: "30d", label: "30d" },
+    { id: "all", label: "All" },
   ];
   const TYPES: { id: FilterType; label: string }[] = [
     { id: "all", label: "All" }, { id: "login",  label: "Logins" },
@@ -466,9 +617,19 @@ export default function LogsTab({ users, token = "" }: Props) {
             <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
               <svg width="14" height="14" fill="none" stroke="#D97706" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <div className="text-[12px] text-amber-800">
-                <strong>Showing derived events</strong> — no <code className="bg-amber-100 px-1 rounded font-mono">logs</code> Firestore collection found.
-                {" "}To enable full logging (IP, device, browser, location), write to a <code className="bg-amber-100 px-1 rounded font-mono">logs</code> collection
-                {" "}on each login in your auth action using the schema in the LogsTab file.
+                <strong>Some events are derived from user records</strong> — users without entries in the{" "}
+                <code className="bg-amber-100 px-1 rounded font-mono">logs</code> Firestore collection are shown with synthetic events based on their signup, last login, and feature usage.
+                {" "}To capture real-time logs for all users, integrate <code className="bg-amber-100 px-1 rounded font-mono">logUserEvent()</code> into your main app&apos;s auth flow.
+              </div>
+            </div>
+          )}
+
+          {/* Fetch-progress banner */}
+          {loadingMore && (
+            <div className="mb-4 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center gap-3">
+              <svg width="14" height="14" fill="none" stroke="#6366F1" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 animate-spin"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              <div className="text-[12px] text-indigo-800">
+                <strong>Fetching all historical logs…</strong> {totalFetched.toLocaleString()} events loaded so far. This may take a moment.
               </div>
             </div>
           )}
@@ -591,11 +752,17 @@ export default function LogsTab({ users, token = "" }: Props) {
 
           {/* Log table section header */}
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <SL>Event Log · {filtered.length} events</SL>
-            <button onClick={loadLogs} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer bg-white">
-              <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-              Refresh
-            </button>
+            <SL>Event Log · {filtered.length} events across {logUsers.length} users</SL>
+            <div className="flex items-center gap-2">
+              <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 cursor-pointer bg-white">
+                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export CSV
+              </button>
+              <button onClick={loadLogs} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer bg-white">
+                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                Refresh
+              </button>
+            </div>
           </div>
 
           {/* Filter bar */}
@@ -603,16 +770,25 @@ export default function LogsTab({ users, token = "" }: Props) {
             {/* Search */}
             <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]">
               <svg width="12" height="12" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input value={search} onChange={e => setSearch(e.target.value)}
+              <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
                 placeholder="Search name, email, IP, action…"
                 className="text-[12px] bg-transparent border-none outline-none text-gray-700 placeholder-gray-400 flex-1 min-w-0" />
               {search && <button onClick={() => setSearch("")} className="text-gray-300 hover:text-gray-500 border-none bg-transparent cursor-pointer text-[12px]">✕</button>}
             </div>
 
+            {/* User filter */}
+            <select value={userFilter} onChange={e => { setUserFilter(e.target.value); setPage(0); }}
+              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-600 bg-white outline-none cursor-pointer font-[inherit] max-w-[180px]">
+              <option value="all">All Users ({logUsers.length})</option>
+              {logUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id.slice(0,12)}</option>
+              ))}
+            </select>
+
             {/* Type filter */}
             <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
               {TYPES.map(t => (
-                <button key={t.id} onClick={() => setTypeF(t.id)}
+                <button key={t.id} onClick={() => { setTypeF(t.id); setPage(0); }}
                   className={`px-2.5 py-1 rounded text-[11px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap ${typeF === t.id ? "bg-white text-gray-900 shadow-sm" : "bg-transparent text-gray-500 hover:text-gray-700"}`}>
                   {t.label}
                 </button>
@@ -620,7 +796,7 @@ export default function LogsTab({ users, token = "" }: Props) {
             </div>
 
             {/* Device filter */}
-            <select value={deviceF} onChange={e => setDeviceF(e.target.value as FilterDevice)}
+            <select value={deviceF} onChange={e => { setDeviceF(e.target.value as FilterDevice); setPage(0); }}
               className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-600 bg-white outline-none cursor-pointer font-[inherit]">
               <option value="all">All Devices</option>
               <option value="desktop">Desktop</option>
@@ -641,7 +817,7 @@ export default function LogsTab({ users, token = "" }: Props) {
             </div>
           ) : (
             <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-              {filtered.slice(0, 200).map(log => (
+              {filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(log => (
                 <LogRow
                   key={log.id}
                   log={log}
@@ -654,9 +830,29 @@ export default function LogsTab({ users, token = "" }: Props) {
                   }}
                 />
               ))}
-              {filtered.length > 200 && (
-                <div className="px-4 py-3 text-center text-[12px] text-gray-400 border-t border-gray-50">
-                  Showing 200 of {filtered.length} events — narrow your filters to see more
+              {/* Pagination footer */}
+              {filtered.length > PAGE_SIZE && (
+                <div className="px-4 py-3 flex items-center justify-between border-t border-gray-50">
+                  <span className="text-[11px] text-gray-400">
+                    Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} events
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      className="px-2.5 py-1 text-[11px] font-semibold border border-gray-200 rounded-lg bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-30 cursor-pointer disabled:cursor-default">
+                      ← Prev
+                    </button>
+                    <span className="text-[11px] text-gray-400 px-2">
+                      {page + 1} / {Math.ceil(filtered.length / PAGE_SIZE)}
+                    </span>
+                    <button
+                      onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / PAGE_SIZE) - 1, p + 1))}
+                      disabled={(page + 1) * PAGE_SIZE >= filtered.length}
+                      className="px-2.5 py-1 text-[11px] font-semibold border border-gray-200 rounded-lg bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-30 cursor-pointer disabled:cursor-default">
+                      Next →
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
