@@ -874,7 +874,7 @@ export async function GET(req: NextRequest) {
               orderBy: [date_ASC]
             ) {
               dimensions { date }
-              sum { requests cachedRequests bytes threats pageViews }
+              sum { requests cachedRequests bytes cachedBytes threats }
               uniq { uniques }
             }
           }
@@ -902,7 +902,6 @@ export async function GET(req: NextRequest) {
         cachedRequests: acc.cachedRequests + (g.sum?.cachedRequests ?? 0),
         bytes:          acc.bytes          + (g.sum?.bytes          ?? 0),
         threats:        acc.threats        + (g.sum?.threats        ?? 0),
-        pageViews:      acc.pageViews      + (g.sum?.pageViews      ?? 0),
         uniques:        acc.uniques        + (g.uniq?.uniques        ?? 0),
       }), { requests: 0, cachedRequests: 0, bytes: 0, threats: 0, pageViews: 0, uniques: 0 });
 
@@ -1268,7 +1267,7 @@ export async function GET(req: NextRequest) {
             orderBy: [date_ASC]
           ) {
             dimensions { date }
-            sum { requests cachedRequests bytes cachedBytes threats pageViews visits }
+            sum { requests cachedRequests bytes cachedBytes threats }
             uniq { uniques }
           }
         }
@@ -1284,7 +1283,7 @@ export async function GET(req: NextRequest) {
       const text = await res.text();
       if (!res.ok) return NextResponse.json({ error: `Cloudflare ${res.status}: ${text.slice(0, 200)}` }, { status: 502 });
 
-      type CFSum   = { requests?: number; cachedRequests?: number; bytes?: number; cachedBytes?: number; threats?: number; pageViews?: number; visits?: number };
+      type CFSum   = { requests?: number; cachedRequests?: number; bytes?: number; cachedBytes?: number; threats?: number };
       type CFGroup = { dimensions?: { date?: string }; sum?: CFSum; uniq?: { uniques?: number } };
       type CFResp  = { data?: { viewer?: { zones?: { httpRequests1dGroups?: CFGroup[] }[] } }; errors?: { message: string }[] };
 
@@ -1299,9 +1298,8 @@ export async function GET(req: NextRequest) {
         cachedBytes:    acc.cachedBytes    + (g.sum?.cachedBytes    ?? 0),
         threats:        acc.threats        + (g.sum?.threats        ?? 0),
         pageViews:      acc.pageViews      + (g.sum?.pageViews      ?? 0),
-        visits:         acc.visits         + (g.sum?.visits         ?? 0),
         uniques:        acc.uniques        + (g.uniq?.uniques        ?? 0),
-      }), { requests: 0, cachedRequests: 0, bytes: 0, cachedBytes: 0, threats: 0, pageViews: 0, visits: 0, uniques: 0 });
+      }), { requests: 0, cachedRequests: 0, bytes: 0, cachedBytes: 0, threats: 0, uniques: 0 });
 
       const cacheRate = totals.requests > 0
         ? Math.round((totals.cachedRequests / totals.requests) * 100)
@@ -1314,7 +1312,6 @@ export async function GET(req: NextRequest) {
           bytes:          totals.bytes,
           cachedBytes:    totals.cachedBytes,
           cacheRate,
-          visits:         totals.visits,
         },
         daily: groups.map(g => ({
           date: g.dimensions?.date,
