@@ -889,7 +889,7 @@ export async function GET(req: NextRequest) {
       const text = await res.text();
       if (!res.ok) throw new Error(`Cloudflare API ${res.status}: ${text.slice(0, 300)}`);
 
-      type CFSum   = { requests?: number; cachedRequests?: number; bytes?: number; threats?: number; pageViews?: number };
+      type CFSum   = { requests?: number; cachedRequests?: number; bytes?: number; cachedBytes?: number; threats?: number };
       type CFGroup = { dimensions?: { date?: string }; sum?: CFSum; uniq?: { uniques?: number } };
       type CFResp  = { data?: { viewer?: { zones?: { httpRequests1dGroups?: CFGroup[] }[] } }; errors?: { message: string }[] };
 
@@ -897,20 +897,23 @@ export async function GET(req: NextRequest) {
       if (json.errors?.length) throw new Error(json.errors.map(e => e.message).join("; "));
 
       const groups = json.data?.viewer?.zones?.[0]?.httpRequests1dGroups ?? [];
-      const totals = groups.reduce((acc, g) => ({
+      const totals = groups.reduce<{
+        requests: number; cachedRequests: number; bytes: number;
+        cachedBytes: number; threats: number; uniques: number;
+      }>((acc, g) => ({
         requests:       acc.requests       + (g.sum?.requests       ?? 0),
         cachedRequests: acc.cachedRequests + (g.sum?.cachedRequests ?? 0),
         bytes:          acc.bytes          + (g.sum?.bytes          ?? 0),
+        cachedBytes:    acc.cachedBytes    + (g.sum?.cachedBytes    ?? 0),
         threats:        acc.threats        + (g.sum?.threats        ?? 0),
         uniques:        acc.uniques        + (g.uniq?.uniques        ?? 0),
-      }), { requests: 0, cachedRequests: 0, bytes: 0, threats: 0, pageViews: 0, uniques: 0 });
+      }), { requests: 0, cachedRequests: 0, bytes: 0, cachedBytes: 0, threats: 0, uniques: 0 });
 
       return {
         requests:        totals.requests,
         bandwidth_bytes: totals.bytes,
         threats:         totals.threats,
         cached_requests: totals.cachedRequests,
-        page_views:      totals.pageViews,
         unique_visitors: totals.uniques,
         period:          `${since} – ${now.toISOString().slice(0, 10)}`,
       };
@@ -1291,13 +1294,15 @@ export async function GET(req: NextRequest) {
       if (json.errors?.length) return NextResponse.json({ error: json.errors.map(e => e.message).join("; ") }, { status: 502 });
 
       const groups = json.data?.viewer?.zones?.[0]?.httpRequests1dGroups ?? [];
-      const totals = groups.reduce((acc, g) => ({
+      const totals = groups.reduce<{
+        requests: number; cachedRequests: number; bytes: number;
+        cachedBytes: number; threats: number; uniques: number;
+      }>((acc, g) => ({
         requests:       acc.requests       + (g.sum?.requests       ?? 0),
         cachedRequests: acc.cachedRequests + (g.sum?.cachedRequests ?? 0),
         bytes:          acc.bytes          + (g.sum?.bytes          ?? 0),
         cachedBytes:    acc.cachedBytes    + (g.sum?.cachedBytes    ?? 0),
         threats:        acc.threats        + (g.sum?.threats        ?? 0),
-        pageViews:      acc.pageViews      + (g.sum?.pageViews      ?? 0),
         uniques:        acc.uniques        + (g.uniq?.uniques        ?? 0),
       }), { requests: 0, cachedRequests: 0, bytes: 0, cachedBytes: 0, threats: 0, uniques: 0 });
 
