@@ -85,8 +85,8 @@ export default function OverviewTab({ analytics, users, loading, token = "" }: P
       if (fltCountry !== "all") params.set("country", fltCountry);
       if (fltDevice  !== "all") params.set("device",  fltDevice);
 
-      fetch(`/api/cloudflare?${params.toString()}`, {
-        headers: token ? { "x-admin-secret": token } : {},
+      fetch(`/api/admin?action=cloudflare&${params.toString()}`, {
+        headers: token ? { "x-firebase-token": token } : {},
       })
         .then(r => r.json() as Promise<{
           adaptive?: boolean;

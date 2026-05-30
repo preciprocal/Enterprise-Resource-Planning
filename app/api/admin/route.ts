@@ -1234,6 +1234,99 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── cloudflare — dedicated endpoint for OverviewTab ─────────────────────────
+  if (action === "cloudflare") {
+    const cfToken  = process.env.CLOUDFLARE_API_TOKEN;
+    const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
+    if (!cfToken || !cfZoneId) {
+      return NextResponse.json({ error: "CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set" }, { status: 400 });
+    }
+
+    const days    = parseInt(req.nextUrl.searchParams.get("days") ?? "7");
+    const country = req.nextUrl.searchParams.get("country") ?? "";
+    const device  = req.nextUrl.searchParams.get("device")  ?? "";
+
+    const now   = new Date();
+    const since = new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
+    const until = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
+
+    // Build filter
+    const filterParts = [`date_geq: "${since}"`, `date_lt: "${until}"`];
+    if (country && country !== "all") filterParts.push(`clientCountryName: "${country}"`);
+    if (device  && device  !== "all") {
+      const deviceMap: Record<string, string> = { desktop: "desktop", mobile: "mobile", tablet: "tablet" };
+      if (deviceMap[device]) filterParts.push(`deviceType: "${deviceMap[device]}"`);
+    }
+    const filter = filterParts.join(", ");
+
+    const gqlQuery = `{
+      viewer {
+        zones(filter: { zoneTag: "${cfZoneId}" }) {
+          httpRequests1dGroups(
+            limit: ${Math.min(days + 1, 31)}
+            filter: { ${filter} }
+            orderBy: [date_ASC]
+          ) {
+            dimensions { date }
+            sum { requests cachedRequests bytes cachedBytes threats pageViews visits }
+            uniq { uniques }
+          }
+        }
+      }
+    }`;
+
+    try {
+      const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
+        body:    JSON.stringify({ query: gqlQuery }),
+      });
+      const text = await res.text();
+      if (!res.ok) return NextResponse.json({ error: `Cloudflare ${res.status}: ${text.slice(0, 200)}` }, { status: 502 });
+
+      type CFSum   = { requests?: number; cachedRequests?: number; bytes?: number; cachedBytes?: number; threats?: number; pageViews?: number; visits?: number };
+      type CFGroup = { dimensions?: { date?: string }; sum?: CFSum; uniq?: { uniques?: number } };
+      type CFResp  = { data?: { viewer?: { zones?: { httpRequests1dGroups?: CFGroup[] }[] } }; errors?: { message: string }[] };
+
+      const json = JSON.parse(text) as CFResp;
+      if (json.errors?.length) return NextResponse.json({ error: json.errors.map(e => e.message).join("; ") }, { status: 502 });
+
+      const groups = json.data?.viewer?.zones?.[0]?.httpRequests1dGroups ?? [];
+      const totals = groups.reduce((acc, g) => ({
+        requests:       acc.requests       + (g.sum?.requests       ?? 0),
+        cachedRequests: acc.cachedRequests + (g.sum?.cachedRequests ?? 0),
+        bytes:          acc.bytes          + (g.sum?.bytes          ?? 0),
+        cachedBytes:    acc.cachedBytes    + (g.sum?.cachedBytes    ?? 0),
+        threats:        acc.threats        + (g.sum?.threats        ?? 0),
+        pageViews:      acc.pageViews      + (g.sum?.pageViews      ?? 0),
+        visits:         acc.visits         + (g.sum?.visits         ?? 0),
+        uniques:        acc.uniques        + (g.uniq?.uniques        ?? 0),
+      }), { requests: 0, cachedRequests: 0, bytes: 0, cachedBytes: 0, threats: 0, pageViews: 0, visits: 0, uniques: 0 });
+
+      const cacheRate = totals.requests > 0
+        ? Math.round((totals.cachedRequests / totals.requests) * 100)
+        : null;
+
+      return NextResponse.json({
+        totals: {
+          uniqueVisitors: totals.uniques,
+          requests:       totals.requests,
+          bytes:          totals.bytes,
+          cachedBytes:    totals.cachedBytes,
+          cacheRate,
+          visits:         totals.visits,
+        },
+        daily: groups.map(g => ({
+          date: g.dimensions?.date,
+          sum:  g.sum,
+        })),
+        adaptive: false,
+      }, { headers: { "Cache-Control": "private, max-age=300" } });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
   return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
 }
 
