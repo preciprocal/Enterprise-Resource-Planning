@@ -15,6 +15,7 @@ import StripeTab    from "./admin/StripeTab";
 import AnalyticsTab from "./admin/AnalyticsTab";
 import EmailTab     from "./admin/EmailTab";
 import LogsTab      from "./admin/LogsTab";
+import UsageTab     from "./admin/UsageTab";
 
 function getDb() {
   const cfg = {
@@ -34,19 +35,20 @@ const NAV = [
   { id: "users",     label: "Users",     icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
   { id: "stripe",    label: "Stripe",    icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> },
   { id: "analytics", label: "Analytics", icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
+  { id: "usage",     label: "Usage",     icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg> },
   { id: "logs",      label: "Logs",      icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 12h6M9 16h6M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l5 5v11a2 2 0 0 1-2 2z"/></svg> },
   { id: "email",     label: "Email",     icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg> },
 ];
 
 const NAV_GROUPS = [
   { g: "Dashboard", ids: ["overview", "users"] },
-  { g: "Data",      ids: ["stripe", "analytics"] },
+  { g: "Data",      ids: ["stripe", "analytics", "usage"] },
   { g: "Tools",     ids: ["logs", "email"] },
 ];
 
 const NAV_TITLES: Record<string, string> = {
   overview: "Overview", users: "Users", stripe: "Stripe",
-  analytics: "Analytics", logs: "Activity Logs", email: "Outlook Inbox",
+  analytics: "Analytics", usage: "API Usage", logs: "Activity Logs", email: "Outlook Inbox",
 };
 
 export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: () => void; token?: string }) {
@@ -165,9 +167,9 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
 
       {!isMobile && (
         <aside className="w-[200px] bg-white border-r border-gray-100 flex flex-col shrink-0 h-screen sticky top-0">
-          <div className="px-4 py-[18px] border-b border-gray-100 flex items-center gap-2.5">
-            <img src="/logo.png" alt="Preciprocal" className="w-7 h-7 rounded-lg object-cover shrink-0" />
-            <div className="text-[13px] font-extrabold text-gray-900 tracking-tight leading-tight">Preciprocal</div>
+          <div className="px-4 py-4 border-b border-gray-100 flex items-center gap-3">
+            <img src="/logo.png" alt="Preciprocal" className="w-9 h-9 rounded-xl object-cover shrink-0" />
+            <div className="text-[14px] font-extrabold text-gray-900 tracking-tight leading-tight">Preciprocal</div>
           </div>
           <nav className="p-2 flex-1 overflow-y-auto">
             {NAV_GROUPS.map(({g,ids}) => (
@@ -228,6 +230,7 @@ export default function AdminDashboard({ onLogout, token = "" }: { onLogout?: ()
           {nav==="users"     && <UsersTab users={users} filtered={filtered} loading={loading} analytics={analytics} search={search} setSearch={setSearch} planF={planF} setPlanF={setPlanF} sortF={sortF} setSortF={setSortF} sortD={sortD} setSortD={setSortD} saveUser={saveUser} saving={saving} msg={msg} />}
           {nav==="stripe"    && <StripeTab    analytics={analytics} users={users} loading={loading} token={token} />}
           {nav==="analytics" && <AnalyticsTab users={users} loading={loading} token={token} />}
+          {nav==="usage"     && <UsageTab     token={token} />}
           {nav==="logs"      && <LogsTab      users={users} token={token} />}
           {nav==="email"     && <EmailTab />}
         </div>
