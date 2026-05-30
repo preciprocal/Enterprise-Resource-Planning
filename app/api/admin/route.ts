@@ -1220,9 +1220,10 @@ export async function GET(req: NextRequest) {
       query = query.limit(limit);
 
       const snap = await query.get() as FirebaseFirestore.QuerySnapshot;
-      let logs = snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({ id: d.id, ...d.data() as Record<string,unknown> }));
-      // Sort client-side desc when userId filter bypassed orderBy
-      if (userId) logs = logs.sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")));
+      type LogDoc = Record<string, unknown> & { id: string };
+      const logs: LogDoc[] = snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
+      // Sort client-side desc when userId filter bypassed orderBy (no composite index needed)
+      if (userId) logs.sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")));
       return NextResponse.json({ logs }, { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
       const msg = (err as Error).message;
