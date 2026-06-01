@@ -611,19 +611,6 @@ export default function LogsTab({ users, token = "" }: Props) {
       {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
-
-          {/* Derived data banner */}
-          {isDerived && (
-            <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-              <svg width="14" height="14" fill="none" stroke="#D97706" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              <div className="text-[12px] text-amber-800">
-                <strong>Some events are derived from user records</strong> — users without entries in the{" "}
-                <code className="bg-amber-100 px-1 rounded font-mono">logs</code> Firestore collection are shown with synthetic events based on their signup, last login, and feature usage.
-                {" "}To capture real-time logs for all users, integrate <code className="bg-amber-100 px-1 rounded font-mono">logUserEvent()</code> into your main app&apos;s auth flow.
-              </div>
-            </div>
-          )}
-
           {/* Fetch-progress banner */}
           {loadingMore && (
             <div className="mb-4 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center gap-3">
