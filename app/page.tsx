@@ -194,7 +194,7 @@ function LoginGate({ verify, onSuccess }: LoginGateProps) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <Image src="/logo.png" alt="Preciprocal" className="w-16 h-16 mb-3 rounded-2xl shadow-lg" />
+          <Image src="/logo.png" alt="Preciprocal" className="w-16 h-16 mb-3 rounded-2xl shadow-lg" width={16} height={16}/>
           <p className="text-[11px] font-semibold text-gray-400 mt-1 uppercase tracking-widest">
             Admin Dashboard
           </p>
