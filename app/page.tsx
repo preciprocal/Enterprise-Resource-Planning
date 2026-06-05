@@ -13,6 +13,7 @@ import {
   browserLocalPersistence,
 } from "firebase/auth";
 import AdminDashboard from "@/components/AdminDashboard";
+import Image from "next/image";
 
 // ─── Firebase Auth — reuse the adm-dashboard app already created in admin.ts,
 //     or create it here if this module loads first.
@@ -193,7 +194,7 @@ function LoginGate({ verify, onSuccess }: LoginGateProps) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo.png" alt="Preciprocal" className="w-16 h-16 mb-3 rounded-2xl shadow-lg" />
+          <Image src="/logo.png" alt="Preciprocal" className="w-16 h-16 mb-3 rounded-2xl shadow-lg" />
           <p className="text-[11px] font-semibold text-gray-400 mt-1 uppercase tracking-widest">
             Admin Dashboard
           </p>

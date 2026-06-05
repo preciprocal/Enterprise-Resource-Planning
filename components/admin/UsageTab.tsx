@@ -18,9 +18,9 @@ interface OpenAIUsage {
 interface ClaudeUsage {
   total_tokens: number; input_tokens: number; output_tokens: number;
   total_requests: number;
-  cost_usd: number | null;       // null when no Admin key — never fake
-  cost_is_estimated?: boolean;   // always false now
-  cost_real?: boolean;           // true only when from cost_report API
+  cost_usd: number | null;
+  cost_is_estimated?: boolean;
+  cost_real?: boolean;
   period: string;
   credit_balance: number | null;
   spend_limit:    number | null;
@@ -80,6 +80,18 @@ interface AllUsage {
   cachedAt?:    string;
 }
 
+// ─── Per-service loading state ────────────────────────────────────────────────
+// Track which individual services are still in-flight after the initial load
+interface ServiceLoadingState {
+  claude:     boolean;
+  openai:     boolean;
+  googleai:   boolean;
+  stripe:     boolean;
+  resend:     boolean;
+  cloudflare: boolean;
+  firebase:   boolean;
+}
+
 // ─── Client cache ─────────────────────────────────────────────────────────────
 const _cache = new Map<string, { data: AllUsage; ts: number }>();
 const TTL = 5 * 60 * 1000;
@@ -119,6 +131,83 @@ function buildMonthOptions() {
   return opts;
 }
 const MONTH_OPTIONS = buildMonthOptions();
+
+// Pre-computed stable heights for the skeleton bar chart (avoids Math.random in render)
+const SKELETON_BAR_HEIGHTS = [38, 52, 29, 61, 44, 33, 56, 47, 22, 64, 41, 35, 58, 26, 50, 43, 30, 62, 48, 37];
+
+// ─── Skeleton shimmer ─────────────────────────────────────────────────────────
+
+function SkeletonLine({ w = "100%", h = 10, className = "" }: { w?: string | number; h?: number; className?: string }) {
+  return (
+    <div
+      className={`rounded animate-pulse bg-gray-100 ${className}`}
+      style={{ width: w, height: h }}
+    />
+  );
+}
+
+function CardSkeleton({ name, icon, color }: { name: string; icon: React.ReactNode; color: string }) {
+  return (
+    <Card>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-white border border-gray-100 shadow-sm">
+            {icon}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[13px] font-bold text-gray-900">{name}</div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
+              <SkeletonLine w={70} h={8} />
+            </div>
+          </div>
+        </div>
+        {/* Spinning indicator */}
+        <div
+          className="w-4 h-4 rounded-full border-2 border-gray-100 animate-spin shrink-0"
+          style={{ borderTopColor: color }}
+        />
+      </div>
+
+      {/* Big stats placeholders */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {[0, 1].map(i => (
+          <div key={i} className="bg-gray-50 rounded-lg p-2.5 flex flex-col items-center gap-1.5">
+            <SkeletonLine w="60%" h={20} />
+            <SkeletonLine w="50%" h={8} />
+          </div>
+        ))}
+      </div>
+
+      {/* Stat rows */}
+      {[0, 1, 2].map(i => (
+        <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+          <SkeletonLine w="35%" h={9} />
+          <SkeletonLine w="25%" h={9} />
+        </div>
+      ))}
+
+      {/* Mini bar chart skeleton */}
+      <div className="mt-4">
+        <SkeletonLine w="40%" h={8} className="mb-2" />
+        <div className="flex items-end gap-0.5 h-16 w-full">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex-1 rounded-t-sm animate-pulse"
+              style={{
+                height: `${SKELETON_BAR_HEIGHTS[i % SKELETON_BAR_HEIGHTS.length]}px`,
+                background: color + "30",
+                animationDelay: `${i * 40}ms`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -217,7 +306,17 @@ function ModelBar({ model, tokens, totalTokens, cost, requests, color }: {
   );
 }
 
-// APICard wrapper — matches original aesthetic exactly
+// Spinning refresh dot shown in card header while that service is loading
+function CardLoadingDot({ color }: { color: string }) {
+  return (
+    <div
+      className="w-3.5 h-3.5 rounded-full border-2 border-gray-100 animate-spin shrink-0"
+      style={{ borderTopColor: color }}
+    />
+  );
+}
+
+// APICard wrapper
 function APICard({
   name, icon, color, status, error, loading, children, headerExtra,
 }: {
@@ -234,17 +333,35 @@ function APICard({
             {icon}
           </div>
           <div>
-            <div className="text-[13px] font-bold text-gray-900">{name}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-[13px] font-bold text-gray-900">{name}</div>
+              {loading && <CardLoadingDot color={color} />}
+            </div>
             {!loading && <StatusPill status={status} />}
-            {loading  && <div className="text-[10px] text-gray-400">Loading…</div>}
+            {loading  && <div className="text-[10px] text-gray-400 mt-0.5">Loading…</div>}
           </div>
         </div>
         {headerExtra && <div className="shrink-0">{headerExtra}</div>}
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-6">
-          <div className="w-5 h-5 rounded-full border-2 border-gray-100 border-t-indigo-500 animate-spin" />
+        // Inline skeleton while data is in-flight (only for subsequent refreshes;
+        // initial skeletons are rendered by CardSkeleton before any data arrives)
+        <div className="space-y-2 py-2">
+          <div className="grid grid-cols-2 gap-2 mb-1">
+            {[0, 1].map(i => (
+              <div key={i} className="bg-gray-50 rounded-lg p-2.5 flex flex-col items-center gap-1.5">
+                <SkeletonLine w="60%" h={18} />
+                <SkeletonLine w="50%" h={8} />
+              </div>
+            ))}
+          </div>
+          {[0, 1, 2].map(i => (
+            <div key={i} className="flex items-center justify-between py-1">
+              <SkeletonLine w="38%" h={9} />
+              <SkeletonLine w="22%" h={9} />
+            </div>
+          ))}
         </div>
       ) : status === "unconfigured" ? (
         <div className="text-[12px] text-gray-400 py-3 text-center">API key not set in environment</div>
@@ -255,7 +372,7 @@ function APICard({
   );
 }
 
-// Expand/collapse toggle for detail rows
+// Expand/collapse toggle
 function ExpandToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   return (
     <button onClick={onToggle}
@@ -271,9 +388,8 @@ function ExpandToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () 
 
 // ─── Individual cards ─────────────────────────────────────────────────────────
 
-function ClaudeCard({ data, error, loading, month, onMonthChange }: {
+function ClaudeCard({ data, error, loading }: {
   data?: ClaudeUsage | null; error?: string; loading: boolean;
-  month: string; onMonthChange: (m: string) => void;
 }) {
   const [selectedModel, setSelectedModel] = useState("all");
   const [expanded, setExpanded] = useState(false);
@@ -297,28 +413,20 @@ function ClaudeCard({ data, error, loading, month, onMonthChange }: {
   const daily    = selectedModel === "all" ? (data?.daily ?? []) : (data?.model_daily?.[selectedModel] ?? []);
   const spendPct = data?.spend_limit ? Math.min(100, Math.round(((data.cost_usd ?? 0) / data.spend_limit) * 100)) : null;
 
-  const headerExtra = (
-    <div className="flex items-center gap-1.5">
-      {realModels.length > 1 && (
-        <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}
-          className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none cursor-pointer font-[inherit] max-w-[110px] truncate">
-          <option value="all">All models</option>
-          {realModels.map(m => (
-            <option key={m.model} value={m.model}>
-              {m.model.replace("claude-", "").replace(/-20\d{6}$/, "")}
-            </option>
-          ))}
-        </select>
-      )}
-      <select value={month} onChange={e => onMonthChange(e.target.value)}
-        className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none cursor-pointer font-[inherit]">
-        {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
+  const headerExtra = realModels.length > 1 && !loading ? (
+    <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}
+      className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none cursor-pointer font-[inherit] max-w-[110px] truncate">
+      <option value="all">All models</option>
+      {realModels.map(m => (
+        <option key={m.model} value={m.model}>
+          {m.model.replace("claude-", "").replace(/-20\d{6}$/, "")}
+        </option>
+      ))}
+    </select>
+  ) : null;
 
   return (
-    <APICard name="Claude (Anthropic)" color="#D97706" status={status} error={error} loading={loading}
+    <APICard name="Claude" color="#D97706" status={status} error={error} loading={loading}
       headerExtra={headerExtra}
       icon={<img src="https://cdn.simpleicons.org/anthropic/D97706" width="20" height="20" alt="Anthropic" />}>
       {data && (
@@ -338,7 +446,6 @@ function ClaudeCard({ data, error, loading, month, onMonthChange }: {
             </div>
           )}
 
-          {/* Credit balance */}
           {data.credit_balance !== null && selectedModel === "all" && (
             <div className="flex items-center justify-between py-1.5 mb-1 bg-amber-50 rounded-lg px-2.5">
               <span className="text-[11px] text-amber-700 font-medium">Credit balance</span>
@@ -346,7 +453,6 @@ function ClaudeCard({ data, error, loading, month, onMonthChange }: {
             </div>
           )}
 
-          {/* Spend limit bar */}
           {spendPct !== null && data.spend_limit != null && selectedModel === "all" && (
             <div className="mb-2">
               <div className="flex justify-between text-[10px] text-gray-400 mb-1">
@@ -365,7 +471,6 @@ function ClaudeCard({ data, error, loading, month, onMonthChange }: {
           <StatRow label="Output tokens" value={fmtNum(dispOut)} />
           {dispReq > 0 && dispCost !== null && <StatRow label="Avg cost / req" value={fmtCost(dispCost / dispReq)} />}
 
-          {/* Daily bar chart */}
           {daily.length > 0 && hasTokens && (
             <>
               <div className="text-[10px] text-gray-400 mt-3 mb-1">
@@ -375,18 +480,15 @@ function ClaudeCard({ data, error, loading, month, onMonthChange }: {
             </>
           )}
 
-          {/* Expandable detail */}
           <ExpandToggle expanded={expanded} onToggle={() => setExpanded(e => !e)} />
           {expanded && (
             <div className="mt-2 pt-2 border-t border-gray-100">
-              {/* Daily cost chart */}
               {daily.length > 0 && daily.some(d => d.cost > 0) && (
                 <>
                   <div className="text-[10px] text-gray-400 mb-1">Daily cost</div>
                   <MiniBarChart data={daily} color="#92400E" valueKey="cost" />
                 </>
               )}
-              {/* Per-model breakdown */}
               {selectedModel === "all" && realModels.length > 0 && hasTokens && (
                 <div className="mt-3">
                   <div className="text-[10px] text-gray-400 mb-1.5">By model</div>
@@ -398,15 +500,13 @@ function ClaudeCard({ data, error, loading, month, onMonthChange }: {
                   ))}
                 </div>
               )}
-              {/* Extra stats */}
               <div className="mt-3">
                 <StatRow label="I/O ratio" value={`${Math.round((dispInp / Math.max(dispTok, 1)) * 100)}% in / ${Math.round((dispOut / Math.max(dispTok, 1)) * 100)}% out`} />
-              {dispCost !== null && dispReq > 0 && <StatRow label="Avg cost / req" value={fmtCost(dispCost / dispReq)} />}
+                {dispCost !== null && dispReq > 0 && <StatRow label="Avg cost / req" value={fmtCost(dispCost / dispReq)} />}
                 <StatRow label="Avg tokens / req" value={dispReq > 0 ? fmtNum(Math.round(dispTok / dispReq)) : "—"} />
                 {daily.length > 0 && <StatRow label="Active days" value={String(daily.filter(d => d.tokens > 0).length)} sub={`of ${daily.length}`} />}
                 {daily.length > 0 && <StatRow label="Peak day"    value={fmtNum(Math.max(...daily.map(d => d.tokens)))} />}
               </div>
-              {/* Setup hint */}
               {!data.has_tracking && data.data_source !== "admin_api" && (
                 <div className="mt-3 px-3 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
                   <div className="text-[11px] font-bold text-indigo-800 mb-1">API key valid ✓ — add usage tracking</div>
@@ -423,9 +523,8 @@ function ClaudeCard({ data, error, loading, month, onMonthChange }: {
   );
 }
 
-function OpenAICard({ data, error, loading, month, onMonthChange, refreshing = false }: {
+function OpenAICard({ data, error, loading }: {
   data?: OpenAIUsage | null; error?: string; loading: boolean;
-  month: string; onMonthChange: (m: string) => void; refreshing?: boolean;
 }) {
   const [selectedModel, setSelectedModel] = useState("all");
   const [expanded, setExpanded] = useState(false);
@@ -448,30 +547,17 @@ function OpenAICard({ data, error, loading, month, onMonthChange, refreshing = f
   const dispCmp  = selectedModel === "all" ? cmp     : Math.round(mTok * cR);
   const daily    = data?.daily ?? [];
 
-  const headerExtra = (
-    <div className="flex items-center gap-1.5">
-      {refreshing && (
-        <svg width="10" height="10" fill="none" stroke="#6366F1" strokeWidth="2" viewBox="0 0 24 24" style={{ animation: "spin .7s linear infinite" }}>
-          <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-        </svg>
-      )}
-      {realModels.length > 1 && (
-        <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}
-          className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none cursor-pointer font-[inherit] max-w-[110px] truncate">
-          <option value="all">All models</option>
-          {realModels.map(m => (
-            <option key={m.model} value={m.model}>
-              {m.model.replace(/^gpt-/, "").replace(/-\d{4}-\d{2}-\d{2}$/, "")}
-            </option>
-          ))}
-        </select>
-      )}
-      <select value={month} onChange={e => onMonthChange(e.target.value)}
-        className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none cursor-pointer font-[inherit]">
-        {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
+  const headerExtra = realModels.length > 1 && !loading ? (
+    <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}
+      className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none cursor-pointer font-[inherit] max-w-[110px] truncate">
+      <option value="all">All models</option>
+      {realModels.map(m => (
+        <option key={m.model} value={m.model}>
+          {m.model.replace(/^gpt-/, "").replace(/-\d{4}-\d{2}-\d{2}$/, "")}
+        </option>
+      ))}
+    </select>
+  ) : null;
 
   return (
     <APICard name="OpenAI" color="#10A37F" status={status} error={error} loading={loading}
@@ -533,13 +619,13 @@ function OpenAICard({ data, error, loading, month, onMonthChange, refreshing = f
 function GoogleAICard({ data, error, loading }: { data?: GoogleAIUsage | null; error?: string; loading: boolean }) {
   const status = !data && !error ? "unconfigured" : error ? "error" : "connected";
   return (
-    <APICard name="Google AI (Gemini)" color="#4285F4" status={status} error={error} loading={loading}
+    <APICard name="Gemini" color="#4285F4" status={status} error={error} loading={loading}
       icon={<img src="https://cdn.simpleicons.org/googlegemini/4285F4" width="20" height="20" alt="Google Gemini" />}>
       {data && (
         <>
           <BigStats items={[
             { label: "Requests",  value: fmtNum(data.total_requests), color: "#4285F4" },
-            { label: "Billed",     value: fmtCost(data.cost_usd),      color: "#1A56DB" },
+            { label: "Billed",    value: fmtCost(data.cost_usd),      color: "#1A56DB" },
           ]} />
           <StatRow label="Input tokens"  value={fmtNum(data.input_tokens)}  sub={data.period} />
           <StatRow label="Output tokens" value={fmtNum(data.output_tokens)} />
@@ -589,7 +675,6 @@ function StripeCard({ data, error, loading }: { data?: StripeUsage | null; error
               <StatRow label="Total charges"  value={String(data.total_charges)} />
               <StatRow label="Net revenue"    value={`$${((data.total_volume - data.refunded) / 100).toFixed(2)}`} />
               <StatRow label="Annual run rate" value={`$${(data.mrr * 12).toFixed(2)}`} />
-              {/* Charge success/fail bar */}
               <div className="mt-2">
                 <div className="text-[10px] text-gray-400 mb-1">Charge success rate</div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
@@ -631,7 +716,6 @@ function ResendCard({ data, error, loading }: { data?: ResendUsage | null; error
           {expanded && (
             <div className="mt-2 pt-2 border-t border-gray-100">
               <StatRow label="Unaccounted" value={String(data.emails_sent - data.emails_delivered - data.emails_bounced - data.emails_complained)} />
-              {/* Funnel */}
               <div className="mt-2">
                 <div className="text-[10px] text-gray-400 mb-1.5">Email funnel</div>
                 {[
@@ -705,12 +789,12 @@ function FirebaseCard({ data, error, loading }: { data?: FirebaseUsage | null; e
   const status = !data && !error ? "unconfigured" : error ? "error" : "connected";
   const cols = Object.entries(data?.collections ?? {}).filter(([, v]) => v > 0).sort(([, a], [, b]) => b - a);
   return (
-    <APICard name="Firebase / Firestore" color="#FFCA28" status={status} error={error} loading={loading}
+    <APICard name="Firebase" color="#FFCA28" status={status} error={error} loading={loading}
       icon={<img src="https://cdn.simpleicons.org/firebase/FFCA28" width="20" height="20" alt="Firebase" />}>
       {data && (
         <>
           <BigStats items={[
-            { label: "Active users", value: fmtNum(data.active_users),  color: "#B45309" },
+            { label: "Active users", value: fmtNum(data.active_users),    color: "#B45309" },
             { label: "Billed",       value: fmtCost(data.estimated_cost), color: "#D97706" },
           ]} />
 
@@ -761,9 +845,9 @@ function SummaryBar({ usage }: { usage: AllUsage }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
       {[
-        { label: "Services connected",  value: `${connected} / 7`,                   color: "#6366F1" },
-        { label: "Total AI cost (mo.)", value: fmtCost(aiCost), color: "#10B981" },
-        { label: "Emails sent",         value: fmtNum(usage.resend?.emails_sent ?? 0),color: "#F59E0B" },
+        { label: "Services connected",  value: `${connected} / 7`,                    color: "#6366F1" },
+        { label: "Total AI cost (mo.)", value: fmtCost(aiCost),                        color: "#10B981" },
+        { label: "Emails sent",         value: fmtNum(usage.resend?.emails_sent ?? 0), color: "#F59E0B" },
         { label: "Config errors",       value: String(errors), color: errors > 0 ? "#EF4444" : "#10B981" },
       ].map(s => (
         <div key={s.label} className="bg-white border border-gray-100 rounded-xl p-4">
@@ -775,22 +859,36 @@ function SummaryBar({ usage }: { usage: AllUsage }) {
   );
 }
 
-// ─── Category filter + status filter (matches original) ───────────────────────
+// Summary bar skeleton shown before any data arrives
+function SummaryBarSkeleton() {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
+          <SkeletonLine w="55%" h={8} />
+          <SkeletonLine w="40%" h={24} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Category / status filter ─────────────────────────────────────────────────
 
 type Category     = "all" | "ai" | "payments" | "infra";
 type StatusFilter = "all" | "connected" | "error";
 type ServiceKey   = "claude" | "openai" | "googleai" | "stripe" | "resend" | "cloudflare" | "firebase";
 
-interface ServiceMeta { key: ServiceKey; name: string; category: "ai" | "payments" | "infra" }
+interface ServiceMeta { key: ServiceKey; name: string; category: "ai" | "payments" | "infra"; color: string; icon: React.ReactNode }
 
 const SERVICES: ServiceMeta[] = [
-  { key: "claude",     name: "Claude",              category: "ai"       },
-  { key: "openai",     name: "OpenAI",               category: "ai"       },
-  { key: "googleai",   name: "Google AI",            category: "ai"       },
-  { key: "stripe",     name: "Stripe",               category: "payments" },
-  { key: "resend",     name: "Resend",               category: "payments" },
-  { key: "cloudflare", name: "Cloudflare",           category: "infra"    },
-  { key: "firebase",   name: "Firebase / Firestore", category: "infra"    },
+  { key: "claude",     name: "Claude",     category: "ai",       color: "#D97706", icon: <img src="https://cdn.simpleicons.org/anthropic/D97706"  width="20" height="20" alt="" /> },
+  { key: "openai",     name: "OpenAI",     category: "ai",       color: "#10A37F", icon: <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg" width="20" height="20" alt="" /> },
+  { key: "googleai",   name: "Gemini",     category: "ai",       color: "#4285F4", icon: <img src="https://cdn.simpleicons.org/googlegemini/4285F4" width="20" height="20" alt="" /> },
+  { key: "stripe",     name: "Stripe",     category: "payments", color: "#635BFF", icon: <img src="https://cdn.simpleicons.org/stripe/635BFF"      width="20" height="20" alt="" /> },
+  { key: "resend",     name: "Resend",     category: "payments", color: "#111827", icon: <img src="https://cdn.simpleicons.org/resend/000000"      width="20" height="20" alt="" /> },
+  { key: "cloudflare", name: "Cloudflare", category: "infra",    color: "#F6821F", icon: <img src="https://cdn.simpleicons.org/cloudflare/F6821F"  width="20" height="20" alt="" /> },
+  { key: "firebase",   name: "Firebase",   category: "infra",    color: "#FFCA28", icon: <img src="https://cdn.simpleicons.org/firebase/FFCA28"    width="20" height="20" alt="" /> },
 ];
 
 function getStatus(usage: AllUsage | null, key: ServiceKey): "connected" | "error" | "unconfigured" {
@@ -805,48 +903,71 @@ function getStatus(usage: AllUsage | null, key: ServiceKey): "connected" | "erro
 export default function UsageTab({ token }: { token?: string }) {
   const [usage,         setUsage]         = useState<AllUsage | null>(null);
   const [loading,       setLoading]       = useState(true);
-  const [openaiLoading, setOpenaiLoading] = useState(false);
+  // Per-service loading — so we can show a spinner in each card independently
+  const [svcLoading, setSvcLoading] = useState<ServiceLoadingState>({
+    claude: true, openai: true, googleai: true, stripe: true,
+    resend: true, cloudflare: true, firebase: true,
+  });
   const [error,         setError]         = useState("");
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [fromCache,     setFromCache]     = useState(false);
   const [category,      setCategory]      = useState<Category>("all");
   const [statusFilter,  setStatusFilter]  = useState<StatusFilter>("all");
   const [search,        setSearch]        = useState("");
-  const [claudeMonth,   setClaudeMonth]   = useState(DEFAULT_MONTH);
-  const [openaiMonth,   setOpenaiMonth]   = useState(DEFAULT_MONTH);
+  const [month, setMonth] = useState(DEFAULT_MONTH);
   const isMobile = useIsMobile();
 
   const authHeaders: Record<string, string> = token ? { "x-firebase-token": token } : {};
 
+  // Mark all services as loading
+  const resetSvcLoading = (val: boolean) =>
+    setSvcLoading({ claude: val, openai: val, googleai: val, stripe: val, resend: val, cloudflare: val, firebase: val });
+
   const load = useCallback((force = false) => {
-    const key = `main:${claudeMonth}`;
+    const key = `main:${month}`;
     const hit = _cache.get(key);
     if (!force && hit && Date.now() - hit.ts < TTL) {
-      setUsage(hit.data); setFromCache(true); setLastRefreshed(new Date(hit.ts)); setLoading(false);
+      setUsage(hit.data);
+      setFromCache(true);
+      setLastRefreshed(new Date(hit.ts));
+      setLoading(false);
+      resetSvcLoading(false);
       return;
     }
-    setLoading(true); setError("");
-    fetch(`/api/admin?action=usage&claudeMonth=${claudeMonth}${force ? "&refresh=1" : ""}`, { headers: authHeaders })
+
+    setLoading(true);
+    setError("");
+    setSvcLoading(s => ({ ...s, claude: true, googleai: true, stripe: true, resend: true, cloudflare: true, firebase: true }));
+
+    fetch(`/api/admin?action=usage&claudeMonth=${month}${force ? "&refresh=1" : ""}`, { headers: authHeaders })
       .then(r => r.json() as Promise<AllUsage & { error?: string }>)
       .then(json => {
         if (json.error) throw new Error(json.error);
         _cache.set(key, { data: json, ts: Date.now() });
-        setUsage(json); setFromCache(json.fromCache ?? false);
-        setLastRefreshed(new Date()); setLoading(false);
+        setUsage(prev => ({ ...json, openai: json.openai ?? prev?.openai ?? null }));
+        setFromCache(json.fromCache ?? false);
+        setLastRefreshed(new Date());
+        setLoading(false);
+        setSvcLoading(s => ({ ...s, claude: false, googleai: false, stripe: false, resend: false, cloudflare: false, firebase: false }));
       })
-      .catch(e => { setError((e as Error).message); setLoading(false); });
+      .catch(e => {
+        setError((e as Error).message);
+        setLoading(false);
+        setSvcLoading(s => ({ ...s, claude: false, googleai: false, stripe: false, resend: false, cloudflare: false, firebase: false }));
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, claudeMonth]);
+  }, [token, month]);
 
   const loadOpenAI = useCallback((force = false) => {
-    const key = `openai:${openaiMonth}`;
+    const key = `openai:${month}`;
     const hit = _cache.get(key);
     if (!force && hit && Date.now() - hit.ts < TTL) {
       setUsage(prev => prev ? { ...prev, openai: (hit.data as AllUsage).openai ?? prev.openai } : prev);
+      setSvcLoading(s => ({ ...s, openai: false }));
       return;
     }
-    setOpenaiLoading(true);
-    fetch(`/api/admin?action=usage_openai&openaiMonth=${openaiMonth}${force ? "&refresh=1" : ""}`, { headers: authHeaders })
+    setSvcLoading(s => ({ ...s, openai: true }));
+    fetch(`/api/admin?action=usage_openai&openaiMonth=${month}${force ? "&refresh=1" : ""}`, { headers: authHeaders })
       .then(r => r.json() as Promise<{ openai?: AllUsage["openai"]; errors?: Record<string, string> }>)
       .then(json => {
         _cache.set(key, { data: json as unknown as AllUsage, ts: Date.now() });
@@ -854,20 +975,26 @@ export default function UsageTab({ token }: { token?: string }) {
           ? { ...prev, openai: json.openai ?? null, errors: { ...(prev.errors ?? {}), ...(json.errors ?? {}) } }
           : { openai: json.openai ?? null, errors: json.errors ?? {}, fetchedAt: new Date().toISOString() } as AllUsage
         );
-        setOpenaiLoading(false);
+        setSvcLoading(s => ({ ...s, openai: false }));
       })
-      .catch(() => setOpenaiLoading(false));
+      .catch(() => setSvcLoading(s => ({ ...s, openai: false })));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, openaiMonth]);
+  }, [token, month]);
 
-  useEffect(() => { void Promise.resolve().then(() => load());      }, [load]);
-  useEffect(() => { void Promise.resolve().then(() => loadOpenAI()); }, [loadOpenAI]);
+  // Kick off both fetches in parallel on mount / month change
+  useEffect(() => {
+    void Promise.all([
+      Promise.resolve().then(() => load()),
+      Promise.resolve().then(() => loadOpenAI()),
+    ]);
+  }, [load, loadOpenAI]);
 
+  // Auto-refresh every 5 min
   useEffect(() => {
     const id = setInterval(() => { load(false); loadOpenAI(false); }, 5 * 60 * 1000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claudeMonth, openaiMonth]);
+  }, [month]);
 
   const visibleServices = useMemo(() => {
     return SERVICES.filter(s => {
@@ -882,7 +1009,10 @@ export default function UsageTab({ token }: { token?: string }) {
     });
   }, [category, statusFilter, search, usage]);
 
-  const isCardLoading = loading && !usage;
+  // True initial load — nothing rendered yet
+  const isInitialLoad = loading && !usage;
+  // Refresh on an already-loaded tab
+  const isRefreshing  = loading && !!usage;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6">
@@ -906,7 +1036,7 @@ export default function UsageTab({ token }: { token?: string }) {
           <button onClick={() => { load(true); loadOpenAI(true); }} disabled={loading}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer bg-white disabled:opacity-50">
             <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
-              style={{ animation: loading ? "spin .7s linear infinite" : "none" }}>
+              style={{ animation: isRefreshing ? "spin .7s linear infinite" : "none" }}>
               <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
             </svg>
             Refresh all
@@ -919,7 +1049,7 @@ export default function UsageTab({ token }: { token?: string }) {
       )}
 
       {/* Summary */}
-      {usage && <SummaryBar usage={usage} />}
+      {isInitialLoad ? <SummaryBarSkeleton /> : usage && <SummaryBar usage={usage} />}
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -950,9 +1080,19 @@ export default function UsageTab({ token }: { token?: string }) {
           <option value="connected">Connected only</option>
           <option value="error">Errors only</option>
         </select>
+        {/* Single month picker — applies to all AI services */}
+        <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5">
+          <svg width="11" height="11" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <select value={month} onChange={e => setMonth(e.target.value)}
+            className="text-[11px] bg-transparent border-none outline-none text-gray-600 cursor-pointer font-[inherit]">
+            {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
       </div>
 
-      {!isCardLoading && (
+      {!isInitialLoad && (
         <div className="text-[11px] text-gray-400 mb-3">
           Showing {visibleServices.length} of {SERVICES.length} services
           {search && ` · matching "${search}"`}
@@ -960,7 +1100,7 @@ export default function UsageTab({ token }: { token?: string }) {
       )}
 
       {/* Cards grid */}
-      {visibleServices.length === 0 && !isCardLoading ? (
+      {visibleServices.length === 0 && !isInitialLoad ? (
         <div className="text-center py-16 text-gray-400">
           <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mx-auto mb-2 opacity-30">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -970,14 +1110,19 @@ export default function UsageTab({ token }: { token?: string }) {
       ) : (
         <div className={`grid gap-4 items-stretch ${isMobile ? "grid-cols-1" : "grid-cols-2 xl:grid-cols-3"}`}>
           {visibleServices.map(s => {
+            // Show a full skeleton card on initial load
+            if (isInitialLoad) {
+              return <CardSkeleton key={s.key} name={s.name} icon={s.icon} color={s.color} />;
+            }
+
             const props = {
               data:    (usage as unknown as Record<string, unknown>)?.[s.key] as never,
               error:   usage?.errors?.[s.key],
-              loading: isCardLoading,
+              loading: svcLoading[s.key],
             };
             switch (s.key) {
-              case "claude":     return <ClaudeCard     key={s.key} {...props} month={claudeMonth} onMonthChange={setClaudeMonth} />;
-              case "openai":     return <OpenAICard     key={s.key} {...props} month={openaiMonth} onMonthChange={setOpenaiMonth} refreshing={openaiLoading} />;
+              case "claude":     return <ClaudeCard     key={s.key} {...props} />;
+              case "openai":     return <OpenAICard     key={s.key} {...props} />;
               case "googleai":   return <GoogleAICard   key={s.key} {...props} />;
               case "stripe":     return <StripeCard     key={s.key} {...props} />;
               case "resend":     return <ResendCard     key={s.key} {...props} />;
@@ -987,8 +1132,6 @@ export default function UsageTab({ token }: { token?: string }) {
           })}
         </div>
       )}
-
-
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
