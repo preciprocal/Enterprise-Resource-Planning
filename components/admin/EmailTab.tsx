@@ -25,7 +25,6 @@ const SCOPES       = "Mail.Read Mail.Send Mail.ReadWrite offline_access User.Rea
 const TOKEN_KEY    = "ms_email_token";       // access token
 const REFRESH_KEY  = "ms_email_refresh";     // refresh token
 const EXPIRY_KEY   = "ms_email_expiry";      // unix ms when access token expires
-const HINT_KEY     = "ms_email_hint";        // last signed-in account email (login_hint)
 
 const FOLDERS = [
   { id: "inbox",        label: "Inbox",  icon: "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z" },
@@ -70,16 +69,14 @@ async function generatePKCE(): Promise<{ verifier: string; challenge: string }> 
   return { verifier, challenge };
 }
 
-async function startOAuth(forcePrompt = false): Promise<void> {
+async function startOAuth(): Promise<void> {
   const { verifier, challenge } = await generatePKCE();
   localStorage.setItem(VERIFIER_KEY, verifier);
   const clientId    = process.env.NEXT_PUBLIC_MS_CLIENT_ID ?? "";
   const tenantId    = process.env.NEXT_PUBLIC_MS_TENANT_ID ?? "common";
   const redirectUri = encodeURIComponent(window.location.href.split("?")[0].split("#")[0]);
   const scope       = encodeURIComponent(SCOPES);
-  // Re-use the last signed-in account silently when possible
-  const hint        = localStorage.getItem(HINT_KEY);
-  let url =
+  window.location.href =
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize` +
     `?client_id=${clientId}` +
     `&response_type=code` +
@@ -87,15 +84,8 @@ async function startOAuth(forcePrompt = false): Promise<void> {
     `&scope=${scope}` +
     `&response_mode=query` +
     `&code_challenge=${challenge}` +
-    `&code_challenge_method=S256`;
-  if (forcePrompt) {
-    // "Sign in with a different account" button — let the user pick
-    url += `&prompt=select_account`;
-  } else if (hint) {
-    // Silent re-auth: skip the account picker, go straight to the known account
-    url += `&login_hint=${encodeURIComponent(hint)}`;
-  }
-  window.location.href = url;
+    `&code_challenge_method=S256` +
+    `&prompt=select_account`;
 }
 
 interface TokenResponse {
@@ -104,12 +94,11 @@ interface TokenResponse {
   expires_in?:   number;
 }
 
-function persistTokens(data: TokenResponse, hint?: string) {
+function persistTokens(data: TokenResponse) {
   localStorage.setItem(TOKEN_KEY, data.access_token);
   if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
   const expiresAt = Date.now() + ((data.expires_in ?? 3600) - 60) * 1000;
   localStorage.setItem(EXPIRY_KEY, String(expiresAt));
-  if (hint) localStorage.setItem(HINT_KEY, hint);
 }
 
 async function fetchToken(body: URLSearchParams): Promise<TokenResponse> {
@@ -400,17 +389,12 @@ function SignInScreen({ error }: { error?: string }) {
         <h2 className="text-[17px] font-bold text-gray-900 mb-1.5">Outlook Inbox</h2>
         <p className="text-[13px] text-gray-400 mb-6">Sign in with Microsoft to read and send emails.</p>
         <button
-          onClick={() => { void startOAuth(false); }}
+          onClick={() => { void startOAuth(); }}
           className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[14px] font-semibold rounded-xl transition-colors cursor-pointer border-none flex items-center justify-center gap-2 shadow-sm">
           <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
           </svg>
           Sign in with Microsoft
-        </button>
-        <button
-          onClick={() => { void startOAuth(true); }}
-          className="mt-2 w-full text-[12px] text-gray-400 hover:text-gray-600 cursor-pointer border-none bg-transparent transition-colors">
-          Use a different account
         </button>
         {error && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-600">{error}</div>}
       </div>
@@ -465,11 +449,7 @@ export default function EmailTab() {
   useEffect(() => {
     if (!token) return;
     graphFetch<{ displayName: string; mail: string }>("/me?$select=displayName,mail", token)
-      .then(profile => {
-        setMe(profile);
-        // Persist email as login_hint so future OAuth skips the account picker
-        if (profile.mail) localStorage.setItem(HINT_KEY, profile.mail);
-      })
+      .then(setMe)
       .catch(() => { /* non-critical */ });
   }, [token]);
 
@@ -715,7 +695,13 @@ export default function EmailTab() {
           <div className="flex-1 overflow-y-auto px-5 py-4">
             {selected.body ? (
               selected.body.contentType === "html" ? (
-                <iframe srcDoc={selected.body.content} className="w-full border-0" style={{ minHeight: 400, height: "100%" }} sandbox="allow-same-origin" title="email-body" />
+                <iframe
+                  srcDoc={`<style>html,body{background:#fff!important;color:#1f2937!important;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;margin:0;padding:12px}a{color:#4F6FF0}*{max-width:100%;box-sizing:border-box}</style>${selected.body.content}`}
+                  className="w-full border-0"
+                  style={{ minHeight: 400, height: "100%" }}
+                  sandbox="allow-same-origin"
+                  title="email-body"
+                />
               ) : (
                 <pre className="text-[13px] text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{selected.body.content}</pre>
               )
@@ -765,7 +751,7 @@ export default function EmailTab() {
                 <div className="text-[9px] text-gray-400 truncate">{me.mail}</div>
               </div>
             </div>
-            <button onClick={() => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); localStorage.removeItem(EXPIRY_KEY); localStorage.removeItem(HINT_KEY); setToken(null); setEmails([]); setMe(null); }}
+            <button onClick={() => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); localStorage.removeItem(EXPIRY_KEY); setToken(null); setEmails([]); setMe(null); }}
               className="mt-2 w-full text-[10px] text-gray-400 hover:text-red-500 cursor-pointer border-none bg-transparent text-left transition-colors">
               Sign out
             </button>
