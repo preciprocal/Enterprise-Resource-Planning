@@ -16,15 +16,16 @@ interface MSEmail {
   isRead: boolean;
   hasAttachments: boolean;
   importance: "low" | "normal" | "high";
+  webLink?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GRAPH        = "https://graph.microsoft.com/v1.0";
-const SCOPES       = "Mail.Read Mail.Send Mail.ReadWrite offline_access User.Read";
-const TOKEN_KEY    = "ms_email_token";       // access token
-const REFRESH_KEY  = "ms_email_refresh";     // refresh token
-const EXPIRY_KEY   = "ms_email_expiry";      // unix ms when access token expires
+const GRAPH       = "https://graph.microsoft.com/v1.0";
+const SCOPES      = "Mail.Read Mail.Send Mail.ReadWrite offline_access User.Read";
+const TOKEN_KEY   = "ms_email_token";
+const REFRESH_KEY = "ms_email_refresh";
+const EXPIRY_KEY  = "ms_email_expiry";
 
 const FOLDERS = [
   { id: "inbox",        label: "Inbox",  icon: "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z" },
@@ -58,7 +59,6 @@ function avatarColor(name: string) {
 
 const VERIFIER_KEY = "ms_pkce_verifier";
 
-// PKCE helpers — authorization code flow, no implicit grant needed
 async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
   const array    = crypto.getRandomValues(new Uint8Array(32));
   const verifier = btoa(String.fromCharCode(...Array.from(array)))
@@ -77,15 +77,15 @@ async function startOAuth(): Promise<void> {
   const redirectUri = encodeURIComponent(window.location.href.split("?")[0].split("#")[0]);
   const scope       = encodeURIComponent(SCOPES);
   window.location.href =
-    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize` +
-    `?client_id=${clientId}` +
-    `&response_type=code` +
-    `&redirect_uri=${redirectUri}` +
-    `&scope=${scope}` +
-    `&response_mode=query` +
-    `&code_challenge=${challenge}` +
-    `&code_challenge_method=S256` +
-    `&prompt=select_account`;
+    "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/authorize" +
+    "?client_id=" + clientId +
+    "&response_type=code" +
+    "&redirect_uri=" + redirectUri +
+    "&scope=" + scope +
+    "&response_mode=query" +
+    "&code_challenge=" + challenge +
+    "&code_challenge_method=S256" +
+    "&prompt=select_account";
 }
 
 interface TokenResponse {
@@ -104,7 +104,7 @@ function persistTokens(data: TokenResponse) {
 async function fetchToken(body: URLSearchParams): Promise<TokenResponse> {
   const tenantId = process.env.NEXT_PUBLIC_MS_TENANT_ID ?? "common";
   const res = await fetch(
-    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token",
     { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }
   );
   if (!res.ok) {
@@ -145,7 +145,6 @@ async function refreshAccessToken(): Promise<string | null> {
     persistTokens(data);
     return data.access_token;
   } catch {
-    // Refresh token expired — clear everything
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(EXPIRY_KEY);
@@ -154,17 +153,16 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 async function getValidToken(): Promise<string | null> {
-  const tok     = localStorage.getItem(TOKEN_KEY);
-  const expiry  = parseInt(localStorage.getItem(EXPIRY_KEY) ?? "0", 10);
+  const tok    = localStorage.getItem(TOKEN_KEY);
+  const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) ?? "0", 10);
   if (tok && Date.now() < expiry) return tok;
-  // Expired or missing — try to refresh
   return refreshAccessToken();
 }
 
 async function graphFetch<T>(path: string, token: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${GRAPH}${path}`, {
+  const res = await fetch(GRAPH + path, {
     ...opts,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(opts?.headers ?? {}) },
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(opts?.headers ?? {}) },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: { message: res.statusText } })) as { error?: { message?: string } };
@@ -180,8 +178,6 @@ function NotConfigured() {
   return (
     <div className="flex-1 flex items-center justify-center bg-gray-50 p-6">
       <div className="max-w-lg w-full">
-
-        {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0 shadow-sm">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
@@ -196,13 +192,11 @@ function NotConfigured() {
             <p className="text-[12px] text-gray-500">Add 2 env vars to enable this tab</p>
           </div>
         </div>
-
-        {/* Env vars needed */}
         <div className="bg-slate-900 rounded-xl p-4 mb-5">
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add to your .env.local</div>
           {[
             { key: "NEXT_PUBLIC_MS_CLIENT_ID", desc: "Application (client) ID from your Azure App Registration" },
-            { key: "NEXT_PUBLIC_MS_TENANT_ID", desc: "Tenant ID — use common for personal accounts, or your tenant GUID" },
+            { key: "NEXT_PUBLIC_MS_TENANT_ID", desc: "Tenant ID - use common for personal accounts, or your tenant GUID" },
           ].map(v => (
             <div key={v.key} className="mb-3 last:mb-0">
               <div className="font-mono text-[12px] text-indigo-300 mb-0.5">{v.key}=<span className="text-slate-400">your_value_here</span></div>
@@ -210,82 +204,38 @@ function NotConfigured() {
             </div>
           ))}
         </div>
-
-        {/* Azure setup steps */}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
             <span className="text-[12px] font-bold text-gray-700">How to set up Azure (5 min)</span>
           </div>
-
-          {/* Step 1 */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">1</div>
-              <div>
-                <p className="text-[12px] font-semibold text-gray-800 mb-1">Create App Registration</p>
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Go to <strong>portal.azure.com</strong> → search <strong>&quot;App registrations&quot;</strong> in the top bar → click <strong>&quot;New registration&quot;</strong> → give it any name (e.g. &quot;Preciprocal Admin&quot;) → set Supported account types to <strong>&quot;Accounts in any org directory and personal Microsoft accounts&quot;</strong> → click Register.
-                </p>
+          {[
+            { n: 1, color: "indigo", title: "Create App Registration", body: 'Go to portal.azure.com, search "App registrations", click "New registration", set Supported account types to "Accounts in any org directory and personal Microsoft accounts", then Register.' },
+            { n: 2, color: "indigo", title: "Copy your IDs", body: "On the app Overview page copy Application (client) ID and Directory (tenant) ID." },
+            { n: 4, color: "indigo", title: "Set redirect URI", body: 'Left sidebar > "Authentication" > "+ Add a platform" > "Single-page application" > paste your admin dashboard URL > Save.' },
+            { n: 5, color: "green",  title: "Add env vars & restart", body: "Add both env vars to .env.local and restart the dev server." },
+          ].map((s, i) => (
+            <div key={s.n} className={"px-4 py-3 border-b border-gray-100" + (i === 3 ? " last:border-0" : "")}>
+              <div className="flex items-start gap-3">
+                <div className={"w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 bg-" + s.color + "-100 text-" + s.color + "-700"}>{s.n}</div>
+                <div>
+                  <p className="text-[12px] font-semibold text-gray-800 mb-1">{s.title}</p>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">{s.body}</p>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Step 2 */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">2</div>
-              <div>
-                <p className="text-[12px] font-semibold text-gray-800 mb-1">Copy your IDs</p>
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  On the app&apos;s Overview page you&apos;ll see <strong>Application (client) ID</strong> and <strong>Directory (tenant) ID</strong>. Copy both — these are your two env var values.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Step 3 — the one they're stuck on */}
-          <div className="px-4 py-3 border-b border-gray-100 bg-amber-50/40">
+          ))}
+          <div className="px-4 py-3 bg-amber-50/40 border-t border-gray-100">
             <div className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</div>
               <div>
                 <p className="text-[12px] font-semibold text-gray-800 mb-1">Add Mail permissions <span className="text-amber-600 font-normal">(where people get stuck)</span></p>
-                <ol className="text-[11px] text-gray-600 space-y-1 leading-relaxed list-none">
-                  <li>→ In your app&apos;s left sidebar, click <strong>&quot;API permissions&quot;</strong></li>
-                  <li>→ Click <strong>&quot;+ Add a permission&quot;</strong> (blue button)</li>
-                  <li>→ A panel slides in — click <strong>&quot;Microsoft Graph&quot;</strong> (first big tile)</li>
-                  <li>→ Click <strong>&quot;Delegated permissions&quot;</strong> (not Application)</li>
-                  <li>→ In the search box type <strong>Mail</strong> — tick these three:</li>
-                </ol>
+                <p className="text-[11px] text-gray-600 leading-relaxed">Left sidebar &gt; &quot;API permissions&quot; &gt; &quot;+ Add a permission&quot; &gt; &quot;Microsoft Graph&quot; &gt; &quot;Delegated permissions&quot; &gt; search Mail and tick:</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {["Mail.Read","Mail.Send","Mail.ReadWrite"].map(p => (
                     <code key={p} className="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5 text-[11px] font-mono font-semibold">{p}</code>
                   ))}
                 </div>
-                <p className="text-[11px] text-gray-500 mt-2">→ Click <strong>&quot;Add permissions&quot;</strong> → then click <strong>&quot;Grant admin consent&quot;</strong> (if available — needed for org accounts).</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Step 4 */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">4</div>
-              <div>
-                <p className="text-[12px] font-semibold text-gray-800 mb-1">Set redirect URI</p>
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Left sidebar → <strong>&quot;Authentication&quot;</strong> → <strong>&quot;+ Add a platform&quot;</strong> → choose <strong>&quot;Single-page application&quot;</strong> → paste your admin dashboard URL as the Redirect URI (e.g. <code className="bg-gray-100 px-1 rounded font-mono">https://yourdomain.com/admin</code> or <code className="bg-gray-100 px-1 rounded font-mono">http://localhost:3000/admin</code> for local) → Save.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Step 5 */}
-          <div className="px-4 py-3">
-            <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">5</div>
-              <div>
-                <p className="text-[12px] font-semibold text-gray-800 mb-1">Add env vars & restart</p>
-                <p className="text-[11px] text-gray-500">Add the two env vars above to your <code className="bg-gray-100 px-1 rounded font-mono">.env.local</code>, restart the dev server, and this tab will show a &quot;Sign in with Microsoft&quot; button.</p>
+                <p className="text-[11px] text-gray-500 mt-2">Then click &quot;Add permissions&quot; and &quot;Grant admin consent&quot;.</p>
               </div>
             </div>
           </div>
@@ -343,7 +293,7 @@ function ComposeModal({
         </div>
         <div className="flex-1 overflow-y-auto">
           {[
-            { label: "To",      value: to,      onChange: setTo,      placeholder: "recipient@example.com, …" },
+            { label: "To",      value: to,      onChange: setTo,      placeholder: "recipient@example.com, ..." },
             { label: "Subject", value: subject, onChange: setSubject, placeholder: "Subject" },
           ].map(f => (
             <div key={f.label} className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100">
@@ -352,19 +302,19 @@ function ComposeModal({
                 className="flex-1 text-[13px] border-none outline-none bg-transparent text-gray-900" />
             </div>
           ))}
-          <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message…"
+          <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message..."
             className="w-full resize-none text-[13px] text-gray-800 px-5 py-4 border-none outline-none bg-transparent"
             rows={10} />
         </div>
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 gap-3">
           {err  && <span className="text-[12px] text-red-500 flex-1 truncate">{err}</span>}
-          {sent && <span className="text-[12px] text-green-600 font-semibold flex-1">✓ Sent!</span>}
+          {sent && <span className="text-[12px] text-green-600 font-semibold flex-1">Sent!</span>}
           {!err && !sent && <span className="flex-1" />}
           <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-gray-500 hover:text-gray-700 border-none bg-transparent cursor-pointer">Cancel</button>
           <button onClick={send} disabled={sending || !to.trim() || !subject.trim() || sent}
             className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[12px] font-semibold rounded-xl transition-colors cursor-pointer border-none flex items-center gap-2">
             {sending ? <Spinner size={12} /> : <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
-            {sending ? "Sending…" : "Send"}
+            {sending ? "Sending..." : "Send"}
           </button>
         </div>
       </div>
@@ -405,28 +355,31 @@ function SignInScreen({ error }: { error?: string }) {
 // ─── Main EmailTab ─────────────────────────────────────────────────────────────
 
 export default function EmailTab() {
-  const isMobile = useIsMobile();
-
+  const isMobile     = useIsMobile();
   const isConfigured = !!(process.env.NEXT_PUBLIC_MS_CLIENT_ID);
 
-  const [token,    setToken]    = useState<string | null>(null);
-  const [folder,   setFolder]   = useState("inbox");
-  const [emails,   setEmails]   = useState<MSEmail[]>([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
-  const [selected, setSelected] = useState<MSEmail | null>(null);
-  const [compose,  setCompose]  = useState(false);
-  const [replyTo,  setReplyTo]  = useState<MSEmail | null>(null);
-  const [search,   setSearch]   = useState("");
-  const [unread,   setUnread]   = useState<Record<string, number>>({});
-  const [me,       setMe]       = useState<{ displayName: string; mail: string } | null>(null);
-  const [mobileView, setMobileView] = useState<"list"|"detail">("list");
+  const [token,      setToken]      = useState<string | null>(null);
+  const [folder,     setFolder]     = useState("inbox");
+  const [emails,     setEmails]     = useState<MSEmail[]>([]);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState("");
+  // KEY FIX: store only selectedId; derive selected from emails[] as single source of truth.
+  // This means any emails[] update (read/unread, body fetch) is immediately reflected in detail panel.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [compose,    setCompose]    = useState(false);
+  const [replyTo,    setReplyTo]    = useState<MSEmail | null>(null);
+  const [forwardOf,  setForwardOf]  = useState<MSEmail | null>(null);
+  const [search,     setSearch]     = useState("");
+  const [unread,     setUnread]     = useState<Record<string, number>>({});
+  const [me,         setMe]         = useState<{ displayName: string; mail: string } | null>(null);
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
-  // ── Restore token from localStorage or handle OAuth callback ────────────
+  const selected = emails.find(e => e.id === selectedId) ?? null;
+
+  // ── Restore token / handle OAuth callback ──────────────────────────────
   useEffect(() => {
     if (!isConfigured) return;
     void Promise.resolve().then(async () => {
-      // Handle PKCE code callback first (?code=...)
       const params = new URLSearchParams(window.location.search);
       const code   = params.get("code");
       if (code) {
@@ -439,30 +392,28 @@ export default function EmailTab() {
         }
         return;
       }
-      // Try to restore / refresh existing token
       const tok = await getValidToken();
       if (tok) setToken(tok);
     });
   }, [isConfigured]);
 
-  // ── Fetch signed-in user profile ──────────────────────────────────────────
+  // ── User profile ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     graphFetch<{ displayName: string; mail: string }>("/me?$select=displayName,mail", token)
       .then(setMe)
-      .catch(() => { /* non-critical */ });
+      .catch(() => {});
   }, [token]);
 
-  // ── Load emails ───────────────────────────────────────────────────────────
+  // ── Load emails ───────────────────────────────────────────────────────
   const loadEmails = useCallback((folderId: string, tok: string) => {
-    // All setState deferred into the async chain — effect body calls zero setState
     void Promise.resolve()
       .then(() => {
         setLoading(true);
         setError("");
-        setSelected(null);
+        setSelectedId(null);
         return graphFetch<{ value: MSEmail[] }>(
-          `/me/mailFolders/${folderId}/messages?$top=40&$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,isRead,hasAttachments,importance&$orderby=receivedDateTime desc`,
+          "/me/mailFolders/" + folderId + "/messages?$top=40&$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,isRead,hasAttachments,importance,webLink&$orderby=receivedDateTime desc",
           tok
         );
       })
@@ -472,7 +423,7 @@ export default function EmailTab() {
       })
       .catch(e => {
         const msg = (e as Error).message;
-        if (msg.includes("401") || msg.includes("InvalidAuthentication") || msg.includes("token") ) {
+        if (msg.includes("401") || msg.includes("InvalidAuthentication") || msg.includes("token")) {
           localStorage.removeItem(TOKEN_KEY);
           localStorage.removeItem(REFRESH_KEY);
           localStorage.removeItem(EXPIRY_KEY);
@@ -486,12 +437,12 @@ export default function EmailTab() {
 
   useEffect(() => { if (token) loadEmails(folder, token); }, [folder, token, loadEmails]);
 
-  // ── Unread counts ─────────────────────────────────────────────────────────
+  // ── Unread counts ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     Promise.all(
       FOLDERS.map(f =>
-        graphFetch<{ unreadItemCount: number }>(`/me/mailFolders/${f.id}?$select=unreadItemCount`, token)
+        graphFetch<{ unreadItemCount: number }>("/me/mailFolders/" + f.id + "?$select=unreadItemCount", token)
           .then(r => [f.id, r.unreadItemCount] as const)
           .catch(() => [f.id, 0] as const)
       )
@@ -502,47 +453,62 @@ export default function EmailTab() {
     });
   }, [token, emails]);
 
-  // ── Open full email ───────────────────────────────────────────────────────
+  // ── Open email ────────────────────────────────────────────────────────
+  // FIX 1: Always mark read on open — update emails[] immediately (not inside the
+  // "!email.body" branch). Previously cached emails skipped the mark-read entirely.
   const openEmail = useCallback(async (email: MSEmail) => {
-    setSelected(email);
+    setSelectedId(email.id);
     if (isMobile) setMobileView("detail");
+
+    // Optimistically mark as read in emails[] right away
+    if (!email.isRead) {
+      setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: true } : e));
+      if (token) {
+        graphFetch("/me/messages/" + email.id, token, {
+          method: "PATCH", body: JSON.stringify({ isRead: true }),
+        }).catch(() => {});
+      }
+    }
+
+    // Fetch full body + webLink if not already loaded
     if (!email.body && token) {
       try {
         const full = await graphFetch<MSEmail>(
-          `/me/messages/${email.id}?$select=id,subject,body,from,toRecipients,receivedDateTime,isRead,hasAttachments`,
+          "/me/messages/" + email.id + "?$select=id,subject,body,from,toRecipients,receivedDateTime,isRead,hasAttachments,webLink",
           token
         );
-        setSelected(full);
-        setEmails(prev => prev.map(e => e.id === full.id ? { ...e, body: full.body, isRead: true } : e));
-        if (!email.isRead) {
-          graphFetch(`/me/messages/${email.id}`, token, {
-            method: "PATCH", body: JSON.stringify({ isRead: true }),
-          }).catch(() => { /* non-critical */ });
-        }
-      } catch { /* show preview */ }
+        setEmails(prev => prev.map(e =>
+          e.id === full.id ? { ...e, body: full.body, webLink: full.webLink, isRead: true } : e
+        ));
+      } catch {}
     }
   }, [token, isMobile]);
 
-  // ── Delete / toggle read ─────────────────────────────────────────────────
+  // ── Delete ────────────────────────────────────────────────────────────
   const deleteEmail = useCallback(async (id: string) => {
     if (!token) return;
     setEmails(prev => prev.filter(e => e.id !== id));
-    setSelected(null);
+    setSelectedId(null);
     if (isMobile) setMobileView("list");
-    graphFetch(`/me/messages/${id}`, token, { method: "DELETE" }).catch(() => { /* ignore */ });
+    graphFetch("/me/messages/" + id, token, { method: "DELETE" }).catch(() => {});
   }, [token, isMobile]);
 
+  // ── Toggle read/unread ────────────────────────────────────────────────
+  // FIX 2: Only update emails[] — selected is derived from it automatically.
+  // Previously there was a separate setSelected() that could get out of sync.
   const toggleRead = useCallback(async (email: MSEmail) => {
     if (!token) return;
-    const val = !email.isRead;
-    setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: val } : e));
-    if (selected?.id === email.id) setSelected(prev => prev ? { ...prev, isRead: val } : prev);
-    graphFetch(`/me/messages/${email.id}`, token, {
-      method: "PATCH", body: JSON.stringify({ isRead: val }),
-    }).catch(() => { /* ignore */ });
-  }, [token, selected]);
+    const newVal = !email.isRead;
+    setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: newVal } : e));
+    graphFetch("/me/messages/" + email.id, token, {
+      method: "PATCH", body: JSON.stringify({ isRead: newVal }),
+    }).catch(() => {
+      // Revert on failure
+      setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: email.isRead } : e));
+    });
+  }, [token]);
 
-  // ── Filtered emails ───────────────────────────────────────────────────────
+  // ── Search filter ─────────────────────────────────────────────────────
   const filtered = search.trim()
     ? emails.filter(e =>
         e.subject?.toLowerCase().includes(search.toLowerCase()) ||
@@ -551,20 +517,17 @@ export default function EmailTab() {
       )
     : emails;
 
-  // ── Not configured ────────────────────────────────────────────────────────
   if (!isConfigured) return <NotConfigured />;
-
-  // ── Not signed in ─────────────────────────────────────────────────────────
   if (!token) return <SignInScreen error={error || undefined} />;
 
-  // ── Email list panel ──────────────────────────────────────────────────────
+  // ── List panel ────────────────────────────────────────────────────────
   const ListPanel = (
-    <div className={`flex flex-col border-r border-gray-100 bg-white ${isMobile ? "flex-1" : "w-80 shrink-0"} ${isMobile && mobileView === "detail" ? "hidden" : "flex"}`}>
+    <div className={"flex flex-col border-r border-gray-100 bg-white " + (isMobile ? "flex-1" : "w-80 shrink-0") + " " + (isMobile && mobileView === "detail" ? "hidden" : "flex")}>
       <div className="px-3 pt-3 pb-2 border-b border-gray-100 space-y-2">
         <div className="flex items-center gap-2">
           <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
             <svg width="12" height="12" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
               className="flex-1 text-[12px] bg-transparent border-none outline-none text-gray-700 placeholder-gray-400" />
           </div>
           <button onClick={() => { if (token) loadEmails(folder, token); }}
@@ -576,14 +539,13 @@ export default function EmailTab() {
             )}
           </button>
         </div>
-        {/* Folder pills */}
         <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
           {FOLDERS.map(f => (
-            <button key={f.id} onClick={() => { setFolder(f.id); setSelected(null); }}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border-none cursor-pointer transition-colors shrink-0 ${folder === f.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+            <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); }}
+              className={"flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border-none cursor-pointer transition-colors shrink-0 " + (folder === f.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
               {f.label}
               {(unread[f.id] ?? 0) > 0 && (
-                <span className={`text-[9px] rounded-full px-1 py-0.5 font-bold ${folder === f.id ? "bg-white text-indigo-600" : "bg-indigo-500 text-white"}`}>
+                <span className={"text-[9px] rounded-full px-1 py-0.5 font-bold " + (folder === f.id ? "bg-white text-indigo-600" : "bg-indigo-500 text-white")}>
                   {unread[f.id]}
                 </span>
               )}
@@ -605,25 +567,29 @@ export default function EmailTab() {
         )}
         {!loading && filtered.map(email => {
           const name  = email.from?.emailAddress?.name || email.from?.emailAddress?.address || "?";
-          const isAct = selected?.id === email.id;
+          const isAct = selectedId === email.id;
           return (
             <button key={email.id} onClick={() => openEmail(email)}
-              className={`w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer border-none ${!email.isRead ? "bg-blue-50/30" : ""}`}
+              className={"w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer border-none" + (!email.isRead ? " bg-blue-50/30" : "")}
               style={{ borderLeft: isAct ? "2px solid #6366F1" : "2px solid transparent", background: isAct ? "#EEF2FF" : undefined }}>
               <div className="flex items-center gap-2.5 mb-1">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ background: avatarColor(name) }}>
                   {initials(name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className={`text-[12px] truncate block ${!email.isRead ? "font-bold text-gray-900" : "font-medium text-gray-700"}`}>{name}</span>
+                  <span className={"text-[12px] truncate block " + (!email.isRead ? "font-bold text-gray-900" : "font-medium text-gray-700")}>{name}</span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  {email.hasAttachments && <svg width="10" height="10" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>}
+                  {email.hasAttachments && (
+                    <svg width="10" height="10" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    </svg>
+                  )}
                   <span className="text-[10px] text-gray-400">{fmtDate(email.receivedDateTime)}</span>
                   {!email.isRead && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
                 </div>
               </div>
-              <p className={`text-[11px] truncate pl-9 ${!email.isRead ? "text-gray-700 font-semibold" : "text-gray-500"}`}>{email.subject || "(no subject)"}</p>
+              <p className={"text-[11px] truncate pl-9 " + (!email.isRead ? "text-gray-700 font-semibold" : "text-gray-500")}>{email.subject || "(no subject)"}</p>
               <p className="text-[11px] text-gray-400 truncate pl-9 mt-0.5">{email.bodyPreview}</p>
             </button>
           );
@@ -632,9 +598,9 @@ export default function EmailTab() {
     </div>
   );
 
-  // ── Email detail panel ────────────────────────────────────────────────────
+  // ── Detail panel ──────────────────────────────────────────────────────
   const DetailPanel = (
-    <div className={`flex-1 flex flex-col bg-white min-w-0 ${isMobile && mobileView === "list" ? "hidden" : "flex"}`}>
+    <div className={"flex-1 flex flex-col bg-white min-w-0 " + (isMobile && mobileView === "list" ? "hidden" : "flex")}>
       {!selected ? (
         <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
           <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-30">
@@ -644,6 +610,8 @@ export default function EmailTab() {
         </div>
       ) : (
         <div className="flex flex-col h-full">
+
+          {/* Header */}
           <div className="px-5 py-4 border-b border-gray-100 bg-white shrink-0">
             {isMobile && (
               <button onClick={() => setMobileView("list")} className="flex items-center gap-1 text-indigo-600 text-[12px] font-medium mb-3 border-none bg-transparent cursor-pointer">
@@ -652,6 +620,7 @@ export default function EmailTab() {
               </button>
             )}
             <h2 className="text-[15px] font-bold text-gray-900 mb-3 leading-snug">{selected.subject || "(no subject)"}</h2>
+
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
@@ -663,40 +632,70 @@ export default function EmailTab() {
                   <div className="text-[11px] text-gray-400 truncate">{selected.from?.emailAddress?.address}</div>
                 </div>
               </div>
+
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-[11px] text-gray-400">{new Date(selected.receivedDateTime).toLocaleString()}</span>
-                <button onClick={() => toggleRead(selected)} title={selected.isRead ? "Mark unread" : "Mark read"}
-                  className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center cursor-pointer hover:bg-gray-50">
-                  <svg width="11" height="11" fill={selected.isRead ? "none" : "#6366F1"} stroke={selected.isRead ? "#9CA3AF" : "#6366F1"} strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
-                  </svg>
+
+                {/* Mark read/unread — label and icon always reflect live state from emails[] */}
+                <button
+                  onClick={() => toggleRead(selected)}
+                  title={selected.isRead ? "Mark as unread" : "Mark as read"}
+                  className="flex items-center gap-1 px-2 h-7 rounded-lg border bg-white text-[10px] font-medium cursor-pointer hover:bg-gray-50 transition-colors"
+                  style={{
+                    color: selected.isRead ? "#6B7280" : "#6366F1",
+                    borderColor: selected.isRead ? "#E5E7EB" : "#A5B4FC",
+                  }}>
+                  {selected.isRead ? (
+                    <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                      <polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                  ) : (
+                    <svg width="9" height="9" fill="#6366F1" viewBox="0 0 10 10">
+                      <circle cx="5" cy="5" r="5"/>
+                    </svg>
+                  )}
+                  {selected.isRead ? "Mark unread" : "Mark read"}
                 </button>
+
                 <button onClick={() => deleteEmail(selected.id)} title="Delete"
-                  className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center cursor-pointer hover:bg-red-50 hover:border-red-200">
+                  className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors">
                   <svg width="11" height="11" fill="none" stroke="#EF4444" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
                   </svg>
                 </button>
               </div>
             </div>
+
+            {/* Action buttons */}
             <div className="flex gap-2 mt-3">
-              <button onClick={() => setReplyTo(selected)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-gray-600 cursor-pointer hover:bg-gray-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+              <button
+                onClick={() => { setReplyTo(selected); setForwardOf(null); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
                 Reply
               </button>
-              <button onClick={() => setCompose(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-gray-600 cursor-pointer hover:bg-gray-50 transition-colors">
+              <button
+                onClick={() => { setForwardOf(selected); setReplyTo(null); setCompose(true); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 10 20 15 15 20"/><path d="M4 4h7a4 4 0 0 1 4 4v7"/></svg>
                 Forward
               </button>
+              <button
+                onClick={() => deleteEmail(selected.id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-red-400 cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors">
+                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                Delete
+              </button>
             </div>
           </div>
+
+          {/* Body */}
           <div className="flex-1 overflow-y-auto px-5 py-4">
             {selected.body ? (
               selected.body.contentType === "html" ? (
                 <iframe
-                  srcDoc={`<style>html,body{background:#fff!important;color:#1f2937!important;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;margin:0;padding:12px}a{color:#4F6FF0}*{max-width:100%;box-sizing:border-box}</style>${selected.body.content}`}
+                  srcDoc={"<style>html,body{background:#fff!important;color:#1f2937!important;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;margin:0;padding:12px}a{color:#4F6FF0}*{max-width:100%;box-sizing:border-box}</style>" + selected.body.content}
                   className="w-full border-0"
                   style={{ minHeight: 400, height: "100%" }}
                   sandbox="allow-same-origin"
@@ -709,6 +708,40 @@ export default function EmailTab() {
               <p className="text-[13px] text-gray-500 italic">{selected.bodyPreview}</p>
             )}
           </div>
+
+          {/* Footer: Open in Outlook */}
+          <div className="shrink-0 px-5 py-3 border-t border-gray-100 bg-gray-50/80 flex items-center justify-between">
+            <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
+              {selected.hasAttachments && (
+                <>
+                  <svg width="10" height="10" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                  Has attachments
+                </>
+              )}
+            </span>
+            <a
+              href={selected.webLink ?? "https://outlook.live.com/mail/0/inbox"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+              style={{ textDecoration: "none" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="2" width="9" height="9" fill="#F25022"/>
+                <rect x="13" y="2" width="9" height="9" fill="#7FBA00"/>
+                <rect x="2" y="13" width="9" height="9" fill="#00A4EF"/>
+                <rect x="13" y="13" width="9" height="9" fill="#FFB900"/>
+              </svg>
+              Open in Outlook
+              <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </a>
+          </div>
+
         </div>
       )}
     </div>
@@ -717,9 +750,9 @@ export default function EmailTab() {
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Sidebar */}
-      <aside className={`flex flex-col shrink-0 border-r border-gray-100 bg-gray-50 ${isMobile ? "hidden" : "w-44"}`}>
+      <aside className={"flex flex-col shrink-0 border-r border-gray-100 bg-gray-50 " + (isMobile ? "hidden" : "w-44")}>
         <div className="px-3 py-4">
-          <button onClick={() => setCompose(true)}
+          <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }}
             className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] font-semibold rounded-xl cursor-pointer border-none flex items-center justify-center gap-1.5 transition-colors shadow-sm">
             <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Compose
@@ -727,8 +760,8 @@ export default function EmailTab() {
         </div>
         <nav className="flex-1 px-2">
           {FOLDERS.map(f => (
-            <button key={f.id} onClick={() => { setFolder(f.id); setSelected(null); setMobileView("list"); }}
-              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium mb-0.5 cursor-pointer border-none transition-colors text-left ${folder === f.id ? "bg-indigo-50 text-indigo-700" : "bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-800"}`}>
+            <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); setMobileView("list"); }}
+              className={"w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium mb-0.5 cursor-pointer border-none transition-colors text-left " + (folder === f.id ? "bg-indigo-50 text-indigo-700" : "bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-800")}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill={folder === f.id ? "#6366F1" : "#9CA3AF"}>
                 <path d={f.icon}/>
               </svg>
@@ -751,8 +784,12 @@ export default function EmailTab() {
                 <div className="text-[9px] text-gray-400 truncate">{me.mail}</div>
               </div>
             </div>
-            <button onClick={() => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); localStorage.removeItem(EXPIRY_KEY); setToken(null); setEmails([]); setMe(null); }}
-              className="mt-2 w-full text-[10px] text-gray-400 hover:text-red-500 cursor-pointer border-none bg-transparent text-left transition-colors">
+            <button onClick={() => {
+              localStorage.removeItem(TOKEN_KEY);
+              localStorage.removeItem(REFRESH_KEY);
+              localStorage.removeItem(EXPIRY_KEY);
+              setToken(null); setEmails([]); setMe(null);
+            }} className="mt-2 w-full text-[10px] text-gray-400 hover:text-red-500 cursor-pointer border-none bg-transparent text-left transition-colors">
               Sign out
             </button>
           </div>
@@ -762,7 +799,7 @@ export default function EmailTab() {
       {/* Mobile compose FAB */}
       {isMobile && (
         <div className="fixed bottom-16 right-4 z-40">
-          <button onClick={() => setCompose(true)}
+          <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }}
             className="w-12 h-12 rounded-full bg-indigo-600 text-white shadow-lg flex items-center justify-center cursor-pointer border-none hover:bg-indigo-700">
             <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
@@ -772,13 +809,29 @@ export default function EmailTab() {
       {ListPanel}
       {DetailPanel}
 
-      {compose && <ComposeModal token={token} onClose={() => setCompose(false)} />}
+      {/* Compose (new or forward) */}
+      {compose && !replyTo && (
+        <ComposeModal
+          token={token}
+          onClose={() => { setCompose(false); setForwardOf(null); }}
+          prefill={forwardOf ? {
+            subject: "Fwd: " + forwardOf.subject,
+            body: "\n\n---------- Forwarded message ----------\nFrom: " + forwardOf.from?.emailAddress?.name + " <" + forwardOf.from?.emailAddress?.address + ">\nDate: " + new Date(forwardOf.receivedDateTime).toLocaleString() + "\nSubject: " + forwardOf.subject + "\n\n" + forwardOf.bodyPreview,
+          } : undefined}
+        />
+      )}
+
+      {/* Reply */}
       {replyTo && (
-        <ComposeModal token={token} onClose={() => setReplyTo(null)} prefill={{
-          to:      replyTo.from?.emailAddress?.address,
-          subject: `Re: ${replyTo.subject}`,
-          body:    `\n\n---\nOn ${new Date(replyTo.receivedDateTime).toLocaleString()}, ${replyTo.from?.emailAddress?.name} wrote:\n${replyTo.bodyPreview}`,
-        }} />
+        <ComposeModal
+          token={token}
+          onClose={() => setReplyTo(null)}
+          prefill={{
+            to:      replyTo.from?.emailAddress?.address,
+            subject: "Re: " + replyTo.subject,
+            body:    "\n\n---\nOn " + new Date(replyTo.receivedDateTime).toLocaleString() + ", " + replyTo.from?.emailAddress?.name + " wrote:\n" + replyTo.bodyPreview,
+          }}
+        />
       )}
     </div>
   );
