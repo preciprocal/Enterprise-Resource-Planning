@@ -209,9 +209,9 @@ function NotConfigured() {
             <span className="text-[12px] font-bold text-gray-700">How to set up Azure (5 min)</span>
           </div>
           {[
-            { n: 1, color: "indigo", title: "Create App Registration", body: 'Go to portal.azure.com, search "App registrations", click "New registration", set Supported account types to "Accounts in any org directory and personal Microsoft accounts", then Register.' },
+            { n: 1, color: "indigo", title: "Create App Registration", body: "Go to portal.azure.com, search \u201cApp registrations\u201d, click \u201cNew registration\u201d, set Supported account types to \u201cAccounts in any org directory and personal Microsoft accounts\u201d, then Register." },
             { n: 2, color: "indigo", title: "Copy your IDs", body: "On the app Overview page copy Application (client) ID and Directory (tenant) ID." },
-            { n: 4, color: "indigo", title: "Set redirect URI", body: 'Left sidebar > "Authentication" > "+ Add a platform" > "Single-page application" > paste your admin dashboard URL > Save.' },
+            { n: 4, color: "indigo", title: "Set redirect URI", body: "Left sidebar \u203a \u201cAuthentication\u201d \u203a \u201c+ Add a platform\u201d \u203a \u201cSingle-page application\u201d \u203a paste your admin dashboard URL \u203a Save." },
             { n: 5, color: "green",  title: "Add env vars & restart", body: "Add both env vars to .env.local and restart the dev server." },
           ].map((s, i) => (
             <div key={s.n} className={"px-4 py-3 border-b border-gray-100" + (i === 3 ? " last:border-0" : "")}>
@@ -229,13 +229,13 @@ function NotConfigured() {
               <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</div>
               <div>
                 <p className="text-[12px] font-semibold text-gray-800 mb-1">Add Mail permissions <span className="text-amber-600 font-normal">(where people get stuck)</span></p>
-                <p className="text-[11px] text-gray-600 leading-relaxed">Left sidebar &gt; &quot;API permissions&quot; &gt; &quot;+ Add a permission&quot; &gt; &quot;Microsoft Graph&quot; &gt; &quot;Delegated permissions&quot; &gt; search Mail and tick:</p>
+                <p className="text-[11px] text-gray-600 leading-relaxed">Left sidebar &gt; &ldquo;API permissions&rdquo; &gt; &ldquo;+ Add a permission&rdquo; &gt; &ldquo;Microsoft Graph&rdquo; &gt; &ldquo;Delegated permissions&rdquo; &gt; search Mail and tick:</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {["Mail.Read","Mail.Send","Mail.ReadWrite"].map(p => (
                     <code key={p} className="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5 text-[11px] font-mono font-semibold">{p}</code>
                   ))}
                 </div>
-                <p className="text-[11px] text-gray-500 mt-2">Then click &quot;Add permissions&quot; and &quot;Grant admin consent&quot;.</p>
+                <p className="text-[11px] text-gray-500 mt-2">Then click &ldquo;Add permissions&rdquo; and &ldquo;Grant admin consent&rdquo;.</p>
               </div>
             </div>
           </div>
@@ -695,7 +695,7 @@ export default function EmailTab() {
             {selected.body ? (
               selected.body.contentType === "html" ? (
                 <iframe
-                  srcDoc={"<style>html,body{background:#fff!important;color:#1f2937!important;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;margin:0;padding:12px}a{color:#4F6FF0}*{max-width:100%;box-sizing:border-box}</style>" + selected.body.content}
+                  srcDoc={"<style>html,body{background:#ffffff!important;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;margin:0;padding:12px}*{color:#1f2937!important;max-width:100%;box-sizing:border-box}a,a *{color:#4F6FF0!important}td,th,div,p,span,h1,h2,h3,h4,h5,h6,li,table{background-color:#ffffff!important}</style>" + selected.body.content}
                   className="w-full border-0"
                   style={{ minHeight: 400, height: "100%" }}
                   sandbox="allow-same-origin"
