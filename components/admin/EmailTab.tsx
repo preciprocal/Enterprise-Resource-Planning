@@ -354,7 +354,7 @@ function SignInScreen({ error }: { error?: string }) {
 
 // ─── Main EmailTab ─────────────────────────────────────────────────────────────
 
-export default function EmailTab() {
+export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: number) => void } = {}) {
   const isMobile     = useIsMobile();
   const isConfigured = !!(process.env.NEXT_PUBLIC_MS_CLIENT_ID);
 
@@ -363,18 +363,30 @@ export default function EmailTab() {
   const [emails,     setEmails]     = useState<MSEmail[]>([]);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState("");
-  // KEY FIX: store only selectedId; derive selected from emails[] as single source of truth.
-  // This means any emails[] update (read/unread, body fetch) is immediately reflected in detail panel.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [compose,    setCompose]    = useState(false);
   const [replyTo,    setReplyTo]    = useState<MSEmail | null>(null);
   const [forwardOf,  setForwardOf]  = useState<MSEmail | null>(null);
   const [search,     setSearch]     = useState("");
-  const [unread,     setUnread]     = useState<Record<string, number>>({});
+  // API counts for non-active folders (Sent, Drafts, Junk, Trash)
+  const [otherFolderUnread, setOtherFolderUnread] = useState<Record<string, number>>({});
   const [me,         setMe]         = useState<{ displayName: string; mail: string } | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   const selected = emails.find(e => e.id === selectedId) ?? null;
+
+  // Derive unread for the active folder directly from emails[] — always in sync
+  // with optimistic read/unread updates. Other folders use last-fetched API counts.
+  const unread: Record<string, number> = {
+    ...otherFolderUnread,
+    [folder]: emails.filter(e => !e.isRead).length,
+  };
+
+  // Bubble inbox unread count up to parent sidebar badge
+  const inboxUnread = folder === "inbox"
+    ? emails.filter(e => !e.isRead).length
+    : (otherFolderUnread["inbox"] ?? 0);
+  useEffect(() => { onUnreadChange?.(inboxUnread); }, [inboxUnread, onUnreadChange]);
 
   // ── Restore token / handle OAuth callback ──────────────────────────────
   useEffect(() => {
@@ -437,11 +449,13 @@ export default function EmailTab() {
 
   useEffect(() => { if (token) loadEmails(folder, token); }, [folder, token, loadEmails]);
 
-  // ── Unread counts ─────────────────────────────────────────────────────
+  // ── Unread counts for non-active folders ─────────────────────────────
+  // Only fetch API counts for folders NOT currently loaded in emails[].
+  // The active folder count is derived from emails[] directly (instant + accurate).
   useEffect(() => {
     if (!token) return;
     Promise.all(
-      FOLDERS.map(f =>
+      FOLDERS.filter(f => f.id !== folder).map(f =>
         graphFetch<{ unreadItemCount: number }>("/me/mailFolders/" + f.id + "?$select=unreadItemCount", token)
           .then(r => [f.id, r.unreadItemCount] as const)
           .catch(() => [f.id, 0] as const)
@@ -449,9 +463,9 @@ export default function EmailTab() {
     ).then(results => {
       const map: Record<string, number> = {};
       results.forEach(([id, count]) => { map[id] = count; });
-      setUnread(map);
+      setOtherFolderUnread(map);
     });
-  }, [token, emails]);
+  }, [token, folder]);
 
   // ── Open email ────────────────────────────────────────────────────────
   // FIX 1: Always mark read on open — update emails[] immediately (not inside the
