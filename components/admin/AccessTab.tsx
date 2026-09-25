@@ -74,7 +74,7 @@ export default function AccessTab({ token }: { token: string }) {
       <section>
         <SL>ERP Access <CodeRef k="erpSchema" /></SL>
         <p className="text-[13px] text-[#555] -mt-1 mb-3 leading-relaxed">
-          Only these emails can sign in to the ERP. They must sign in with this exact email (password or Google).
+          Only these emails can sign in to the ERP. They sign in with this exact email and their Preciprocal password (new people can use “Forgot password?” to set one).
           Being an admin in the main app does not grant access.
         </p>
 
