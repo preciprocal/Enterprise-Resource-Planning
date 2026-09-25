@@ -1,16 +1,19 @@
 // components/admin/admin-shared.tsx
 "use client";
 
-import { useState, useEffect, ReactNode } from "react";
+import React, { useState, useEffect, ReactNode, createContext, useContext } from "react";
 import { BarChart as MuiBarChart }  from "@mui/x-charts/BarChart";
 import { PieChart  as MuiPieChart } from "@mui/x-charts/PieChart";
 import { LineChart as MuiLineChart } from "@mui/x-charts/LineChart";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Mirrors the Supabase schema via lib/erp-data.ts loadUsers():
+// profiles → User, subscriptions → Subscription, current usage_counters row →
+// Usage, credit_packs → PackSummary.
 export interface Subscription {
-  plan?: string; status?: string; interviewsUsed?: number; interviewsLimit?: number;
-  currentPeriodStart?: string; currentPeriodEnd?: string; subscriptionEndsAt?: string;
+  plan?: string; status?: string;
+  currentPeriodStart?: string; currentPeriodEnd?: string; subscriptionStartedAt?: string; subscriptionEndsAt?: string;
   canceledAt?: string; lastPaymentAt?: string; trialEndsAt?: string;
   studentVerified?: boolean; studentEduEmail?: string;
   stripeCustomerId?: string; stripeSubscriptionId?: string;
@@ -19,15 +22,21 @@ export interface Subscription {
 }
 export interface Usage {
   resumesUsed?: number; coverLettersUsed?: number; studyPlansUsed?: number;
-  interviewsUsed?: number; interviewDebriefsUsed?: number; linkedinOptimisationsUsed?: number;
-  coldOutreachUsed?: number; findContactsUsed?: number; jobTrackerUsed?: number;
-  lastReset?: string; lastUpdated?: string; [key: string]: unknown;
+  interviewsUsed?: number; interviewDebriefsUsed?: number; debriefAnalysesUsed?: number;
+  linkedinOptimisationsUsed?: number; coldOutreachUsed?: number; findContactsUsed?: number;
+  jobTrackerUsed?: number; jobAnalysesUsed?: number;
+  periodStart?: string; periodEnd?: string; lastUpdated?: string; [key: string]: unknown;
+}
+export interface PackSummary {
+  purchases: number; refunded: number; spentCents: number;
+  balance: Record<string, number>; totalCredits: number;
+  lastPurchasedAt?: string; keys: string[];
 }
 export interface User {
   id: string; name?: string; email?: string; provider?: string; isAdmin?: boolean;
   createdAt?: string; updatedAt?: string; lastLogin?: string;
   lastContactedAt?: string; lastContactSubject?: string;
-  subscription?: Subscription; usage?: Usage; [key: string]: unknown;
+  subscription?: Subscription; usage?: Usage; packs?: PackSummary; [key: string]: unknown;
 }
 export interface PlanColor   { bg: string; text: string; border: string; dot: string; accent: string; tw: string }
 export interface StatusColor { bg: string; text: string; dot: string }
@@ -44,44 +53,49 @@ export interface AnalyticsData {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Keys must match ALLOWED in app/api/admin/route.ts (action=code_ref).
+// Paths are in the Dashboard repo unless noted.
 export const CODE_REFS: Record<string, { file: string; desc: string }> = {
-  stripeWebhook:      { file: "app/api/webhooks/stripe/route.ts",                    desc: "Handles subscription.created/updated/deleted, invoice.payment_succeeded/failed" },
+  stripeWebhook:      { file: "app/api/webhooks/stripe/route.ts",                    desc: "Subscription lifecycle + checkout.session.completed → pack grants" },
   stripeCreateSub:    { file: "app/api/subscription/create-subscription/route.ts",   desc: "Creates Stripe customer + incomplete subscription + SetupIntent" },
-  stripeCancelSub:    { file: "app/api/subscription/cancel-subscription/route.ts",   desc: "cancel_at_period_end — keeps access until period end" },
-  priceIds:           { file: "components/StripePaymentForm.tsx",                    desc: "PRICE_IDS const" },
-  subscriptionFields: { file: "lib/actions/auth.action.ts",                          desc: "buildSubscription() — all subscription Firestore fields" },
-  usageFields:        { file: "lib/actions/auth.action.ts",                          desc: "buildUsage() — all usage counters" },
+  stripeCancelSub:    { file: "app/api/subscription/cancel-subscription/route.ts",   desc: "cancel_at_period_end - keeps access until period end" },
+  priceIds:           { file: "lib/config/stripe-prices.ts",                         desc: "Subscription plan price IDs (env with live fallbacks)" },
+  packs:              { file: "lib/config/packs.ts",                                 desc: "PACKS catalog + STRIPE_PACK_*_PRICE_ID lookup" },
+  packGrant:          { file: "lib/packs/grant.ts",                                  desc: "Writes credit_packs rows on successful checkout" },
+  subscriptionFields: { file: "lib/actions/auth.action.ts",                          desc: "Reads profiles + subscriptions + usage_counters" },
   usageLimits:        { file: "lib/config/usage-limits.ts",                          desc: "USAGE_LIMITS per-plan limits" },
-  usageGuard:         { file: "lib/usage-guard.ts",                                  desc: "checkUsage() + checkAndIncrementUsage()" },
-  userDocument:       { file: "lib/actions/auth.action.ts",                          desc: "getCurrentUser()" },
-  validateUser:       { file: "lib/actions/auth.action.ts",                          desc: "validateAndFixUserDocument()" },
-  adminRoute:         { file: "app/api/admin/route.ts",                              desc: "Server-side admin route" },
-  adminTs:            { file: "admin.ts",                                             desc: "Client-side Firebase init with long-polling" },
+  usageGuard:         { file: "lib/ai/usage-guard.ts",                               desc: "Quota check → increment_usage_counter / consume_pack_credit" },
+  usagePeriod:        { file: "lib/usage/period.ts",                                 desc: "Rolling 30-day usage window anchor" },
+  adminRoute:         { file: "app/api/admin/route.ts",                              desc: "ERP: server-side admin route" },
+  erpData:            { file: "lib/erp-data.ts",                                     desc: "ERP: Supabase ↔ ERP User mapping" },
+  erpSchema:          { file: "supabase/erp_schema.sql",                             desc: "ERP: erp_* tables + admin read policies" },
 };
 
+// Annual plans were removed from the Dashboard (lib/config/stripe-prices.ts).
 export const PRICE_IDS_MAP: Record<string, { plan: string; billing: string; price: string; label: string }> = {
-  "price_1TFjvAQSkS83MGF9XlLXgu5H": { plan: "free",    billing: "—",       price: "$0",           label: "Free"           },
+  "price_1TFjvAQSkS83MGF9XlLXgu5H": { plan: "free",    billing: "",       price: "$0",           label: "Free"           },
   "price_1TFjwCQSkS83MGF9xH1bdc1o": { plan: "pro",     billing: "Monthly", price: "$9.99/mo",     label: "Pro Monthly"    },
-  "price_1TFjykQSkS83MGF9oczwiyNo": { plan: "pro",     billing: "Annual",  price: "$95.88/yr",    label: "Pro Annual"     },
   "price_1TFjzWQSkS83MGF9YCP7CBk3": { plan: "premium", billing: "Monthly", price: "$24.99/mo",    label: "Premium Monthly"},
-  "price_1TFk0EQSkS83MGF9PfRehCO":  { plan: "premium", billing: "Annual",  price: "$239.88/yr",   label: "Premium Annual" },
 };
+
+const PLAN_PRICES: Record<string, number> = { free: 0, pro: 9.99, premium: 24.99 };
+export function planMonthlyPrice(plan?: string): number { return PLAN_PRICES[plan ?? "free"] ?? 0; }
 
 export const PLAN_FEATURES: Record<string, { features: string[]; price: string; annualPrice: string; tagline: string; cta: string; popular?: boolean; customPricing?: boolean; securityFeatures?: string[] }> = {
   free: {
     tagline: "Get started and feel the value.",
     price: "$0", annualPrice: "$0", cta: "Current plan",
-    features: ["2 resume analyses / month","3 cover letters / month","1 mock interview / month","1 LinkedIn optimisation / month","1 interview debrief / month","1 cold outreach message / month","1 find contacts / month","Job tracker (5 jobs)","Chrome extension (limited)","Basic analytics"],
+    features: ["3 resume analyses / month","5 cover letters / month","1 mock interview / month","2 study plans / month","2 LinkedIn optimisations / month","2 interview debriefs / month","3 cold outreach messages / month","3 find contacts / month","Job tracker (10 jobs)"],
   },
   pro: {
     tagline: "Everything an active job seeker needs.",
-    price: "$9.99/mo", annualPrice: "$95.88/yr", cta: "Start Pro", popular: true,
-    features: ["10 resume analyses / month","20 cover letters / month","Unlimited mock interviews","5 LinkedIn optimisations / month","5 interview debriefs / month","5 cold outreach messages / month","5 find contacts / month","5 active study plans","Job tracker (30 jobs)","Chrome extension (full)","Resume editor + PDF & Word export","Recruiter eye simulation","Full analytics dashboard","Priority AI responses","Students: 1 month free — no card needed"],
+    price: "$9.99/mo", annualPrice: "—", cta: "Start Pro", popular: true,
+    features: ["20 resume analyses / month","30 cover letters / month","3 mock interviews / month","10 study plans / month","5 LinkedIn optimisations / month","5 interview debriefs / month","20 cold outreach messages / month","15 find contacts / month","Unlimited job tracker"],
   },
   premium: {
-    tagline: "Unlimited access for serious candidates.",
-    price: "$24.99/mo", annualPrice: "$239.88/yr", cta: "Start Premium",
-    features: ["Unlimited everything","Company-specific interview prep","AI interview coach + deep analysis","Post-interview improvement roadmap","All Pro features included","Priority support (24hr SLA)","Early access to new features"],
+    tagline: "For serious candidates.",
+    price: "$24.99/mo", annualPrice: "—", cta: "Start Premium",
+    features: ["50 resume analyses / month","80 cover letters / month","5 mock interviews / month","25 study plans / month","15 LinkedIn optimisations / month","10 interview debriefs / month","60 cold outreach messages / month","50 find contacts / month","Unlimited job tracker"],
   },
   enterprise: {
     tagline: "For teams, hiring pipelines & organisations.",
@@ -92,32 +106,37 @@ export const PLAN_FEATURES: Record<string, { features: string[]; price: string; 
 };
 
 export const WEBHOOK_EVENTS = [
-  { event: "customer.subscription.created",  handler: "handleSubscriptionCreated" },
-  { event: "customer.subscription.updated",  handler: "handleSubscriptionUpdated" },
-  { event: "customer.subscription.deleted",  handler: "handleSubscriptionDeleted" },
-  { event: "invoice.payment_succeeded",      handler: "handlePaymentSucceeded"    },
-  { event: "invoice.payment_failed",         handler: "handlePaymentFailed"       },
+  { event: "customer.subscription.created",         handler: "handleSubscriptionCreated"      },
+  { event: "customer.subscription.updated",         handler: "handleSubscriptionUpdated"      },
+  { event: "customer.subscription.deleted",         handler: "handleSubscriptionDeleted"      },
+  { event: "invoice.payment_succeeded",             handler: "handlePaymentSucceeded"         },
+  { event: "invoice.payment_failed",                handler: "handlePaymentFailed"            },
+  { event: "checkout.session.completed",            handler: "handleCheckoutSessionCompleted" },
+  { event: "checkout.session.async_payment_succeeded", handler: "handleCheckoutSessionCompleted" },
 ];
 
 export const PLANS = ["free", "pro", "premium", "enterprise"] as const;
 
 export const USAGE_FIELDS: { key: keyof Usage; label: string; color: string }[] = [
-  { key: "resumesUsed",               label: "Resumes",       color: "#6366F1" },
-  { key: "coverLettersUsed",          label: "Cover Letters", color: "#0EA5E9" },
-  { key: "studyPlansUsed",            label: "Study Plans",   color: "#10B981" },
-  { key: "interviewsUsed",            label: "Interviews",    color: "#F59E0B" },
-  { key: "interviewDebriefsUsed",     label: "Debriefs",      color: "#8B5CF6" },
-  { key: "linkedinOptimisationsUsed", label: "LinkedIn",      color: "#3B82F6" },
-  { key: "coldOutreachUsed",          label: "Cold Outreach", color: "#EC4899" },
-  { key: "findContactsUsed",          label: "Find Contacts", color: "#14B8A6" },
-  { key: "jobTrackerUsed",            label: "Job Tracker",   color: "#F97316" },
+  { key: "resumesUsed",               label: "Resumes",       color: "#0070f3" },
+  { key: "coverLettersUsed",          label: "Cover Letters", color: "#3ecf8e" },
+  { key: "studyPlansUsed",            label: "Study Plans",   color: "#50e3c2" },
+  { key: "interviewsUsed",            label: "Interviews",    color: "#f5a623" },
+  { key: "interviewDebriefsUsed",     label: "Debriefs",      color: "#a855f7" },
+  { key: "debriefAnalysesUsed",       label: "Debrief AI",    color: "#c084fc" },
+  { key: "linkedinOptimisationsUsed", label: "LinkedIn",      color: "#38bdf8" },
+  { key: "coldOutreachUsed",          label: "Cold Outreach", color: "#f472b6" },
+  { key: "findContactsUsed",          label: "Find Contacts", color: "#2dd4bf" },
+  { key: "jobTrackerUsed",            label: "Job Tracker",   color: "#fb923c" },
 ];
 
+// Monthly quotas — mirrors USAGE_LIMITS in the Dashboard's lib/config/usage-limits.ts. -1 = unlimited.
+// Pack credits (User.packs.balance) are spent only after these run out.
 export const LIMITS: Record<string, Record<string, number>> = {
-  free:       { resumesUsed:2, coverLettersUsed:3, studyPlansUsed:0, interviewsUsed:1, interviewDebriefsUsed:1, linkedinOptimisationsUsed:1, coldOutreachUsed:1, findContactsUsed:1, jobTrackerUsed:5 },
-  pro:        { resumesUsed:10, coverLettersUsed:20, studyPlansUsed:5, interviewsUsed:-1, interviewDebriefsUsed:5, linkedinOptimisationsUsed:5, coldOutreachUsed:5, findContactsUsed:5, jobTrackerUsed:30 },
-  premium:    { resumesUsed:-1, coverLettersUsed:-1, studyPlansUsed:-1, interviewsUsed:-1, interviewDebriefsUsed:-1, linkedinOptimisationsUsed:-1, coldOutreachUsed:-1, findContactsUsed:-1, jobTrackerUsed:-1 },
-  enterprise: { resumesUsed:-1, coverLettersUsed:-1, studyPlansUsed:-1, interviewsUsed:-1, interviewDebriefsUsed:-1, linkedinOptimisationsUsed:-1, coldOutreachUsed:-1, findContactsUsed:-1, jobTrackerUsed:-1 },
+  free:       { resumesUsed:3,  coverLettersUsed:5,  studyPlansUsed:2,  interviewsUsed:1, interviewDebriefsUsed:2,  debriefAnalysesUsed:1,  linkedinOptimisationsUsed:2,  coldOutreachUsed:3,  findContactsUsed:3,  jobTrackerUsed:10 },
+  pro:        { resumesUsed:20, coverLettersUsed:30, studyPlansUsed:10, interviewsUsed:3, interviewDebriefsUsed:5,  debriefAnalysesUsed:4,  linkedinOptimisationsUsed:5,  coldOutreachUsed:20, findContactsUsed:15, jobTrackerUsed:-1 },
+  premium:    { resumesUsed:50, coverLettersUsed:80, studyPlansUsed:25, interviewsUsed:5, interviewDebriefsUsed:10, debriefAnalysesUsed:12, linkedinOptimisationsUsed:15, coldOutreachUsed:60, findContactsUsed:50, jobTrackerUsed:-1 },
+  enterprise: { resumesUsed:-1, coverLettersUsed:-1, studyPlansUsed:-1, interviewsUsed:-1, interviewDebriefsUsed:-1, debriefAnalysesUsed:-1, linkedinOptimisationsUsed:-1, coldOutreachUsed:-1, findContactsUsed:-1, jobTrackerUsed:-1 },
 };
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -136,135 +155,215 @@ export function useIsMobile(bp = 640) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 export function planColor(p?: string): PlanColor {
-  if (p === "enterprise") return { bg:"#F0FDF4", text:"#065F46", border:"#6EE7B7", dot:"#10B981", accent:"#10B981", tw:"bg-emerald-50 text-emerald-800 border-emerald-200" };
-  if (p === "premium")    return { bg:"#FEF9EE", text:"#92400E", border:"#FDE68A", dot:"#F59E0B", accent:"#F59E0B", tw:"bg-amber-50 text-amber-800 border-amber-200" };
-  if (p === "pro")        return { bg:"#EFF6FF", text:"#1D4ED8", border:"#BFDBFE", dot:"#3B82F6", accent:"#3B82F6", tw:"bg-blue-50 text-blue-700 border-blue-200" };
-  if (p === "starter")    return { bg:"#F5F3FF", text:"#6D28D9", border:"#DDD6FE", dot:"#8B5CF6", accent:"#8B5CF6", tw:"bg-violet-50 text-violet-700 border-violet-200" };
-  return { bg:"#F9FAFB", text:"#6B7280", border:"#E5E7EB", dot:"#9CA3AF", accent:"#9CA3AF", tw:"bg-gray-50 text-gray-500 border-gray-200" };
+  if (p === "enterprise") return {
+    bg: "rgba(62,207,142,0.08)", text: "#3ecf8e", border: "rgba(62,207,142,0.2)", dot: "#3ecf8e", accent: "#3ecf8e",
+    tw: "bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border-[rgba(62,207,142,0.2)]",
+  };
+  if (p === "premium") return {
+    bg: "rgba(245,166,35,0.08)", text: "#f5a623", border: "rgba(245,166,35,0.2)", dot: "#f5a623", accent: "#f5a623",
+    tw: "bg-[rgba(245,166,35,0.08)] text-[#f5a623] border-[rgba(245,166,35,0.2)]",
+  };
+  if (p === "pro") return {
+    bg: "rgba(0,112,243,0.08)", text: "#0070f3", border: "rgba(0,112,243,0.2)", dot: "#0070f3", accent: "#0070f3",
+    tw: "bg-[rgba(0,112,243,0.08)] text-[#0070f3] border-[rgba(0,112,243,0.2)]",
+  };
+  if (p === "starter") return {
+    bg: "rgba(168,85,247,0.08)", text: "#a855f7", border: "rgba(168,85,247,0.2)", dot: "#a855f7", accent: "#a855f7",
+    tw: "bg-[rgba(168,85,247,0.08)] text-[#a855f7] border-[rgba(168,85,247,0.2)]",
+  };
+  return {
+    bg: "rgba(136,136,136,0.08)", text: "#888", border: "rgba(136,136,136,0.2)", dot: "#555", accent: "#444",
+    tw: "bg-[rgba(136,136,136,0.08)] text-[#888] border-[rgba(136,136,136,0.2)]",
+  };
 }
 
 export function statusColor(s?: string): StatusColor {
-  if (s === "active")   return { bg:"#F0FDF4", text:"#16A34A", dot:"#22C55E" };
-  if (s === "canceled") return { bg:"#FFF1F2", text:"#BE123C", dot:"#F43F5E" };
-  if (s === "past_due") return { bg:"#FFFBEB", text:"#92400E", dot:"#F59E0B" };
-  if (s === "trialing") return { bg:"#F5F3FF", text:"#6D28D9", dot:"#8B5CF6" };
-  return { bg:"#F9FAFB", text:"#6B7280", dot:"#9CA3AF" };
+  if (s === "active")   return { bg: "rgba(62,207,142,0.08)",  text: "#3ecf8e", dot: "#3ecf8e" };
+  if (s === "canceled") return { bg: "rgba(255,68,68,0.08)",   text: "#f44",    dot: "#f44" };
+  if (s === "past_due") return { bg: "rgba(245,166,35,0.08)",  text: "#f5a623", dot: "#f5a623" };
+  if (s === "trialing") return { bg: "rgba(136,136,136,0.08)", text: "#888",    dot: "#888" };
+  return { bg: "rgba(136,136,136,0.06)", text: "#555", dot: "#333" };
 }
 
 export function fmt(s?: string) {
-  if (!s) return "—";
+  if (!s) return "";
   try { return new Date(s).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); }
   catch { return s; }
 }
 export function fmtFull(s?: string) {
-  if (!s) return "—";
+  if (!s) return "";
   try { return new Date(s).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }); }
   catch { return s; }
 }
 export function daysAgo(s?: string) {
-  if (!s) return "—";
+  if (!s) return "";
   try {
     const d = Math.floor((Date.now() - new Date(s).getTime()) / 86400000);
     if (d === 0) return "Today"; if (d === 1) return "1d ago";
     if (d < 30) return `${d}d ago`; if (d < 365) return `${Math.floor(d/30)}mo ago`;
     return `${Math.floor(d/365)}y ago`;
-  } catch { return "—"; }
+  } catch { return ""; }
 }
 
-export const inputCls  = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 font-[inherit]";
+// Vercel dark theme inputs
+export const inputCls = "w-full border border-[#2a2a2a] rounded-md px-3 py-2 text-[14px] text-[#ededed] bg-[#0a0a0a] outline-none focus:border-[#555] transition-colors placeholder:text-[#444] font-[inherit]";
 export const selectCls = inputCls + " cursor-pointer";
+
+// ─── Select ───────────────────────────────────────────────────────────────────
+
+type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
+  wrapperClassName?: string;
+};
+
+export function Select({ wrapperClassName = "w-full", className = "", children, ...props }: SelectProps) {
+  return (
+    <div className={`relative ${wrapperClassName}`}>
+      <select
+        className={`appearance-none w-full border border-[#2a2a2a] rounded-md px-3 py-2 pr-8 text-[14px] text-[#ededed] bg-[#0a0a0a] outline-none hover:border-[#333] focus:border-[#555] transition-colors cursor-pointer font-[inherit] ${className}`}
+        {...props}
+      >
+        {children}
+      </select>
+      <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#555]">
+        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
 const PAL = [
-  "bg-violet-100 text-violet-700","bg-blue-100 text-blue-700","bg-emerald-100 text-emerald-700",
-  "bg-amber-100 text-amber-700","bg-rose-100 text-rose-700","bg-fuchsia-100 text-fuchsia-700",
-  "bg-teal-100 text-teal-700","bg-orange-100 text-orange-700",
+  "bg-[rgba(99,102,241,0.15)] text-[#818cf8]",
+  "bg-[rgba(14,165,233,0.15)] text-[#38bdf8]",
+  "bg-[rgba(16,185,129,0.15)] text-[#34d399]",
+  "bg-[rgba(245,158,11,0.15)] text-[#fbbf24]",
+  "bg-[rgba(244,63,94,0.15)] text-[#fb7185]",
+  "bg-[rgba(168,85,247,0.15)] text-[#c084fc]",
+  "bg-[rgba(20,184,166,0.15)] text-[#2dd4bf]",
+  "bg-[rgba(249,115,22,0.15)] text-[#fb923c]",
 ];
 
 export function Avatar({ name, size = 36 }: { name?: string; size?: number }) {
-  const initials = (name ?? "?").split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase();
+  const initials = (name ?? "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const p = PAL[name ? name.charCodeAt(0) % PAL.length : 0];
-  const sz = `${size}px`;
   return (
-    <div className={`rounded-full flex items-center justify-center font-bold shrink-0 text-xs ${p}`}
-      style={{ width: sz, height: sz, fontSize: size * 0.34 }}>
+    <div
+      className={`rounded-full flex items-center justify-center font-medium shrink-0 ${p}`}
+      style={{ width: size, height: size, fontSize: size * 0.34 }}
+    >
       {initials}
     </div>
   );
 }
 
 export function Chip({ label, className = "" }: { label: string; className?: string }) {
-  return <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded whitespace-nowrap ${className}`}>{label}</span>;
+  return (
+    <span className={`inline-block text-[12px] font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${className}`}>
+      {label}
+    </span>
+  );
 }
 
 export function StatusDot({ color }: { color: string }) {
   return <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />;
 }
 
-export function MetricCard({ label, value, color = "#111827", sub }: { label: string; value: ReactNode; color?: string; sub?: string }) {
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+export function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`skeleton rounded-md ${className}`} style={style} />;
+}
+
+export function SkeletonLine({ w, h = 10 }: { w?: string | number; h?: number }) {
   return (
-    <div className="bg-white border border-gray-100 rounded-lg p-4 flex flex-col gap-1 min-w-0">
-      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</div>
-      <div className="text-2xl font-extrabold leading-none tracking-tight mt-1" style={{ color }}>{value}</div>
-      {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
+    <div
+      className="skeleton rounded-full"
+      style={{ height: h, width: w ?? "100%" }}
+    />
+  );
+}
+
+export function SkeletonMetricCard() {
+  return (
+    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-4 flex flex-col gap-2 min-w-0">
+      <SkeletonLine w="45%" h={9} />
+      <SkeletonLine w="55%" h={22} />
+      <SkeletonLine w="35%" h={9} />
     </div>
   );
 }
 
-// ─── HBar (unchanged — it's a progress bar, not a chart) ─────────────────────
-
-export function HBar({ pct, color = "#6366F1", height = 6 }: { pct: number; color?: string; height?: number }) {
+export function SkeletonTable({ rows = 6, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <div className="bg-gray-100 rounded-full overflow-hidden flex-1" style={{ height }}>
-      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct,100)}%`, background: color }} />
+    <div className="w-full">
+      <div className="flex gap-4 px-4 py-2.5 border-b border-[#111]">
+        {Array.from({ length: cols }).map((_, i) => (
+          <SkeletonLine key={i} w={i === 0 ? "30%" : "20%"} h={9} />
+        ))}
+      </div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex gap-4 px-4 py-3 border-b border-[#0d0d0d]">
+          {Array.from({ length: cols }).map((_, j) => (
+            <SkeletonLine key={j} w={j === 0 ? "30%" : j === cols - 1 ? "12%" : "20%"} h={10} />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
 
-// ─── Shared MUI chart sx overrides ───────────────────────────────────────────
+// ─── MetricCard ───────────────────────────────────────────────────────────────
+
+export function MetricCard({ label, value, color = "#ededed", sub }: { label: string; value: ReactNode; color?: string; sub?: string }) {
+  return (
+    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-4 flex flex-col gap-1 min-w-0">
+      <div className="text-[11px] font-semibold text-[#444] uppercase tracking-[0.08em]">{label}</div>
+      <div className="text-[26px] font-bold leading-none tracking-tight mt-1.5" style={{ color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {sub && <div className="text-[12px] text-[#555] mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+// ─── HBar ─────────────────────────────────────────────────────────────────────
+
+export function HBar({ pct, color = "#0070f3", height = 4 }: { pct: number; color?: string; height?: number }) {
+  return (
+    <div className="rounded-full overflow-hidden flex-1" style={{ height, background: "#1a1a1a" }}>
+      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
+    </div>
+  );
+}
+
+// ─── Chart SX overrides ───────────────────────────────────────────────────────
 
 const CHART_SX = {
-  fontFamily: "'Inter',-apple-system,sans-serif",
-  "& .MuiChartsAxis-line":          { stroke: "#F3F4F6" },
-  "& .MuiChartsAxis-tick":          { stroke: "#F3F4F6" },
-  "& .MuiChartsGrid-line":          { stroke: "#F3F4F6", strokeDasharray: "4 4" },
-  "& .MuiChartsTooltip-root":       { fontFamily: "inherit", fontSize: 12, borderRadius: 8, boxShadow: "0 4px 24px rgba(0,0,0,0.10)" },
-  "& .MuiChartsTooltip-table":      { fontFamily: "inherit" },
-  "& .MuiChartsLegend-label":       { fontFamily: "inherit", fontSize: 11 },
-  "& text":                          { fontFamily: "'Inter',-apple-system,sans-serif !important" },
+  fontFamily: "var(--font-geist-sans), -apple-system, sans-serif",
+  background: "transparent",
+  "& .MuiChartsAxis-line":      { stroke: "#1a1a1a" },
+  "& .MuiChartsAxis-tick":      { stroke: "#1a1a1a" },
+  "& .MuiChartsGrid-line":      { stroke: "#1a1a1a", strokeDasharray: "4 4" },
+  "& .MuiChartsAxis-tickLabel": { fill: "#555" },
+  "& .MuiChartsTooltip-root":   { background: "#111 !important", border: "1px solid #333 !important", borderRadius: "8px", boxShadow: "none" },
+  "& .MuiChartsTooltip-table":  { fontFamily: "inherit" },
+  "& .MuiChartsLegend-label":   { fill: "#888", fontSize: 11, fontFamily: "inherit" },
+  "& text":                      { fontFamily: "var(--font-geist-sans), -apple-system, sans-serif !important", fill: "#555 !important" },
 } as const;
 
-const TICK_STYLE = { fontSize: 9, fill: "#9CA3AF", fontFamily: "'Inter',-apple-system,sans-serif" } as const;
+const TICK_STYLE = { fontSize: 9, fill: "#555", fontFamily: "var(--font-geist-sans), -apple-system, sans-serif" } as const;
 
-// ─── BarChart — MUI X powered ─────────────────────────────────────────────────
+// ─── BarChart ─────────────────────────────────────────────────────────────────
 
-export function BarChart({
-  data, color = "#6366F1", h = 80,
-}: {
-  data: { l: string; v: number }[];
-  color?: string;
-  h?: number;
-}) {
+export function BarChart({ data, color = "#0070f3", h = 80 }: { data: { l: string; v: number }[]; color?: string; h?: number }) {
   if (!data?.length) return null;
   return (
     <MuiBarChart
       height={h + 40}
-      series={[{
-        data: data.map(d => d.v),
-        color,
-        valueFormatter: (v: number | null) => String(v ?? 0),
-      }]}
-      xAxis={[{
-        data: data.map(d => d.l),
-        scaleType: "band",
-        tickLabelStyle: TICK_STYLE,
-        tickSize: 0,
-      }]}
-      yAxis={[{
-        tickLabelStyle: { ...TICK_STYLE, fill: "#D1D5DB" },
-        tickSize: 0,
-      }]}
+      series={[{ data: data.map(d => d.v), color, valueFormatter: (v: number | null) => String(v ?? 0) }]}
+      xAxis={[{ data: data.map(d => d.l), scaleType: "band", tickLabelStyle: TICK_STYLE, tickSize: 0 }]}
+      yAxis={[{ tickLabelStyle: { ...TICK_STYLE, fill: "#444" }, tickSize: 0 }]}
       margin={{ top: 8, bottom: 28, left: 32, right: 4 }}
       borderRadius={4}
       grid={{ horizontal: true }}
@@ -274,29 +373,19 @@ export function BarChart({
   );
 }
 
-// ─── Donut — MUI X PieChart powered ──────────────────────────────────────────
+// ─── Donut ────────────────────────────────────────────────────────────────────
 
-export function Donut({
-  segments, size = 80, label,
-}: {
-  segments: { color: string; value: number; label?: string }[];
-  size?: number;
-  label?: string;
-}) {
+export function Donut({ segments, size = 80, label }: { segments: { color: string; value: number; label?: string }[]; size?: number; label?: string }) {
   const validSegments = segments.filter(s => s.value > 0);
   if (!validSegments.length) return null;
-
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       <MuiPieChart
         series={[{
           data: validSegments.map((s, i) => ({ id: i, value: s.value, color: s.color, label: s.label })),
-          innerRadius: size * 0.28,
-          outerRadius: size * 0.44,
-          cx: size / 2 - 4,
-          cy: size / 2 - 4,
-          paddingAngle: 2,
-          cornerRadius: 2,
+          innerRadius: size * 0.28, outerRadius: size * 0.44,
+          cx: size / 2 - 4, cy: size / 2 - 4,
+          paddingAngle: 2, cornerRadius: 2,
           highlightScope: { fade: "global", highlight: "item" },
         }]}
         width={size}
@@ -310,7 +399,7 @@ export function Donut({
         <div style={{
           position: "absolute", top: "50%", left: "50%",
           transform: "translate(-60%, -50%)",
-          fontSize: size * 0.16, fontWeight: 800, color: "#111827",
+          fontSize: size * 0.16, fontWeight: 700, color: "#ededed",
           pointerEvents: "none", lineHeight: 1, letterSpacing: "-0.02em",
         }}>
           {label}
@@ -320,21 +409,13 @@ export function Donut({
   );
 }
 
-// ─── LineChart — MUI X powered ────────────────────────────────────────────────
+// ─── LineChart ────────────────────────────────────────────────────────────────
 
-export function LineChart({
-  data, labels, color = "#6366F1", h = 120, area = false, smooth = true,
-}: {
-  data: number[][];          // one array per series
-  labels: string[];          // x-axis labels
-  colors?: string[];
-  color?: string;
-  h?: number;
-  area?: boolean;
-  smooth?: boolean;
+export function LineChart({ data, labels, color = "#0070f3", h = 120, area = false, smooth = true }: {
+  data: number[][]; labels: string[]; colors?: string[]; color?: string; h?: number; area?: boolean; smooth?: boolean;
 }) {
   if (!data?.length || !labels?.length) return null;
-  const colors = ["#6366F1","#10B981","#F59E0B","#EC4899","#0EA5E9","#8B5CF6"];
+  const colors = ["#0070f3", "#3ecf8e", "#f5a623", "#f472b6", "#38bdf8", "#a855f7"];
   return (
     <MuiLineChart
       height={h + 40}
@@ -346,22 +427,14 @@ export function LineChart({
         showMark: false,
         valueFormatter: (v: number | null) => String(v ?? 0),
       }))}
-      xAxis={[{
-        data: labels,
-        scaleType: "band",
-        tickLabelStyle: TICK_STYLE,
-        tickSize: 0,
-      }]}
-      yAxis={[{
-        tickLabelStyle: { ...TICK_STYLE, fill: "#D1D5DB" },
-        tickSize: 0,
-      }]}
+      xAxis={[{ data: labels, scaleType: "band", tickLabelStyle: TICK_STYLE, tickSize: 0 }]}
+      yAxis={[{ tickLabelStyle: { ...TICK_STYLE, fill: "#444" }, tickSize: 0 }]}
       margin={{ top: 8, bottom: 28, left: 32, right: 4 }}
       grid={{ horizontal: true }}
       sx={{
         ...CHART_SX,
         width: "100% !important",
-        "& .MuiAreaElement-root": { fillOpacity: 0.12 },
+        "& .MuiAreaElement-root": { fillOpacity: 0.08 },
         "& .MuiLineElement-root": { strokeWidth: 2 },
         "& .MuiMarkElement-root": { display: "none" },
       }}
@@ -380,17 +453,19 @@ export interface FRowProps {
 
 export function FRow({ label, value, mono, copyable, badgeLabel, badgeClassName }: FRowProps) {
   const [cp, setCp] = useState(false);
-  const strVal  = (value !== undefined && value !== null && value !== "") ? String(value) : "—";
+  const strVal  = (value !== undefined && value !== null && value !== "") ? String(value) : "";
   const copyVal = (value !== undefined && value !== null && value !== "") ? String(value) : "";
   return (
-    <div className="flex items-start gap-2.5 py-2 border-b border-gray-50 min-w-0">
-      <div className="w-32 shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-0.5">{label}</div>
-      <div className={`flex-1 text-[13px] min-w-0 overflow-hidden ${mono ? "text-indigo-600 font-mono" : "text-gray-900"}`}>
+    <div className="flex items-start gap-2.5 py-2.5 border-b border-[#1a1a1a] last:border-0 min-w-0">
+      <div className="w-32 shrink-0 text-[12px] font-medium text-[#555] uppercase tracking-wider pt-0.5">{label}</div>
+      <div className={`flex-1 text-[14px] min-w-0 overflow-hidden ${mono ? "text-[#0070f3] font-mono" : "text-[#ededed]"}`}>
         {badgeLabel ? <Chip label={badgeLabel} className={badgeClassName ?? ""} /> : strVal}
       </div>
       {copyable && copyVal && (
-        <button onClick={() => { navigator.clipboard?.writeText(copyVal); setCp(true); setTimeout(()=>setCp(false),1200); }}
-          className={`shrink-0 text-[11px] font-semibold border-none bg-transparent cursor-pointer ${cp?"text-green-600":"text-gray-400"}`}>
+        <button
+          onClick={() => { navigator.clipboard?.writeText(copyVal); setCp(true); setTimeout(() => setCp(false), 1200); }}
+          className={`shrink-0 text-[12px] font-medium border-none bg-transparent cursor-pointer transition-colors ${cp ? "text-[#3ecf8e]" : "text-[#555] hover:text-[#888]"}`}
+        >
           {cp ? "✓" : "Copy"}
         </button>
       )}
@@ -398,16 +473,105 @@ export function FRow({ label, value, mono, copyable, badgeLabel, badgeClassName 
   );
 }
 
+export const AdminTokenContext = createContext("");
+
 export function CodeRef({ k }: { k: string }) {
+  const token = useContext(AdminTokenContext);
   const r = CODE_REFS[k];
+  const [open,     setOpen]     = useState(false);
+  const [content,  setContent]  = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [err,      setErr]      = useState("");
+
+  async function load() {
+    setOpen(true);
+    if (content) return;
+    setFetching(true); setErr("");
+    try {
+      const res  = await fetch(`/api/admin?action=code_ref&key=${encodeURIComponent(k)}`, {
+        headers: token ? { "x-admin-token": token } : {},
+      });
+      const json = await res.json() as { content?: string; error?: string };
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setContent(json.content ?? "");
+    } catch (e) { setErr((e as Error).message); }
+    setFetching(false);
+  }
+
   if (!r) return null;
   return (
-    <span title={r.desc} className="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 cursor-help">
-      <svg width="9" height="9" fill="none" stroke="#7C3AED" strokeWidth="2" viewBox="0 0 24 24">
-        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-      </svg>
-      <span className="font-mono text-[9px] text-violet-700 max-w-[180px] truncate">{r.file}</span>
-    </span>
+    <>
+      <span className="inline-flex items-center gap-1 bg-[rgba(99,102,241,0.08)] border border-[rgba(99,102,241,0.2)] rounded px-1.5 py-0.5">
+        <svg width="9" height="9" fill="none" stroke="#818cf8" strokeWidth="2" viewBox="0 0 24 24">
+          <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+        </svg>
+        <span className="font-mono text-[11px] text-[#818cf8] max-w-45 truncate">{r.file}</span>
+        <button
+          onClick={e => { e.stopPropagation(); void load(); }}
+          title={r.desc}
+          className="ml-0.5 w-3.5 h-3.5 rounded-full bg-[rgba(99,102,241,0.2)] text-[#818cf8] text-[8px] font-bold border-none cursor-pointer hover:bg-[rgba(99,102,241,0.4)] transition-colors flex items-center justify-center leading-none shrink-0"
+        >
+          ?
+        </button>
+      </span>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)" }}
+          onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl flex flex-col overflow-hidden w-full max-w-3xl"
+            style={{ maxHeight: "82vh" }}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-[#1a1a1a] shrink-0">
+              <svg width="12" height="12" fill="none" stroke="#818cf8" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0">
+                <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+              </svg>
+              <code className="font-mono text-[13px] text-[#818cf8] flex-1 min-w-0 truncate">{r.file}</code>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1.5 rounded-md border border-[#2a2a2a] bg-transparent text-[#555] hover:text-[#ededed] hover:border-[#555] transition-colors cursor-pointer shrink-0 flex"
+              >
+                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="px-5 py-2.5 text-[12px] text-[#555] border-b border-[#111] shrink-0">{r.desc}</div>
+
+            {/* Code body */}
+            <div className="flex-1 overflow-auto min-h-0">
+              {fetching && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-5 h-5 rounded-full border-2 border-[#2a2a2a] border-t-[#818cf8] animate-spin" />
+                </div>
+              )}
+              {err && !fetching && (
+                <div className="px-5 py-4 text-sm text-[#f44]">{err}</div>
+              )}
+              {content && !fetching && (
+                <pre className="p-5 m-0 text-[12px] font-mono text-[#c8c8c8] leading-relaxed overflow-x-auto whitespace-pre">
+                  <code>{content}</code>
+                </pre>
+              )}
+            </div>
+
+            {content && (
+              <div className="px-5 py-2.5 border-t border-[#111] text-[11px] text-[#444] shrink-0 flex items-center justify-between">
+                <span>{content.split("\n").length} lines · {r.file}</span>
+                <button
+                  onClick={() => navigator.clipboard?.writeText(content)}
+                  className="text-[11px] text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer transition-colors"
+                >
+                  Copy all
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -417,27 +581,27 @@ export function Spinner({ size }: { size?: number } = {}) {
   if (size) {
     return (
       <div
-        className="rounded-full border-[2px] border-gray-200 border-t-indigo-500 animate-spin shrink-0"
+        className="rounded-full border-[1.5px] border-[#222] border-t-[#555] animate-spin shrink-0"
         style={{ width: size, height: size }}
       />
     );
   }
   return (
-    <div className="flex-1 w-full flex flex-col items-center justify-center gap-3 min-h-[240px]">
-      <div className="w-7 h-7 rounded-full border-[2.5px] border-gray-200 border-t-indigo-500 animate-spin" />
-      <span className="text-[13px] text-gray-400">Loading…</span>
+    <div className="flex-1 w-full flex flex-col items-center justify-center gap-2.5 min-h-48">
+      <div className="w-5 h-5 rounded-full border-[1.5px] border-[#222] border-t-[#555] animate-spin" />
+      <span className="text-[12px] text-[#3a3a3a] tracking-wide">Loading…</span>
     </div>
   );
 }
 
 export function SL({ children }: { children: ReactNode }) {
-  return <div className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-2.5">{children}</div>;
+  return <div className="text-[10px] font-semibold text-[#3a3a3a] uppercase tracking-[0.12em] mb-3">{children}</div>;
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`bg-white border border-gray-100 rounded-xl p-4 md:p-5 ${className}`}>{children}</div>;
+  return <div className={`bg-[#0a0a0a] border border-[#111] rounded-xl p-4 md:p-5 ${className}`}>{children}</div>;
 }
 
 export function CardTitle({ children }: { children: ReactNode }) {
-  return <div className="text-[15px] font-extrabold text-gray-900 tracking-tight mb-4">{children}</div>;
+  return <div className="text-[13px] font-semibold text-[#ccc] tracking-tight mb-4">{children}</div>;
 }

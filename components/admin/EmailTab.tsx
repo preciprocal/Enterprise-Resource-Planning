@@ -189,24 +189,24 @@ function NotConfigured() {
           </div>
           <div>
             <h2 className="text-[16px] font-bold text-gray-900">Outlook not connected</h2>
-            <p className="text-[12px] text-gray-500">Add 2 env vars to enable this tab</p>
+            <p className="text-[13px] text-gray-500">Add 2 env vars to enable this tab</p>
           </div>
         </div>
         <div className="bg-slate-900 rounded-xl p-4 mb-5">
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add to your .env.local</div>
+          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add to your .env.local</div>
           {[
             { key: "NEXT_PUBLIC_MS_CLIENT_ID", desc: "Application (client) ID from your Azure App Registration" },
             { key: "NEXT_PUBLIC_MS_TENANT_ID", desc: "Tenant ID - use common for personal accounts, or your tenant GUID" },
           ].map(v => (
             <div key={v.key} className="mb-3 last:mb-0">
-              <div className="font-mono text-[12px] text-indigo-300 mb-0.5">{v.key}=<span className="text-slate-400">your_value_here</span></div>
-              <div className="text-[10px] text-slate-500">{v.desc}</div>
+              <div className="font-mono text-[13px] text-indigo-300 mb-0.5">{v.key}=<span className="text-slate-400">your_value_here</span></div>
+              <div className="text-[11px] text-slate-500">{v.desc}</div>
             </div>
           ))}
         </div>
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <span className="text-[12px] font-bold text-gray-700">How to set up Azure (5 min)</span>
+            <span className="text-[13px] font-bold text-gray-700">How to set up Azure (5 min)</span>
           </div>
           {[
             { n: 1, color: "indigo", title: "Create App Registration", body: "Go to portal.azure.com, search \u201cApp registrations\u201d, click \u201cNew registration\u201d, set Supported account types to \u201cAccounts in any org directory and personal Microsoft accounts\u201d, then Register." },
@@ -216,26 +216,26 @@ function NotConfigured() {
           ].map((s, i) => (
             <div key={s.n} className={"px-4 py-3 border-b border-gray-100" + (i === 3 ? " last:border-0" : "")}>
               <div className="flex items-start gap-3">
-                <div className={"w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 bg-" + s.color + "-100 text-" + s.color + "-700"}>{s.n}</div>
+                <div className={"w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 bg-" + s.color + "-100 text-" + s.color + "-700"}>{s.n}</div>
                 <div>
-                  <p className="text-[12px] font-semibold text-gray-800 mb-1">{s.title}</p>
-                  <p className="text-[11px] text-gray-500 leading-relaxed">{s.body}</p>
+                  <p className="text-[13px] font-semibold text-gray-800 mb-1">{s.title}</p>
+                  <p className="text-[12px] text-gray-500 leading-relaxed">{s.body}</p>
                 </div>
               </div>
             </div>
           ))}
           <div className="px-4 py-3 bg-amber-50/40 border-t border-gray-100">
             <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</div>
+              <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">3</div>
               <div>
-                <p className="text-[12px] font-semibold text-gray-800 mb-1">Add Mail permissions <span className="text-amber-600 font-normal">(where people get stuck)</span></p>
-                <p className="text-[11px] text-gray-600 leading-relaxed">Left sidebar &gt; &ldquo;API permissions&rdquo; &gt; &ldquo;+ Add a permission&rdquo; &gt; &ldquo;Microsoft Graph&rdquo; &gt; &ldquo;Delegated permissions&rdquo; &gt; search Mail and tick:</p>
+                <p className="text-[13px] font-semibold text-gray-800 mb-1">Add Mail permissions <span className="text-amber-600 font-normal">(where people get stuck)</span></p>
+                <p className="text-[12px] text-gray-600 leading-relaxed">Left sidebar &gt; &ldquo;API permissions&rdquo; &gt; &ldquo;+ Add a permission&rdquo; &gt; &ldquo;Microsoft Graph&rdquo; &gt; &ldquo;Delegated permissions&rdquo; &gt; search Mail and tick:</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {["Mail.Read","Mail.Send","Mail.ReadWrite"].map(p => (
-                    <code key={p} className="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5 text-[11px] font-mono font-semibold">{p}</code>
+                    <code key={p} className="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5 text-[12px] font-mono font-semibold">{p}</code>
                   ))}
                 </div>
-                <p className="text-[11px] text-gray-500 mt-2">Then click &ldquo;Add permissions&rdquo; and &ldquo;Grant admin consent&rdquo;.</p>
+                <p className="text-[12px] text-gray-500 mt-2">Then click &ldquo;Add permissions&rdquo; and &ldquo;Grant admin consent&rdquo;.</p>
               </div>
             </div>
           </div>
@@ -297,22 +297,22 @@ function ComposeModal({
             { label: "Subject", value: subject, onChange: setSubject, placeholder: "Subject" },
           ].map(f => (
             <div key={f.label} className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100">
-              <span className="text-[11px] font-semibold text-gray-400 w-12 shrink-0">{f.label}</span>
+              <span className="text-[12px] font-semibold text-gray-400 w-12 shrink-0">{f.label}</span>
               <input value={f.value} onChange={e => f.onChange(e.target.value)} placeholder={f.placeholder}
-                className="flex-1 text-[13px] border-none outline-none bg-transparent text-gray-900" />
+                className="flex-1 text-[14px] border-none outline-none bg-transparent text-gray-900" />
             </div>
           ))}
           <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message..."
-            className="w-full resize-none text-[13px] text-gray-800 px-5 py-4 border-none outline-none bg-transparent"
+            className="w-full resize-none text-[14px] text-gray-800 px-5 py-4 border-none outline-none bg-transparent"
             rows={10} />
         </div>
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 gap-3">
-          {err  && <span className="text-[12px] text-red-500 flex-1 truncate">{err}</span>}
-          {sent && <span className="text-[12px] text-green-600 font-semibold flex-1">Sent!</span>}
+          {err  && <span className="text-[13px] text-red-500 flex-1 truncate">{err}</span>}
+          {sent && <span className="text-[13px] text-green-600 font-semibold flex-1">Sent!</span>}
           {!err && !sent && <span className="flex-1" />}
-          <button onClick={onClose} className="px-4 py-2 text-[12px] font-medium text-gray-500 hover:text-gray-700 border-none bg-transparent cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-500 hover:text-gray-700 border-none bg-transparent cursor-pointer">Cancel</button>
           <button onClick={send} disabled={sending || !to.trim() || !subject.trim() || sent}
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[12px] font-semibold rounded-xl transition-colors cursor-pointer border-none flex items-center gap-2">
+            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[13px] font-semibold rounded-xl transition-colors cursor-pointer border-none flex items-center gap-2">
             {sending ? <Spinner size={12} /> : <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
             {sending ? "Sending..." : "Send"}
           </button>
@@ -337,7 +337,7 @@ function SignInScreen({ error }: { error?: string }) {
           </svg>
         </div>
         <h2 className="text-[17px] font-bold text-gray-900 mb-1.5">Outlook Inbox</h2>
-        <p className="text-[13px] text-gray-400 mb-6">Sign in with Microsoft to read and send emails.</p>
+        <p className="text-[14px] text-gray-400 mb-6">Sign in with Microsoft to read and send emails.</p>
         <button
           onClick={() => { void startOAuth(); }}
           className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[14px] font-semibold rounded-xl transition-colors cursor-pointer border-none flex items-center justify-center gap-2 shadow-sm">
@@ -346,7 +346,7 @@ function SignInScreen({ error }: { error?: string }) {
           </svg>
           Sign in with Microsoft
         </button>
-        {error && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-600">{error}</div>}
+        {error && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-600">{error}</div>}
       </div>
     </div>
   );
@@ -375,7 +375,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
 
   const selected = emails.find(e => e.id === selectedId) ?? null;
 
-  // Derive unread for the active folder directly from emails[] — always in sync
+  // Derive unread for the active folder directly from emails[] - always in sync
   // with optimistic read/unread updates. Other folders use last-fetched API counts.
   const unread: Record<string, number> = {
     ...otherFolderUnread,
@@ -468,7 +468,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
   }, [token, folder]);
 
   // ── Open email ────────────────────────────────────────────────────────
-  // FIX 1: Always mark read on open — update emails[] immediately (not inside the
+  // FIX 1: Always mark read on open - update emails[] immediately (not inside the
   // "!email.body" branch). Previously cached emails skipped the mark-read entirely.
   const openEmail = useCallback(async (email: MSEmail) => {
     setSelectedId(email.id);
@@ -508,7 +508,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
   }, [token, isMobile]);
 
   // ── Toggle read/unread ────────────────────────────────────────────────
-  // FIX 2: Only update emails[] — selected is derived from it automatically.
+  // FIX 2: Only update emails[] - selected is derived from it automatically.
   // Previously there was a separate setSelected() that could get out of sync.
   const toggleRead = useCallback(async (email: MSEmail) => {
     if (!token) return;
@@ -542,7 +542,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
           <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
             <svg width="12" height="12" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
-              className="flex-1 text-[12px] bg-transparent border-none outline-none text-gray-700 placeholder-gray-400" />
+              className="flex-1 text-[13px] bg-transparent border-none outline-none text-gray-700 placeholder-gray-400" />
           </div>
           <button onClick={() => { if (token) loadEmails(folder, token); }}
             className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center cursor-pointer hover:bg-gray-50 shrink-0">
@@ -556,10 +556,10 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
         <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
           {FOLDERS.map(f => (
             <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); }}
-              className={"flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border-none cursor-pointer transition-colors shrink-0 " + (folder === f.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
+              className={"flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold whitespace-nowrap border-none cursor-pointer transition-colors shrink-0 " + (folder === f.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
               {f.label}
               {(unread[f.id] ?? 0) > 0 && (
-                <span className={"text-[9px] rounded-full px-1 py-0.5 font-bold " + (folder === f.id ? "bg-white text-indigo-600" : "bg-indigo-500 text-white")}>
+                <span className={"text-[11px] rounded-full px-1 py-0.5 font-bold " + (folder === f.id ? "bg-white text-indigo-600" : "bg-indigo-500 text-white")}>
                   {unread[f.id]}
                 </span>
               )}
@@ -569,14 +569,14 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {error && !loading && <div className="p-4 text-[12px] text-red-500 text-center">{error}</div>}
+        {error && !loading && <div className="p-4 text-[13px] text-red-500 text-center">{error}</div>}
         {loading && <div className="flex items-center justify-center py-12"><Spinner size={20} /></div>}
         {!loading && filtered.length === 0 && !error && (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-2 opacity-40">
               <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
             </svg>
-            <p className="text-[12px]">{search ? "No results" : "No emails"}</p>
+            <p className="text-[13px]">{search ? "No results" : "No emails"}</p>
           </div>
         )}
         {!loading && filtered.map(email => {
@@ -587,11 +587,11 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
               className={"w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer border-none" + (!email.isRead ? " bg-blue-50/30" : "")}
               style={{ borderLeft: isAct ? "2px solid #6366F1" : "2px solid transparent", background: isAct ? "#EEF2FF" : undefined }}>
               <div className="flex items-center gap-2.5 mb-1">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ background: avatarColor(name) }}>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: avatarColor(name) }}>
                   {initials(name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className={"text-[12px] truncate block " + (!email.isRead ? "font-bold text-gray-900" : "font-medium text-gray-700")}>{name}</span>
+                  <span className={"text-[13px] truncate block " + (!email.isRead ? "font-bold text-gray-900" : "font-medium text-gray-700")}>{name}</span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   {email.hasAttachments && (
@@ -599,12 +599,12 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                     </svg>
                   )}
-                  <span className="text-[10px] text-gray-400">{fmtDate(email.receivedDateTime)}</span>
+                  <span className="text-[11px] text-gray-400">{fmtDate(email.receivedDateTime)}</span>
                   {!email.isRead && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
                 </div>
               </div>
-              <p className={"text-[11px] truncate pl-9 " + (!email.isRead ? "text-gray-700 font-semibold" : "text-gray-500")}>{email.subject || "(no subject)"}</p>
-              <p className="text-[11px] text-gray-400 truncate pl-9 mt-0.5">{email.bodyPreview}</p>
+              <p className={"text-[12px] truncate pl-9 " + (!email.isRead ? "text-gray-700 font-semibold" : "text-gray-500")}>{email.subject || "(no subject)"}</p>
+              <p className="text-[12px] text-gray-400 truncate pl-9 mt-0.5">{email.bodyPreview}</p>
             </button>
           );
         })}
@@ -620,7 +620,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
           <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-30">
             <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
           </svg>
-          <p className="text-[13px]">Select an email to read</p>
+          <p className="text-[14px]">Select an email to read</p>
         </div>
       ) : (
         <div className="flex flex-col h-full">
@@ -628,7 +628,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
           {/* Header */}
           <div className="px-5 py-4 border-b border-gray-100 bg-white shrink-0">
             {isMobile && (
-              <button onClick={() => setMobileView("list")} className="flex items-center gap-1 text-indigo-600 text-[12px] font-medium mb-3 border-none bg-transparent cursor-pointer">
+              <button onClick={() => setMobileView("list")} className="flex items-center gap-1 text-indigo-600 text-[13px] font-medium mb-3 border-none bg-transparent cursor-pointer">
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                 Back
               </button>
@@ -637,24 +637,24 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
 
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0"
                   style={{ background: avatarColor(selected.from?.emailAddress?.name || "?") }}>
                   {initials(selected.from?.emailAddress?.name || "?")}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[12px] font-semibold text-gray-800 truncate">{selected.from?.emailAddress?.name}</div>
-                  <div className="text-[11px] text-gray-400 truncate">{selected.from?.emailAddress?.address}</div>
+                  <div className="text-[13px] font-semibold text-gray-800 truncate">{selected.from?.emailAddress?.name}</div>
+                  <div className="text-[12px] text-gray-400 truncate">{selected.from?.emailAddress?.address}</div>
                 </div>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[11px] text-gray-400">{new Date(selected.receivedDateTime).toLocaleString()}</span>
+                <span className="text-[12px] text-gray-400">{new Date(selected.receivedDateTime).toLocaleString()}</span>
 
-                {/* Mark read/unread — label and icon always reflect live state from emails[] */}
+                {/* Mark read/unread - label and icon always reflect live state from emails[] */}
                 <button
                   onClick={() => toggleRead(selected)}
                   title={selected.isRead ? "Mark as unread" : "Mark as read"}
-                  className="flex items-center gap-1 px-2 h-7 rounded-lg border bg-white text-[10px] font-medium cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-1 px-2 h-7 rounded-lg border bg-white text-[11px] font-medium cursor-pointer hover:bg-gray-50 transition-colors"
                   style={{
                     color: selected.isRead ? "#6B7280" : "#6366F1",
                     borderColor: selected.isRead ? "#E5E7EB" : "#A5B4FC",
@@ -685,19 +685,19 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
             <div className="flex gap-2 mt-3">
               <button
                 onClick={() => { setReplyTo(selected); setForwardOf(null); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
                 Reply
               </button>
               <button
                 onClick={() => { setForwardOf(selected); setReplyTo(null); setCompose(true); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 10 20 15 15 20"/><path d="M4 4h7a4 4 0 0 1 4 4v7"/></svg>
                 Forward
               </button>
               <button
                 onClick={() => deleteEmail(selected.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-red-400 cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-red-400 cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
                 Delete
               </button>
@@ -716,16 +716,16 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
                   title="email-body"
                 />
               ) : (
-                <pre className="text-[13px] text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{selected.body.content}</pre>
+                <pre className="text-[14px] text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{selected.body.content}</pre>
               )
             ) : (
-              <p className="text-[13px] text-gray-500 italic">{selected.bodyPreview}</p>
+              <p className="text-[14px] text-gray-500 italic">{selected.bodyPreview}</p>
             )}
           </div>
 
           {/* Footer: Open in Outlook */}
           <div className="shrink-0 px-5 py-3 border-t border-gray-100 bg-gray-50/80 flex items-center justify-between">
-            <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
+            <span className="text-[12px] text-gray-400 flex items-center gap-1.5">
               {selected.hasAttachments && (
                 <>
                   <svg width="10" height="10" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24">
@@ -739,7 +739,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
               href={selected.webLink ?? "https://outlook.live.com/mail/0/inbox"}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+              className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
               style={{ textDecoration: "none" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <rect x="2" y="2" width="9" height="9" fill="#F25022"/>
@@ -767,7 +767,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
       <aside className={"flex flex-col shrink-0 border-r border-gray-100 bg-gray-50 " + (isMobile ? "hidden" : "w-44")}>
         <div className="px-3 py-4">
           <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }}
-            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] font-semibold rounded-xl cursor-pointer border-none flex items-center justify-center gap-1.5 transition-colors shadow-sm">
+            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold rounded-xl cursor-pointer border-none flex items-center justify-center gap-1.5 transition-colors shadow-sm">
             <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Compose
           </button>
@@ -775,13 +775,13 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
         <nav className="flex-1 px-2">
           {FOLDERS.map(f => (
             <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); setMobileView("list"); }}
-              className={"w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium mb-0.5 cursor-pointer border-none transition-colors text-left " + (folder === f.id ? "bg-indigo-50 text-indigo-700" : "bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-800")}>
+              className={"w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium mb-0.5 cursor-pointer border-none transition-colors text-left " + (folder === f.id ? "bg-indigo-50 text-indigo-700" : "bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-800")}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill={folder === f.id ? "#6366F1" : "#9CA3AF"}>
                 <path d={f.icon}/>
               </svg>
               <span className="flex-1 truncate">{f.label}</span>
               {(unread[f.id] ?? 0) > 0 && (
-                <span className="text-[9px] bg-indigo-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">{unread[f.id]}</span>
+                <span className="text-[11px] bg-indigo-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">{unread[f.id]}</span>
               )}
             </button>
           ))}
@@ -789,13 +789,13 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
         {me && (
           <div className="px-3 py-3 border-t border-gray-200 mt-auto">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
                 style={{ background: avatarColor(me.displayName) }}>
                 {initials(me.displayName)}
               </div>
               <div className="min-w-0">
-                <div className="text-[10px] font-semibold text-gray-700 truncate">{me.displayName}</div>
-                <div className="text-[9px] text-gray-400 truncate">{me.mail}</div>
+                <div className="text-[11px] font-semibold text-gray-700 truncate">{me.displayName}</div>
+                <div className="text-[11px] text-gray-400 truncate">{me.mail}</div>
               </div>
             </div>
             <button onClick={() => {
@@ -803,7 +803,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
               localStorage.removeItem(REFRESH_KEY);
               localStorage.removeItem(EXPIRY_KEY);
               setToken(null); setEmails([]); setMe(null);
-            }} className="mt-2 w-full text-[10px] text-gray-400 hover:text-red-500 cursor-pointer border-none bg-transparent text-left transition-colors">
+            }} className="mt-2 w-full text-[11px] text-gray-400 hover:text-red-500 cursor-pointer border-none bg-transparent text-left transition-colors">
               Sign out
             </button>
           </div>

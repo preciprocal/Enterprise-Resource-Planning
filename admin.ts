@@ -21,12 +21,20 @@ import {
   getDocs,
   doc,
   updateDoc,
+  onSnapshot,
+  addDoc,
+  query,
+  orderBy,
+  limit,
+  serverTimestamp,
+  increment,
 } from "firebase/firestore";
+import { getAuth, Auth } from "firebase/auth";
 
 // Re-export Firestore operations so components only need one import source.
 // Importing directly from "firebase/firestore" alongside this file can cause
 // a double-initialisation conflict under Turbopack — always import from "@/admin".
-export { collection, getDocs, doc, updateDoc };
+export { collection, getDocs, doc, updateDoc, onSnapshot, addDoc, query, orderBy, limit, serverTimestamp, increment };
 
 const APP_NAME = "adm-dashboard";
 
@@ -68,3 +76,11 @@ function buildDb(): Firestore {
 }
 
 export const adminDb: Firestore = buildDb();
+
+// ─── Singleton Auth ───────────────────────────────────────────────────────────
+// Shared getter so every component reuses the same "adm-dashboard" Firebase
+// app instance instead of re-deriving it locally.
+
+export function getAdmAuth(): Auth {
+  return getAuth(getAdminApp());
+}

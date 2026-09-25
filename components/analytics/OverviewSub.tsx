@@ -133,7 +133,8 @@ export default function OverviewSub({ users, data, isMobile }: SubProps) {
           <div className="flex flex-col gap-2">
             {funnel.map((s, i) => {
               const widthPct = s.pctOfStart;
-              const dropPct = i > 0 ? 100 - (funnel[i].count / funnel[i - 1].count) * 100 : 0;
+              // Nobody reached the previous step → nothing to drop (avoids 0/0 = "NaN% drop")
+              const dropPct = i > 0 && funnel[i - 1].count > 0 ? 100 - (funnel[i].count / funnel[i - 1].count) * 100 : 0;
               const isBigDrop = dropPct > 60;
               return (
                 <div key={s.label}>

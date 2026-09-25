@@ -72,6 +72,8 @@ export function computeMRRMovement(users: User[]): MRRMovement {
   const expansionMRR = 0, contractionMRR = 0;
 
   users.forEach(u => {
+    // Admins and edu-email/free-coupon users don't generate real revenue
+    if (u.isAdmin || u.subscription?.studentVerified) return;
     const sub = u.subscription;
     if (!sub) return;
     const plan = (sub.plan ?? "free") as string;
@@ -188,6 +190,7 @@ export function computeRevenueRetention(users: User[]): RevenueRetention[] {
   const cohorts: Record<string, User[]> = {};
 
   users.forEach(u => {
+    if (u.isAdmin || u.subscription?.studentVerified) return;
     const periodStart = safeDate(u.subscription?.currentPeriodStart);
     if (!periodStart) return;
     const monthsAgo = (now.getFullYear() - periodStart.getFullYear()) * 12 + (now.getMonth() - periodStart.getMonth());
@@ -201,6 +204,7 @@ export function computeRevenueRetention(users: User[]): RevenueRetention[] {
     let startingMRR = 0, currentMRR = 0;
 
     members.forEach(u => {
+      if (u.isAdmin || u.subscription?.studentVerified) return;
       const plan = (u.subscription?.plan ?? "free") as string;
       const planMRR = PLAN_MRR[plan] ?? 0;
       startingMRR += planMRR; // approximation: assume they started at current plan
@@ -239,6 +243,7 @@ export interface ARPUStats {
 export function computeARPU(users: User[]): ARPUStats[] {
   const buckets: Record<string, User[]> = {};
   users.forEach(u => {
+    if (u.isAdmin || u.subscription?.studentVerified) return;
     const plan = (u.subscription?.plan ?? "free") as string;
     (buckets[plan] ??= []).push(u);
   });

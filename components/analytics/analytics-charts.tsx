@@ -165,10 +165,11 @@ export function LineChart({
       yAxis={[{
         scaleType:      "linear",
         min:            yMin,
-        max:            yMax,
+        // All-zero data gives a zero-height domain and ticks like "0.0000…"; pin a 0–1 range instead
+        max:            yMax ?? (series.every(s => s.data.every(v => !v)) ? 1 : undefined),
         tickLabelStyle: TICK,
         tickSize:       0,
-        valueFormatter: yFormat ? (v: number) => yFormat(v) : undefined,
+        valueFormatter: yFormat ? (v: number) => yFormat(v) : (v: number) => String(+v.toFixed(2)),
       }]}
       margin={{ top: showLegend ? 32 : 8, bottom: 28, left: yFormat ? 52 : 32, right: 8 }}
       grid={{ horizontal: true }}

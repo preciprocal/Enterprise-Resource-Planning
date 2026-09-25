@@ -7,13 +7,12 @@ export default function LoginPage() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
   const [shake,    setShake]    = useState(false);
+  const [showPw,   setShowPw]   = useState(false);
 
-  // Read ?from= lazily — safe because this only runs on the client
   const from = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("from") ?? "/")
     : "/";
 
-  // Auto-focus on mount
   useEffect(() => {
     document.getElementById("pw-input")?.focus();
   }, []);
@@ -48,13 +47,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div
-      className="min-h-screen bg-gray-50 flex items-center justify-center p-4"
-      style={{ fontFamily: "'Inter',-apple-system,sans-serif" }}>
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; }
         @keyframes shake {
           0%,100% { transform: translateX(0); }
           20%,60%  { transform: translateX(-6px); }
@@ -63,69 +57,66 @@ export default function LoginPage() {
         .shake { animation: shake 0.45s ease; }
       `}</style>
 
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-[360px]">
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-200"
-            style={{ background: "linear-gradient(135deg,#6366F1,#8B5CF6)" }}>
-            <svg width="26" height="26" fill="none" stroke="#fff" strokeWidth="2.2" viewBox="0 0 24 24">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-          <h1 className="text-[22px] font-extrabold text-gray-900 tracking-tight">Preciprocal</h1>
-          <p className="text-[11px] font-semibold text-gray-400 mt-1 uppercase tracking-[0.12em]">
-            Admin Dashboard
-          </p>
+          <img src="/logo.png" alt="Preciprocal" className="w-10 h-10 object-contain mb-3" />
+          <div className="text-[18px] font-bold text-[#ededed] tracking-tight">Preciprocal</div>
+          <div className="text-[11px] font-medium text-[#555] uppercase tracking-[0.14em] mt-0.5">Enterprise Resource Planning</div>
         </div>
 
         {/* Card */}
-        <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-7 ${shake ? "shake" : ""}`}>
+        <div className={`bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-6 ${shake ? "shake" : ""}`}>
           <div className="mb-5">
-            <h2 className="text-[15px] font-bold text-gray-900">Sign in to continue</h2>
-            <p className="text-xs text-gray-400 mt-1">This dashboard is restricted to authorised admins only.</p>
+            <h1 className="text-[17px] font-bold text-[#ededed] tracking-tight">Admin access</h1>
+            <p className="text-[13px] text-[#555] mt-1">Enter the admin password to continue.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div>
-              <label
-                htmlFor="pw-input"
-                className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
-                Admin Password
+              <label htmlFor="pw-input" className="block text-[11px] font-bold text-[#555] uppercase tracking-widest mb-1.5">
+                Password
               </label>
-              <input
-                id="pw-input"
-                type="password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError(""); }}
-                placeholder="••••••••••••"
-                autoComplete="current-password"
-                spellCheck={false}
-                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 bg-white outline-none transition-all placeholder:text-gray-300"
-                style={{ fontFamily: "inherit" }}
-              />
+              <div className="relative">
+                <input
+                  id="pw-input"
+                  type={showPw ? "text" : "password"}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError(""); }}
+                  placeholder="••••••••••••"
+                  autoComplete="current-password"
+                  spellCheck={false}
+                  className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3.5 py-2.5 pr-10 text-[14px] text-[#ededed] outline-none focus:border-[#555] transition-colors placeholder:text-[#333] font-[inherit]"
+                />
+                <button type="button" onClick={() => setShowPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer p-0 transition-colors">
+                  {showPw
+                    ? <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-rose-50 border border-rose-200 rounded-lg">
-                <svg width="13" height="13" fill="none" stroke="#F43F5E" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0">
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg">
+                <svg width="13" height="13" fill="none" stroke="#f44" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0">
                   <circle cx="12" cy="12" r="10"/>
                   <line x1="12" y1="8" x2="12" y2="12"/>
                   <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                <span className="text-xs text-rose-600 font-medium">{error}</span>
+                <span className="text-[12px] text-[#f44] font-medium">{error}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading || !password.trim()}
-              className="w-full py-2.5 rounded-xl text-sm font-bold text-white border-none cursor-pointer flex items-center justify-center gap-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-              style={{ background: "linear-gradient(135deg,#6366F1,#8B5CF6)" }}>
+              className="w-full py-2.5 rounded-lg text-[14px] font-bold bg-[#ededed] text-black border-none cursor-pointer hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors mt-1">
               {loading ? (
                 <>
-                  <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  <div className="w-4 h-4 rounded-full border-2 border-black/20 border-t-black animate-spin" />
                   Signing in...
                 </>
               ) : (
@@ -142,7 +133,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-[10px] text-gray-300 mt-5">
+        <p className="text-center text-[11px] text-[#333] mt-5">
           Preciprocal ERP · Internal use only
         </p>
       </div>

@@ -6,7 +6,7 @@
 
 import { User } from "../admin/admin-shared";
 
-// ─── Raw entities from Firestore ─────────────────────────────────────────────
+// ─── Raw entities (Supabase, camelCased by /api/admin) ─────────────────────────────────────────────
 
 export interface Interview {
   id: string;

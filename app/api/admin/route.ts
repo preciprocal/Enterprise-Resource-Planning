@@ -2,11 +2,15 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { initializeApp, getApps, cert, App } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getAuth     } from "firebase-admin/auth";
-
 import Stripe from "stripe";
+
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getAdmin, requireAdmin, envAllowedEmails, normaliseEmail } from "@/lib/admin-auth";
+import {
+  loadUsers, fetchAll, profileLookup, subscriptionPatch, upsertSubscription,
+  upsertUserMeta, writeUsage, UUID_RE,
+} from "@/lib/erp-data";
+import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
 
 // ─── UA Parser (no deps) ─────────────────────────────────────────────────────
 
@@ -56,30 +60,20 @@ async function getGeoFromIP(ip: string): Promise<{ city?: string; country?: stri
   } catch { return {}; }
 }
 
-// ─── Firebase Admin ───────────────────────────────────────────────────────────
+// ─── Supabase ─────────────────────────────────────────────────────────────────
 
-let _app: App | null = null;
-let _db: ReturnType<typeof getFirestore> | null = null;
+const sb = () => getSupabaseAdmin();
 
-function getDb() {
-  if (_db) return _db;
-  if (!_app) {
-    _app = getApps().find(a => a.name === "adm-server") ?? initializeApp({
-      credential: cert({
-        projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-        privateKey:  process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      }),
-    }, "adm-server");
-  }
-  _db = getFirestore(_app);
-  return _db;
+/** Stripe customer ids belonging to admins — excluded from revenue figures. */
+async function adminCustomerIds(): Promise<Set<string>> {
+  const { data: admins } = await sb().from("profiles").select("user_id").eq("is_admin", true);
+  const ids = (admins ?? []).map(a => a.user_id as string);
+  if (!ids.length) return new Set();
+  const { data: subs } = await sb().from("subscriptions").select("stripe_customer_id").in("user_id", ids);
+  return new Set((subs ?? []).map(s => s.stripe_customer_id as string | null).filter((v): v is string => !!v));
 }
 
-function getAdminAuth() {
-  getDb();
-  return getAuth(_app!);
-}
+const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 
 // ─── Stripe ───────────────────────────────────────────────────────────────────
 
@@ -88,25 +82,6 @@ function getStripe() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     apiVersion: "2024-04-10" as any,
   });
-}
-
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-
-async function isAuthorised(req: NextRequest): Promise<boolean> {
-  const secret = process.env.ADMIN_SECRET;
-  if (secret && req.headers.get("x-admin-secret") === secret) return true;
-  const idToken = req.headers.get("x-firebase-token");
-  if (!idToken) return false;
-  try {
-    const decoded = await getAdminAuth().verifyIdToken(idToken, false);
-    const userDoc = await getDb().collection("users").doc(decoded.uid).get();
-    return userDoc.exists && userDoc.data()?.isAdmin === true;
-  } catch { return false; }
-}
-
-async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
-  if (await isAuthorised(req)) return null;
-  return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 }
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
@@ -161,55 +136,29 @@ export async function GET(req: NextRequest) {
 
   // ── verify ────────────────────────────────────────────────────────────────
   if (action === "verify") {
-    const idToken = req.headers.get("x-firebase-token");
-    if (!idToken) return NextResponse.json({ error: "Missing token" }, { status: 400 });
-    try {
-      const decoded = await getAdminAuth().verifyIdToken(idToken, false);
-      const uid     = decoded.uid;
-      const email   = decoded.email ?? "";
-      console.log(`[verify] uid=${uid} email=${email}`);
-
-      let userDoc = await getDb().collection("users").doc(uid).get();
-      console.log(`[verify] doc by UID exists=${userDoc.exists} isAdmin=${userDoc.data()?.isAdmin}`);
-
-      if (!userDoc.exists || userDoc.data()?.isAdmin !== true) {
-        const snap = await getDb().collection("users").where("email", "==", email).limit(1).get();
-        if (!snap.empty) {
-          userDoc = snap.docs[0];
-          console.log(`[verify] doc by email found id=${userDoc.id} isAdmin=${userDoc.data()?.isAdmin}`);
-        }
-      }
-
-      if (!userDoc.exists || userDoc.data()?.isAdmin !== true) {
-        console.log(`[verify] DENIED — uid=${uid} email=${email}`);
-        return NextResponse.json({ error: "Not an admin", debug_uid: uid, debug_email: email }, { status: 403 });
-      }
-
-      console.log(`[verify] GRANTED — uid=${uid} docId=${userDoc.id}`);
-
-      void (async () => {
-        try {
-          const ua      = req.headers.get("user-agent") ?? "";
-          const ip      = (req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "unknown").split(",")[0].trim();
-          const parsed  = parseUA(ua);
-          const geo     = await getGeoFromIP(ip);
-          const docData = userDoc.data() ?? {};
-          await getDb().collection("logs").add({
-            userId: uid, userName: docData.name ?? "", userEmail: email,
-            type: "login", timestamp: new Date().toISOString(),
-            ip, userAgent: ua,
-            browser: parsed.browser, os: parsed.os, device: parsed.device,
-            city: geo.city ?? "", country: geo.country ?? "", countryCode: geo.countryCode ?? "",
-            details: { provider: docData.provider ?? "unknown", source: "admin_erp" },
-          });
-        } catch (e) { console.error("[verify] log write failed:", e); }
-      })();
-
-      return NextResponse.json({ ok: true, uid, email });
-    } catch (e) {
-      console.error("[verify] error:", e);
-      return NextResponse.json({ error: "Invalid token", detail: String(e) }, { status: 401 });
+    const admin = await getAdmin(req);
+    if (!admin) {
+      console.log("[verify] DENIED");
+      return NextResponse.json({ error: "Not an admin" }, { status: 403 });
     }
+    // Only log real sign-ins (login=1), not every page load with a stored session
+    if (req.nextUrl.searchParams.get("login") === "1") void (async () => {
+      try {
+        const ua     = req.headers.get("user-agent") ?? "";
+        const ip     = (req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "unknown").split(",")[0].trim();
+        const parsed = parseUA(ua);
+        const geo    = await getGeoFromIP(ip);
+        await sb().from("erp_logs").insert({
+          user_id: admin.userId, user_name: admin.name, user_email: admin.email,
+          type: "login", ip, user_agent: ua,
+          browser: parsed.browser, os: parsed.os, device: parsed.device,
+          city: geo.city ?? "", country: geo.country ?? "", country_code: geo.countryCode ?? "",
+          details: { source: "admin_erp" },
+        });
+      } catch (e) { console.error("[verify] log write failed:", e); }
+    })();
+
+    return NextResponse.json({ ok: true, uid: admin.userId, email: admin.email, name: admin.name });
   }
 
   const _authErr = await requireAdmin(req); if (_authErr) return _authErr;
@@ -217,18 +166,8 @@ export async function GET(req: NextRequest) {
   // ── users ─────────────────────────────────────────────────────────────────
   if (action === "users") {
     try {
-      const snap  = await getDb().collection("users").get();
-      const users = snap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id, name: data.name, email: data.email, provider: data.provider,
-          isAdmin: data.isAdmin, createdAt: data.createdAt, updatedAt: data.updatedAt,
-          lastLogin: data.lastLogin, lastContactedAt: data.lastContactedAt,
-          lastContactSubject: data.lastContactSubject,
-          subscription: data.subscription, usage: data.usage,
-        };
-      });
-      return NextResponse.json({ users }, { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } });
+      const users = await loadUsers(sb());
+      return NextResponse.json({ users }, { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -237,18 +176,117 @@ export async function GET(req: NextRequest) {
   // ── analytics ─────────────────────────────────────────────────────────────
   if (action === "analytics") {
     try {
-      const db = getDb();
-      const [interviewsSnap, feedbackSnap, resumesSnap, plansSnap] = await Promise.all([
-        db.collection("interviews").select("userId","role","type","techstack","company","status","finalized","createdAt","score","level","duration").limit(1000).get(),
-        db.collection("feedback").select("userId","interviewId","totalScore","categoryScores","createdAt").limit(1000).get(),
-        db.collection("resumes").select("userId","jobTitle","companyName","status","score","createdAt").limit(1000).get(),
-        db.collection("interviewPlans").select("userId","createdAt","status").limit(500).get(),
+      const db = sb();
+      const [interviews, feedbacks, resumes, plans] = await Promise.all([
+        db.from("interviews").select("id,user_id,role,type,techstack,company,status,finalized,created_at,level,duration")
+          .order("created_at", { ascending: false }).limit(1000),
+        db.from("interview_feedback").select("id,user_id,interview_id,total_score,category_scores,created_at")
+          .order("created_at", { ascending: false }).limit(1000),
+        db.from("resumes").select("id,user_id,job_title,company_name,status,score,created_at").eq("deleted", false)
+          .order("created_at", { ascending: false }).limit(1000),
+        db.from("interview_plans").select("id,user_id,archived,created_at")
+          .order("created_at", { ascending: false }).limit(500),
       ]);
-      const pick = (snap: FirebaseFirestore.QuerySnapshot) => snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      return NextResponse.json(
-        { interviews: pick(interviewsSnap), feedbacks: pick(feedbackSnap), resumes: pick(resumesSnap), plans: pick(plansSnap) },
-        { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } }
+      const err = interviews.error ?? feedbacks.error ?? resumes.error ?? plans.error;
+      if (err) throw new Error(err.message);
+
+      // Keep the camelCase field names the Analytics tab was written against.
+      return NextResponse.json({
+        interviews: (interviews.data ?? []).map(r => ({
+          id: r.id, userId: r.user_id, role: r.role, type: r.type, techstack: r.techstack, company: r.company,
+          status: r.status, finalized: r.finalized, createdAt: r.created_at, level: r.level, duration: r.duration,
+        })),
+        feedbacks: (feedbacks.data ?? []).map(r => ({
+          id: r.id, userId: r.user_id, interviewId: r.interview_id, totalScore: r.total_score,
+          categoryScores: r.category_scores, createdAt: r.created_at,
+        })),
+        resumes: (resumes.data ?? []).map(r => ({
+          id: r.id, userId: r.user_id, jobTitle: r.job_title, companyName: r.company_name,
+          status: r.status, score: r.score, createdAt: r.created_at,
+        })),
+        plans: (plans.data ?? []).map(r => ({
+          id: r.id, userId: r.user_id, status: r.archived ? "archived" : "active", createdAt: r.created_at,
+        })),
+      }, { headers: { "Cache-Control": "private, max-age=60" } });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── access_list — who can sign in to the ERP ────────────────────────────────
+  if (action === "access_list") {
+    try {
+      const env = envAllowedEmails();
+      // Mirror env entries into the table so the DB-side erp_is_admin() (used by
+      // the realtime support policies) sees the same list the API enforces.
+      if (env.size) {
+        await sb().from("erp_allowed_emails")
+          .upsert([...env].map(email => ({ email, added_by: "env", note: "ERP_ALLOWED_EMAILS" })), { onConflict: "email", ignoreDuplicates: true })
+          .then(r => r, () => null);
+      }
+      const { data, error } = await sb().from("erp_allowed_emails").select("email,note,added_by,created_at").order("created_at");
+      const tableMissing = !!error;
+      const rows = new Map<string, { email: string; note: string | null; addedBy: string | null; createdAt: string | null }>();
+      env.forEach(email => rows.set(email, { email, note: "ERP_ALLOWED_EMAILS", addedBy: "env", createdAt: null }));
+      (data ?? []).forEach(r => {
+        const prev = rows.get(r.email as string);
+        rows.set(r.email as string, { email: r.email as string, note: (r.note as string | null) ?? prev?.note ?? null, addedBy: r.added_by as string | null, createdAt: r.created_at as string });
+      });
+      const emails = [...rows.keys()];
+      const { data: profs } = emails.length
+        ? await sb().from("profiles").select("email,name").in("email", emails)
+        : { data: [] };
+      const nameBy = new Map((profs ?? []).map(p => [String(p.email).toLowerCase(), p.name as string | null]));
+      const me = (await getAdmin(req))?.email?.toLowerCase() ?? "";
+      const list = [...rows.values()].map(r => ({
+        ...r,
+        locked:     env.has(r.email),
+        isYou:      r.email === me,
+        hasAccount: nameBy.has(r.email),
+        name:       nameBy.get(r.email) ?? undefined,
+      }));
+      return NextResponse.json({ list, tableMissing, tableError: error?.message }, { headers: { "Cache-Control": "private, no-store" } });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── packs — catalog, configured price IDs, and sales from credit_packs ──────
+  if (action === "packs") {
+    try {
+      const rows = await fetchAll<{ user_id: string; pack_key: string; price_cents: number; purchased_at: string; refunded_at: string | null; granted: Record<string, number>; consumed: Record<string, number> }>(
+        (a, b) => sb().from("credit_packs").select("user_id,pack_key,price_cents,purchased_at,refunded_at,granted,consumed")
+          .order("purchased_at", { ascending: false }).range(a, b),
       );
+      const names = await profileLookup(sb(), rows.slice(0, 50).map(r => r.user_id));
+      const packs = PACK_KEYS.map(key => {
+        const mine = rows.filter(r => r.pack_key === key);
+        const live = mine.filter(r => !r.refunded_at);
+        return {
+          ...PACKS[key],
+          envVar:    packEnvVar(key),
+          priceId:   process.env[packEnvVar(key)] ?? null,
+          sold:      mine.length,
+          refunded:  mine.length - live.length,
+          revenueCents: live.reduce((s, r) => s + (r.price_cents ?? 0), 0),
+          buyers:    new Set(live.map(r => r.user_id)).size,
+        };
+      });
+      const recent = rows.slice(0, 50).map(r => ({
+        userId: r.user_id, userName: names.get(r.user_id)?.name, userEmail: names.get(r.user_id)?.email,
+        packKey: r.pack_key, packName: PACKS[r.pack_key as keyof typeof PACKS]?.name ?? r.pack_key,
+        priceCents: r.price_cents, purchasedAt: r.purchased_at, refundedAt: r.refunded_at,
+        granted: r.granted, consumed: r.consumed,
+      }));
+      return NextResponse.json({
+        packs, recent,
+        checkoutEnabled: process.env.PACKS_CHECKOUT_ENABLED === "true",
+        totals: {
+          sold: rows.length,
+          revenueCents: rows.filter(r => !r.refunded_at).reduce((s, r) => s + (r.price_cents ?? 0), 0),
+          buyers: new Set(rows.filter(r => !r.refunded_at).map(r => r.user_id)).size,
+        },
+      }, { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -438,7 +476,7 @@ export async function GET(req: NextRequest) {
       const dailyMap:      Record<string, { tokens: number; requests: number; cost: number }> = {};
       const modelDailyMap: Record<string, Record<string, { tokens: number; requests: number; cost: number }>> = {};
       let creditBalance: number | null = null;
-      let dataSource: "admin_api" | "firestore" | "none" = "none";
+      let dataSource: "admin_api" | "none" = "none";
 
       if (anthropicAdminKey && ADMIN_HEADERS) {
         // ── Path A: Anthropic Admin API ─────────────────────────────────────
@@ -638,45 +676,15 @@ export async function GET(req: NextRequest) {
           } catch (e) { console.error("[claude/billing] error:", endpoint, e); }
         }
 
-      } else {
-        // ── Path B: Firestore self-tracking fallback ────────────────────────
-        type UsageDoc = {
-          model: string; input_tokens: number; output_tokens: number;
-          cost_usd?: number; timestamp: string;
-        };
-        const db = getDb();
-        try {
-          const snap = await db.collection("claude_usage")
-            .where("timestamp", ">=", startDate.toISOString())
-            .where("timestamp", "<=", endDate.toISOString())
-            .orderBy("timestamp", "desc").limit(5000).get();
-          if (!snap.empty) {
-            dataSource = "firestore";
-            snap.docs.forEach(doc => {
-              const d = doc.data() as UsageDoc;
-              const inp  = d.input_tokens ?? 0;
-              const out  = d.output_tokens ?? 0;
-              const inP  = INPUT_PRICE[d.model] ?? 3;
-              const outP = OUTPUT_PRICE[d.model] ?? 15;
-              // Firestore tracking: no cache token breakdown, use standard pricing
-              const cost = d.cost_usd ?? (inp * inP + out * outP) / 1_000_000;
-              totalInput += inp; totalOutput += out; totalReqs += 1; totalCost += cost;
-              if (!modelMap[d.model]) modelMap[d.model] = { tokens: 0, requests: 0, cost: 0 };
-              modelMap[d.model].tokens += inp + out; modelMap[d.model].requests += 1; modelMap[d.model].cost += cost;
-              const day = d.timestamp.slice(0, 10);
-              if (!dailyMap[day]) dailyMap[day] = { tokens: 0, requests: 0, cost: 0 };
-              dailyMap[day].tokens += inp + out; dailyMap[day].requests += 1; dailyMap[day].cost += cost;
-            });
-          }
-        } catch { /* collection doesn't exist yet */ }
       }
+      // Without an admin key there is no usage source: the Dashboard no longer
+      // self-tracks Claude calls (the Firestore claude_usage collection is gone).
 
       const daily = Object.entries(dailyMap)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, v]) => ({ date, ...v }));
 
       // Only show cost when it comes from real billing data (Admin API cost_report)
-      // or when Firestore docs have explicit cost_usd fields.
       // Never show a token-estimate as cost — it's always wrong due to cache pricing.
       const costIsReal = dataSource === "admin_api";
       const costToShow = costIsReal ? totalCost : null;
@@ -693,9 +701,7 @@ export async function GET(req: NextRequest) {
         period: `${startStr} – ${endStr}`,
         data_source: dataSource,
         has_tracking: dataSource !== "none",
-        usage_note: dataSource === "admin_api" ? "" : dataSource === "firestore"
-          ? "Showing self-tracked usage from Firestore."
-          : "No usage data yet. Add trackClaudeUsage() to your app.",
+        usage_note: dataSource === "admin_api" ? "" : "Set ANTHROPIC_ADMIN_KEY to see Claude usage.",
         daily,
         model_daily: Object.fromEntries(
           Object.entries(modelDailyMap).map(([model, dayMap]) => [
@@ -808,30 +814,65 @@ export async function GET(req: NextRequest) {
 
     // ── Stripe ──────────────────────────────────────────────────────────────
     const stripeData = await safeGet("stripe", async () => {
-      type StripeCharge  = { status: string; amount: number; amount_refunded: number };
+      type StripeCharge  = { status: string; amount: number; amount_refunded: number; customer?: string | null };
       type StripeSubItem = { price?: { unit_amount?: number; recurring?: { interval?: string } } };
-      type StripeSub     = { items?: { data?: StripeSubItem[] } };
+      type StripeCoupon  = { percent_off?: number | null; amount_off?: number | null };
+      type StripeDiscount = { coupon?: StripeCoupon } | null;
+      type StripeSub     = { customer?: string | { id?: string } | null; items?: { data?: StripeSubItem[] }; discount?: StripeDiscount };
       type StripeList<T> = { data: T[] };
+
+      // Admin customer IDs so we can exclude their subscriptions from MRR
+      const adminCustIds = await adminCustomerIds();
+
       const stripe = getStripe();
       const since  = Math.floor((Date.now() - 30 * 86_400_000) / 1000);
       const [charges, subs] = await Promise.all([
         stripe.charges.list({ limit: 100, created: { gte: since } }) as Promise<StripeList<StripeCharge>>,
         stripe.subscriptions.list({ limit: 100, status: "active" }) as Promise<StripeList<StripeSub>>,
       ]);
-      const successful = charges.data.filter(c => c.status === "succeeded");
-      const failed     = charges.data.filter(c => c.status === "failed");
-      const refunded   = charges.data.reduce((s, c) => s + (c.amount_refunded ?? 0), 0);
+
+      const successful = charges.data.filter(c => c.status === "succeeded" && !adminCustIds.has(c.customer ?? ""));
+      const failed     = charges.data.filter(c => c.status === "failed"    && !adminCustIds.has(c.customer ?? ""));
+      const refunded   = successful.reduce((s, c) => s + (c.amount_refunded ?? 0), 0);
       const volume     = successful.reduce((s, c) => s + (c.amount ?? 0), 0);
+
+      let paidSubCount = 0;
       const mrr = subs.data.reduce((s, sub) => {
+        // Exclude admin subscriptions
+        const custId = typeof sub.customer === "string" ? sub.customer : (sub.customer as { id?: string } | null)?.id ?? "";
+        if (custId && adminCustIds.has(custId)) return s;
+
         const item     = sub.items?.data?.[0];
         const amount   = item?.price?.unit_amount ?? 0;
         const interval = item?.price?.recurring?.interval ?? "month";
-        return s + (interval === "year" ? amount / 12 : amount) / 100;
+        let monthly    = (interval === "year" ? amount / 12 : amount) / 100;
+
+        // Apply subscription-level coupon discount — 100% off = free, skip from MRR
+        const coupon = sub.discount?.coupon;
+        if (coupon) {
+          const pct = coupon.percent_off ?? 0;
+          if (pct >= 100) return s;
+          if (pct > 0) monthly *= (1 - pct / 100);
+          else if ((coupon.amount_off ?? 0) > 0) monthly = Math.max(0, monthly - (coupon.amount_off ?? 0) / 100);
+        }
+
+        if (monthly > 0) paidSubCount++;
+        return s + monthly;
       }, 0);
+
+      // One-time credit packs (ledger in credit_packs), last 30 days
+      const { data: packRows } = await sb().from("credit_packs")
+        .select("price_cents,refunded_at").gte("purchased_at", new Date(since * 1000).toISOString());
+      const livePacks = (packRows ?? []).filter(p => !p.refunded_at);
+
       return {
-        mrr, total_charges: charges.data.length, successful_charges: successful.length,
+        mrr: Math.round(mrr * 100) / 100,
+        total_charges: charges.data.filter(c => !adminCustIds.has(c.customer ?? "")).length,
+        successful_charges: successful.length,
         failed_charges: failed.length, total_volume: volume, refunded,
-        active_subscriptions: subs.data.length, period_requests: charges.data.length,
+        active_subscriptions: paidSubCount, period_requests: charges.data.length,
+        pack_purchases: livePacks.length,
+        pack_revenue: livePacks.reduce((s, p) => s + (p.price_cents ?? 0), 0),
       };
     });
 
@@ -919,24 +960,21 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // ── Firebase / Google Cloud ───────────────────────────────────────────────
-    // Google Cloud has no direct cost API — costs require BigQuery billing export.
-    // We fetch real collection counts from Firestore Admin SDK, and optionally
-    // fetch budget spend from the Cloud Billing Budget API if configured.
-    const firebaseData = await safeGet("firebase", async () => {
-      const db = getDb();
+    // ── Supabase (Postgres) + optional Google Cloud budget ─────────────────────
+    // Real row counts per table via head-only count queries. Google Cloud has
+    // no direct cost API, but the budget can still be read if configured.
+    const supabaseData = await safeGet("supabase", async () => {
+      const db = sb();
 
-      // Real collection counts via Firestore Admin count() aggregation
-      const collections = ["users","logs","interviews","feedback","resumes","interviewPlans","resume_analyses","cover_letters"];
+      const tables = ["profiles","interviews","interview_feedback","resumes","interview_plans","cover_letters",
+        "job_applications","support_tickets","credit_packs","usage_counters","erp_logs"];
       const countResults = await Promise.all(
-        collections.map(c => db.collection(c).count().get().catch(() => null))
+        tables.map(t => Promise.resolve(db.from(t).select("*", { count: "exact", head: true })).then(r => r.count ?? 0).catch(() => 0))
       );
       const counts: Record<string, number> = {};
-      collections.forEach((c, i) => {
-        counts[c] = countResults[i]?.data().count ?? 0;
-      });
+      tables.forEach((t, i) => { counts[t] = countResults[i]; });
       const totalDocs   = Object.values(counts).reduce((a, b) => a + b, 0);
-      const userCount   = counts.users ?? 0;
+      const userCount   = counts.profiles ?? 0;
 
       // Optional: Google Cloud Billing Budget API
       // Requires GOOGLE_CLOUD_BILLING_ACCOUNT=billingAccounts/XXXXXX-XXXXXX-XXXXXX
@@ -990,7 +1028,7 @@ export async function GET(req: NextRequest) {
                 const tokJson = await tokRes.json() as { access_token?: string };
                 accessToken   = tokJson.access_token ?? null;
               }
-            } catch (e) { console.error("[firebase/sa_token]", e); }
+            } catch (e) { console.error("[gcp/sa_token]", e); }
           }
 
           const authHeader = accessToken
@@ -1006,7 +1044,7 @@ export async function GET(req: NextRequest) {
               headers: { "Content-Type": "application/json", ...authHeader },
               signal: AbortSignal.timeout(4000),
             });
-            console.log("[firebase/budget]", budgetRes.status);
+            console.log("[gcp/budget]", budgetRes.status);
             if (budgetRes.ok) {
               type BudgetAmount = { specifiedAmount?: { units?: string; currencyCode?: string } };
               type Budget = {
@@ -1025,38 +1063,22 @@ export async function GET(req: NextRequest) {
                 };
               }
             } else {
-              console.log("[firebase/budget] failed:", await budgetRes.text().then(t => t.slice(0, 200)));
+              console.log("[gcp/budget] failed:", await budgetRes.text().then(t => t.slice(0, 200)));
             }
           }
-        } catch (e) { console.error("[firebase/billing]", e); }
+        } catch (e) { console.error("[gcp/billing]", e); }
       }
 
-      // Firestore pricing (Blaze plan, us-east1, as of 2025)
-      // Reads:  $0.06 per 100K   →  $0.0000006 each
-      // Writes: $0.18 per 100K   →  $0.0000018 each
-      // Deletes:$0.02 per 100K   →  $0.0000002 each
-      // Storage:$0.108 per GiB/month
-      // These are estimates for display only — BigQuery export needed for exact billing
-      const estReads   = totalDocs * 10;   // rough: each doc read ~10× per lifetime
-      const estWrites  = totalDocs * 2;    // rough: each doc written ~2×
-      const estStorage = totalDocs * 1024; // rough: 1KB per doc
-      const estCost    = (estReads * 0.0000006) + (estWrites * 0.0000018) + (estStorage / (1024**3) * 0.108);
-
       return {
-        // Collection counts
-        collections: counts,
-        total_documents: totalDocs,
-        active_users: userCount,
-        // Cost estimates (clearly labelled as estimates)
-        estimated_reads:   estReads,
-        estimated_writes:  estWrites,
-        estimated_cost:    estCost,
-        storage_bytes:     estStorage,
+        tables:        counts,
+        total_rows:    totalDocs,
+        active_users:  userCount,
+        project_ref:   (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/^https?:\/\//, "").split(".")[0],
         // Real billing from Budget API (if configured)
         billing: billingInfo,
         billing_note: billingAccount
           ? "Budget data from Cloud Billing API"
-          : "Set GOOGLE_CLOUD_BILLING_ACCOUNT + GOOGLE_CLOUD_SA_KEY in .env for real billing data. Real costs require Cloud Billing BigQuery export.",
+          : "Row counts are live from Postgres. Supabase billing is per-plan — see the Supabase dashboard for invoices.",
         period: "current",
       };
     });
@@ -1078,7 +1100,7 @@ export async function GET(req: NextRequest) {
 
     const responseData = {
       openai: openaiData, claude: claudeData, stripe: stripeData,
-      resend: resendData, cloudflare: cloudflareData, firebase: firebaseData,
+      resend: resendData, cloudflare: cloudflareData, supabase: supabaseData,
       googleai: googleaiData, errors, fetchedAt: new Date().toISOString(),
     };
     USAGE_CACHE.set(cacheKey, { data: responseData, ts: Date.now() });
@@ -1202,37 +1224,58 @@ export async function GET(req: NextRequest) {
   }
 
   // ── logs ──────────────────────────────────────────────────────────────────
+  // Two sources, merged newest-first:
+  //   erp_logs       — ERP admin logins + anything POSTed via write_log
+  //   user_sessions  — the Dashboard's own session table (one row per sign-in,
+  //                    with IP/geo/UA), surfaced as "login" events
   if (action === "logs") {
     try {
-      const db     = getDb();
+      const db     = sb();
       const userId = req.nextUrl.searchParams.get("userId");
       const type   = req.nextUrl.searchParams.get("type");
       const limit  = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "500"), 1000);
 
-      // Firestore requires where() before orderBy() when filtering on a different field.
-      // Also: where("userId") + orderBy("timestamp") needs a composite index —
-      // so when filtering by userId, skip orderBy to avoid the index requirement
-      // and sort client-side instead.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let query: any = db.collection("logs");
-      if (userId) query = query.where("userId", "==", userId);
-      if (type)   query = query.where("type",   "==", type);
-      // Only add orderBy when NOT filtering by userId (avoids composite index requirement)
-      if (!userId) query = query.orderBy("timestamp", "desc");
-      query = query.limit(limit);
+      let erpQ = db.from("erp_logs").select("*").order("timestamp", { ascending: false }).limit(limit);
+      if (userId) erpQ = erpQ.eq("user_id", userId);
+      if (type)   erpQ = erpQ.eq("type", type);
 
-      const snap = await query.get() as FirebaseFirestore.QuerySnapshot;
-      type LogDoc = Record<string, unknown> & { id: string };
-      const logs: LogDoc[] = snap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
-      // Sort client-side desc when userId filter bypassed orderBy (no composite index needed)
-      if (userId) logs.sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")));
+      const wantSessions = !type || type === "login";
+      let sessQ = db.from("user_sessions").select("session_id,user_id,ip,geo_country,geo_city,user_agent,created_at,revoked_at,revoked_reason")
+        .order("created_at", { ascending: false }).limit(limit);
+      if (userId) sessQ = UUID_RE.test(userId) ? sessQ.eq("user_id", userId) : sessQ.eq("user_id", "00000000-0000-0000-0000-000000000000");
+
+      const [erp, sess] = await Promise.all([
+        erpQ.then(r => r, () => ({ data: null, error: null })),
+        wantSessions ? sessQ : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      const sessRows = (sess.data ?? []) as { session_id: string; user_id: string; ip: string | null; geo_country: string | null; geo_city: string | null; user_agent: string | null; created_at: string; revoked_at: string | null; revoked_reason: string | null }[];
+      const names = await profileLookup(db, sessRows.map(s => s.user_id));
+
+      const logs = [
+        ...((erp.data ?? []) as Record<string, unknown>[]).map(r => ({
+          id: r.id, userId: r.user_id ?? "", userName: r.user_name ?? undefined, userEmail: r.user_email ?? undefined,
+          type: r.type, timestamp: iso(r.timestamp), ip: r.ip ?? undefined, city: r.city ?? undefined,
+          country: r.country ?? undefined, countryCode: r.country_code ?? undefined, device: r.device ?? undefined,
+          browser: r.browser ?? undefined, os: r.os ?? undefined, userAgent: r.user_agent ?? undefined,
+          action: r.action ?? undefined, path: r.path ?? undefined, details: r.details ?? {},
+        })),
+        ...sessRows.map(s => {
+          const ua = parseUA(s.user_agent ?? "");
+          return {
+            id: `sess_${s.session_id}`, userId: s.user_id,
+            userName: names.get(s.user_id)?.name, userEmail: names.get(s.user_id)?.email,
+            type: "login", timestamp: iso(s.created_at), ip: s.ip ?? undefined,
+            city: s.geo_city ?? undefined, countryCode: s.geo_country ?? undefined, country: s.geo_country ?? undefined,
+            device: ua.device, browser: ua.browser, os: ua.os, userAgent: s.user_agent ?? undefined,
+            details: { source: "dashboard_session", ...(s.revoked_at ? { revokedAt: s.revoked_at, revokedReason: s.revoked_reason } : {}) },
+          };
+        }),
+      ].sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? ""))).slice(0, limit);
+
       return NextResponse.json({ logs }, { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
-      const msg = (err as Error).message;
-      if (msg.includes("NOT_FOUND") || msg.includes("no index") || msg.includes("collection")) {
-        return NextResponse.json({ logs: [] });
-      }
-      return NextResponse.json({ error: msg }, { status: 500 });
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
   }
 
@@ -1329,13 +1372,168 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ─── Support Tickets ────────────────────────────────────────────────────────
+  // Reads go through here with the service role. The Support tab also opens a
+  // Supabase realtime channel on support_tickets / support_ticket_replies and
+  // refetches on change (needs the admin SELECT policies in erp_schema.sql).
+  if (action === "tickets") {
+    try {
+      const { data, error } = await sb().from("support_tickets")
+        .select("id,user_id,subject,message,category,status,priority,user_email,user_name,attachments,last_reply_by,last_reply_at,reply_count,created_at,updated_at")
+        .order("created_at", { ascending: false }).limit(500);
+      if (error) throw new Error(error.message);
+      const ids = (data ?? []).map(t => t.id as string);
+      const { data: notes } = ids.length
+        ? await sb().from("erp_ticket_notes").select("ticket_id,notes").in("ticket_id", ids).then(r => r, () => ({ data: null }))
+        : { data: [] };
+      const noteBy = new Map((notes ?? []).map(n => [n.ticket_id as string, n.notes as string]));
+      const tickets = (data ?? []).map(t => ({
+        id: t.id, userId: t.user_id, subject: t.subject ?? undefined, message: t.message ?? undefined,
+        category: t.category ?? undefined, status: t.status, priority: t.priority,
+        userEmail: t.user_email ?? undefined, userName: t.user_name ?? undefined,
+        lastReplyBy: t.last_reply_by ?? undefined, lastReplyAt: t.last_reply_at ?? undefined, replyCount: t.reply_count ?? 0,
+        tags: t.category ? [t.category] : [],
+        notes: noteBy.get(t.id as string) ?? "",
+        createdAt: t.created_at, updatedAt: t.updated_at,
+      }));
+      return NextResponse.json({ tickets }, { headers: { "Cache-Control": "private, no-store" } });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  if (action === "ticket_replies") {
+    const ticketId = req.nextUrl.searchParams.get("ticketId");
+    if (!ticketId) return NextResponse.json({ error: "Missing ticketId" }, { status: 400 });
+    try {
+      const { data, error } = await sb().from("support_ticket_replies")
+        .select("id,ticket_id,author_user_id,is_staff,body,from_email,created_at")
+        .eq("ticket_id", ticketId).order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      const replies = (data ?? []).map(r => ({
+        id: r.id, ticketId: r.ticket_id, message: r.body, from: r.is_staff ? "support" : "user",
+        fromEmail: r.from_email ?? undefined, isStaff: r.is_staff, createdAt: r.created_at,
+      }));
+      return NextResponse.json({ replies }, { headers: { "Cache-Control": "private, no-store" } });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // ─── Feedback (feature_ratings) ──────────────────────────────────────────────
+  if (action === "feedback_list") {
+    try {
+      const sp         = req.nextUrl.searchParams;
+      const userId     = sp.get("userId");
+      const serviceKey = sp.get("serviceKey");
+      let q = sb().from("feature_ratings").select("id,user_id,feature,rating,comment,nps,tags,created_at")
+        .order("created_at", { ascending: false }).limit(500);
+      if (serviceKey) q = q.eq("feature", serviceKey);
+      if (userId && UUID_RE.test(userId)) q = q.eq("user_id", userId);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      const names = await profileLookup(sb(), (data ?? []).map(r => r.user_id as string));
+      const items = (data ?? []).map(r => ({
+        id: r.id, type: "feature-rating", userId: r.user_id,
+        userName: names.get(r.user_id)?.name, userEmail: names.get(r.user_id)?.email,
+        serviceKey: r.feature, rating: r.rating ?? undefined, comment: r.comment ?? undefined,
+        nps: r.nps ?? undefined, tags: r.tags?.length ? r.tags : undefined, createdAt: r.created_at,
+      }));
+      return NextResponse.json({ items });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // ─── Surveys (product_surveys) ───────────────────────────────────────────────
+  if (action === "surveys") {
+    try {
+      const userId = req.nextUrl.searchParams.get("userId");
+      let q = sb().from("product_surveys").select("*").order("created_at", { ascending: false }).limit(500);
+      if (userId && UUID_RE.test(userId)) q = q.eq("user_id", userId);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      const surveys = (data ?? []).map(s => ({
+        id: s.id, userId: s.user_id ?? undefined, userEmail: s.user_email ?? undefined, userName: s.user_name ?? undefined,
+        page: s.page, overallRating: s.overall_rating, nps: s.nps ?? undefined,
+        featureRatings: s.feature_ratings, usageOptions: s.usage_options, specificAnswers: s.specific_answers,
+        topImprovement: s.top_improvement ?? undefined, freeText: s.free_text ?? undefined,
+        userAgent: s.user_agent ?? undefined, submittedAt: s.submitted_at, createdAt: s.created_at,
+      }));
+      return NextResponse.json({ surveys });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // ─── Stripe Coupons ──────────────────────────────────────────────────────────
+  if (action === "coupons") {
+    try {
+      const stripe = getStripe();
+      const list = await stripe.coupons.list({ limit: 100 });
+      const coupons = list.data.map(c => ({
+        id:           c.id,
+        name:         c.name ?? c.id,
+        amountOff:    c.amount_off,
+        percentOff:   c.percent_off,
+        currency:     c.currency,
+        duration:     c.duration,
+        durationMonths: c.duration_in_months,
+        timesRedeemed: c.times_redeemed,
+        maxRedemptions: c.max_redemptions,
+        valid:        c.valid,
+      }));
+      return NextResponse.json({ coupons });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  if (action === "code_ref") {
+    const key = req.nextUrl.searchParams.get("key") ?? "";
+    // "erp:" paths live in this repo; the rest in the Dashboard repo
+    // (DASHBOARD_REPO_DIR, default ../Dashboard — only available in local dev).
+    const ALLOWED: Record<string, string> = {
+      stripeWebhook:      "app/api/webhooks/stripe/route.ts",
+      stripeCreateSub:    "app/api/subscription/create-subscription/route.ts",
+      stripeCancelSub:    "app/api/subscription/cancel-subscription/route.ts",
+      priceIds:           "lib/config/stripe-prices.ts",
+      packs:              "lib/config/packs.ts",
+      packGrant:          "lib/packs/grant.ts",
+      subscriptionFields: "lib/actions/auth.action.ts",
+      usageLimits:        "lib/config/usage-limits.ts",
+      usageGuard:         "lib/ai/usage-guard.ts",
+      usagePeriod:        "lib/usage/period.ts",
+      adminRoute:         "erp:app/api/admin/route.ts",
+      erpData:            "erp:lib/erp-data.ts",
+      erpSchema:          "erp:supabase/erp_schema.sql",
+    };
+    if (!key || !ALLOWED[key]) {
+      return NextResponse.json({ error: "Unknown ref key" }, { status: 400 });
+    }
+    try {
+      const { readFile } = await import("node:fs/promises");
+      const { join }     = await import("node:path");
+      const ref  = ALLOWED[key];
+      // turbopackIgnore: dev-only source viewer, keep these reads out of the build trace
+      const path = ref.startsWith("erp:")
+        ? join(/*turbopackIgnore: true*/ process.cwd(), ref.slice(4))
+        : join(/*turbopackIgnore: true*/ process.env.DASHBOARD_REPO_DIR ?? join(/*turbopackIgnore: true*/ process.cwd(), "..", "Dashboard"), ref);
+      const content = await readFile(path, "utf-8");
+      return NextResponse.json({ content, file: ref.replace(/^erp:/, "") });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
   return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
 }
 
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const _authErr = await requireAdmin(req); if (_authErr) return _authErr;
+  const admin = await getAdmin(req);
+  if (!admin) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
   let body: Record<string, unknown>;
   try { body = await req.json() as Record<string, unknown>; }
@@ -1354,36 +1552,162 @@ export async function POST(req: NextRequest) {
       const ip     = (log.ip as string) || (req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "").split(",")[0].trim();
       const parsed = ua && !log.browser ? parseUA(ua) : { browser: log.browser, os: log.os, device: log.device };
       const geo    = ip && !log.country  ? await getGeoFromIP(ip) : {};
-      const entry  = {
-        ...log,
-        userAgent: ua || log.userAgent,
-        browser: parsed.browser || log.browser || "Unknown",
-        os: parsed.os || log.os || "Unknown",
-        device: parsed.device || log.device || "desktop",
-        ip: ip || log.ip || "",
-        city: geo.city || log.city || "",
-        country: geo.country || log.country || "",
-        countryCode: geo.countryCode || log.countryCode || "",
-        timestamp: log.timestamp ?? new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-      };
-      const ref = await getDb().collection("logs").add(entry);
-      return NextResponse.json({ success: true, id: ref.id });
+      const { data: row, error } = await sb().from("erp_logs").insert({
+        user_id:      String(log.userId),
+        user_name:    (log.userName as string) ?? null,
+        user_email:   (log.userEmail as string) ?? null,
+        type:         String(log.type),
+        action:       (log.action as string) ?? null,
+        path:         (log.path as string) ?? null,
+        user_agent:   ua || null,
+        browser:      (parsed.browser || log.browser || "Unknown") as string,
+        os:           (parsed.os || log.os || "Unknown") as string,
+        device:       (parsed.device || log.device || "desktop") as string,
+        ip:           (ip || log.ip || "") as string,
+        city:         (geo.city || log.city || "") as string,
+        country:      (geo.country || log.country || "") as string,
+        country_code: (geo.countryCode || log.countryCode || "") as string,
+        details:      (log.details as Record<string, unknown>) ?? {},
+        timestamp:    (log.timestamp as string) ?? new Date().toISOString(),
+      }).select("id").single();
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ success: true, id: row.id });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
   }
 
+  // ── Support: staff reply ──────────────────────────────────────────────────
+  // The sync_ticket_on_reply trigger maintains reply_count / last_reply_* /
+  // status, so only the reply row is inserted here.
+  if (action === "ticket_reply") {
+    const { ticketId, message } = body as { ticketId?: string; message?: string };
+    if (!ticketId || !message?.trim()) return NextResponse.json({ error: "Missing ticketId or message" }, { status: 400 });
+    try {
+      const { data, error } = await sb().from("support_ticket_replies").insert({
+        ticket_id: ticketId, author_user_id: admin.userId, is_staff: true,
+        body: message.trim(), from_email: admin.email || null,
+      }).select("id,created_at").single();
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ success: true, id: data.id, createdAt: data.created_at });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── Support: status / priority / internal notes ───────────────────────────
+  if (action === "ticket_update") {
+    const { ticketId, status, priority, notes } = body as { ticketId?: string; status?: string; priority?: string; notes?: string };
+    if (!ticketId) return NextResponse.json({ error: "Missing ticketId" }, { status: 400 });
+    try {
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (status)   patch.status   = status;
+      if (priority) patch.priority = priority;
+      const { error } = await sb().from("support_tickets").update(patch).eq("id", ticketId);
+      if (error) throw new Error(error.message);
+      if (notes !== undefined) {
+        const { error: nErr } = await sb().from("erp_ticket_notes").upsert(
+          { ticket_id: ticketId, notes, updated_by: admin.userId, updated_at: new Date().toISOString() },
+          { onConflict: "ticket_id" },
+        );
+        if (nErr) throw new Error(`Notes not saved: ${nErr.message} (run supabase/erp_schema.sql)`);
+      }
+      return NextResponse.json({ success: true });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // ─── Ticket reply notification email ────────────────────────────────────────
+  // Sends the customer their "you have a reply" email after ticket_reply.
+  if (action === "ticket_notify_reply") {
+    const { ticketId, message } = body as { ticketId: string; message: string };
+    if (!ticketId || !message) return NextResponse.json({ error: "Missing ticketId or message" }, { status: 400 });
+    try {
+      const { data: ticket } = await sb().from("support_tickets").select("user_email,user_name,subject").eq("id", ticketId).maybeSingle();
+      if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      if (!ticket.user_email) return NextResponse.json({ error: "Ticket has no user email" }, { status: 400 });
+
+      const fromEmail = process.env.ADMIN_FROM_EMAIL ?? "support@preciprocal.com";
+      const resendKey = process.env.RESEND_API_KEY;
+      const shortId   = ticketId.slice(0, 8).toUpperCase();
+      const subject   = `[Ticket #${shortId}] Re: ${ticket.subject ?? "Your support ticket"}`;
+
+      if (resendKey) {
+        const res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: fromEmail, to: [ticket.user_email], subject,
+            html: `<p>Hi ${ticket.user_name ?? "there"},</p>`
+              + `<p>Our support team replied to your ticket <strong>${ticket.subject ?? ""}</strong>:</p>`
+              + `<blockquote style="border-left:3px solid #4f46e5;margin:0;padding:8px 16px;color:#374151;white-space:pre-wrap;">${message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</blockquote>`
+              + `<p>Sign in to Preciprocal and go to Help & Support &gt; Tickets to view the full conversation and reply.</p>`
+              + `<hr/><small style="color:#9ca3af">Preciprocal Support · Ticket #${shortId}</small>`,
+          }),
+        });
+        if (!res.ok) throw new Error(`Resend error: ${await res.text()}`);
+      } else {
+        console.log("📧 [DRAFT — no RESEND_API_KEY]\nTo:", ticket.user_email, "\nSubject:", subject);
+      }
+      return NextResponse.json({ success: true, sent: !!resendKey });
+    } catch (e) {
+      console.error("❌ ticket_notify_reply error:", e);
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── ERP access list: add / remove ─────────────────────────────────────────
+  if (action === "access_add") {
+    const email = normaliseEmail(String(body.email ?? ""));
+    const note  = typeof body.note === "string" && body.note.trim() ? body.note.trim().slice(0, 200) : null;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
+    const { error } = await sb().from("erp_allowed_emails")
+      .upsert({ email, note, added_by: admin.email || admin.name }, { onConflict: "email" });
+    if (error) return NextResponse.json({ error: `${error.message} (run supabase/erp_schema.sql)` }, { status: 500 });
+    return NextResponse.json({ success: true, email });
+  }
+
+  if (action === "access_remove") {
+    const email = normaliseEmail(String(body.email ?? ""));
+    if (!email) return NextResponse.json({ error: "Missing email" }, { status: 400 });
+    if (envAllowedEmails().has(email)) {
+      return NextResponse.json({ error: "This email comes from ERP_ALLOWED_EMAILS in the server environment and can't be removed here" }, { status: 400 });
+    }
+    if (admin.email && normaliseEmail(admin.email) === email) {
+      return NextResponse.json({ error: "You can't remove your own access" }, { status: 400 });
+    }
+    const { error } = await sb().from("erp_allowed_emails").delete().eq("email", email);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  }
+
   const id = body.id as string;
-  if (!id && action !== "write_log") {
+  if (!id) {
     return NextResponse.json({ error: "Missing user id" }, { status: 400 });
   }
 
-  // ── 1. Plain Firestore update ─────────────────────────────────────────────
+  // ── 1. Profile / subscription / usage update from the Users tab ───────────
   if (action === "update") {
-    const data = body.data as Record<string, unknown>;
+    const data = (body.data ?? {}) as Record<string, unknown>;
     try {
-      await getDb().collection("users").doc(id).update({ ...data, updatedAt: new Date().toISOString() });
+      const profile: Record<string, unknown> = {};
+      if (typeof data.name     === "string")  profile.name     = data.name;
+      if (typeof data.email    === "string")  profile.email    = data.email;
+      if (typeof data.provider === "string")  profile.provider = data.provider;
+      if (typeof data.isAdmin  === "boolean") profile.is_admin = data.isAdmin;
+      if (Object.keys(profile).length) {
+        const { error } = await sb().from("profiles").update({ ...profile, updated_at: new Date().toISOString() }).eq("user_id", id);
+        if (error) throw new Error(`profiles: ${error.message}`);
+      }
+      if (data.subscription && typeof data.subscription === "object") {
+        const s = data.subscription as Record<string, unknown>;
+        // Only the fields the Users tab edits — Stripe-owned fields change via stripe_update.
+        await upsertSubscription(sb(), id, subscriptionPatch({ plan: s.plan, status: s.status, studentVerified: s.studentVerified }));
+      }
+      if (data.usage && typeof data.usage === "object") {
+        await writeUsage(sb(), id, data.usage as Record<string, unknown>);
+      }
       return NextResponse.json({ success: true });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
@@ -1399,12 +1723,18 @@ export async function POST(req: NextRequest) {
     };
     try {
       const stripe  = getStripe();
-      const userDoc = await getDb().collection("users").doc(id).get();
-      if (!userDoc.exists) return NextResponse.json({ error: "User not found" }, { status: 404 });
+      const [{ data: profile }, { data: subRow }] = await Promise.all([
+        sb().from("profiles").select("name,email").eq("user_id", id).maybeSingle(),
+        sb().from("subscriptions").select("plan,stripe_customer_id,stripe_subscription_id").eq("user_id", id).maybeSingle(),
+      ]);
+      if (!profile) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-      const userData = userDoc.data() as Record<string, unknown>;
-      const sub      = (userData.subscription ?? {}) as Record<string, unknown>;
-      const subId    = sub.stripeSubscriptionId as string | undefined;
+      const sub = {
+        plan:                 subRow?.plan as string | undefined,
+        stripeCustomerId:     subRow?.stripe_customer_id as string | undefined,
+        stripeSubscriptionId: subRow?.stripe_subscription_id as string | undefined,
+      };
+      const subId    = sub.stripeSubscriptionId;
       let updatedSub: Record<string, unknown> = {};
 
       if (subId && sd.priceId) {
@@ -1439,12 +1769,11 @@ export async function POST(req: NextRequest) {
           subscriptionEndsAt: new Date((upd.current_period_end ?? 0) * 1000).toISOString(),
         };
       } else if (sd.priceId && sd.priceId !== "__free__") {
-        const userData2 = userDoc.data() as Record<string, unknown>;
-        const userEmail = userData2.email as string | undefined;
-        const userName  = userData2.name  as string | undefined;
-        let custId = sub.stripeCustomerId as string | undefined;
+        const userEmail = (profile.email as string | null) ?? undefined;
+        const userName  = (profile.name  as string | null) ?? undefined;
+        let custId = sub.stripeCustomerId;
         if (!custId) {
-          const customer = await stripe.customers.create({ email: userEmail, name: userName, metadata: { firebaseUid: id } });
+          const customer = await stripe.customers.create({ email: userEmail, name: userName, metadata: { userId: id, supabaseUserId: id } });
           custId = customer.id;
         }
         const createParams: Record<string, unknown> = {
@@ -1468,9 +1797,8 @@ export async function POST(req: NextRequest) {
         updatedSub = { plan: sd.plan ?? sub.plan };
       }
 
-      await getDb().collection("users").doc(id).update({
-        subscription: { ...sub, ...updatedSub }, updatedAt: new Date().toISOString(),
-      });
+      // cancelAtPeriodEnd has no column — Stripe is the source of truth for it.
+      await upsertSubscription(sb(), id, subscriptionPatch(updatedSub));
       return NextResponse.json({ success: true, subscription: updatedSub });
     } catch (err) {
       console.error("❌ stripe_update error:", err);
@@ -1484,24 +1812,29 @@ export async function POST(req: NextRequest) {
     if (!couponCode) return NextResponse.json({ error: "Missing couponCode" }, { status: 400 });
     try {
       const stripe  = getStripe();
-      const userDoc = await getDb().collection("users").doc(id).get();
-      const sub     = ((userDoc.data() as Record<string, unknown>)?.subscription ?? {}) as Record<string, unknown>;
-      const custId  = sub.stripeCustomerId as string | undefined;
-      const subId   = sub.stripeSubscriptionId as string | undefined;
+      const { data: subRow } = await sb().from("subscriptions")
+        .select("stripe_customer_id,stripe_subscription_id").eq("user_id", id).maybeSingle();
+      const custId  = subRow?.stripe_customer_id as string | undefined;
+      const subId   = subRow?.stripe_subscription_id as string | undefined;
       if (!custId) return NextResponse.json({ error: "No Stripe customer ID on this user" }, { status: 400 });
 
       let couponId = couponCode;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let couponObj: any = null;
       try {
         const promoCodes = await stripe.promotionCodes.list({ code: couponCode, active: true, limit: 1 });
         if (promoCodes.data.length > 0) {
-          const promo = promoCodes.data[0];
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const couponField = (promo as any).coupon;
-          couponId = typeof couponField === "object" && couponField?.id
-            ? (couponField.id as string)
-            : typeof couponField === "string" ? couponField : couponCode;
+          const couponField = (promoCodes.data[0] as any).coupon;
+          couponId  = typeof couponField === "object" && couponField?.id ? (couponField.id as string) : typeof couponField === "string" ? couponField : couponCode;
+          couponObj = typeof couponField === "object" ? couponField : null;
         }
       } catch { /* fall through */ }
+
+      // Fetch coupon details if not already resolved via promo code — needed to detect 100% off
+      if (!couponObj) {
+        try { couponObj = await stripe.coupons.retrieve(couponId); } catch { /* may not exist as coupon ID */ }
+      }
 
       if (subId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1510,12 +1843,14 @@ export async function POST(req: NextRequest) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (stripe.customers.update as any)(custId, { coupon: couponId });
       }
-      await getDb().collection("users").doc(id).update({
-        "subscription.lastAppliedCoupon":   couponCode,
-        "subscription.lastCouponAppliedAt": new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      return NextResponse.json({ success: true, applied: couponCode });
+
+      // If the coupon is 100% off, mark the user as studentVerified so all MRR
+      // calculations (both Stripe-based and DB-based) consistently exclude them.
+      const isFullyFree = (couponObj?.percent_off ?? 0) >= 100;
+      if (isFullyFree) await upsertSubscription(sb(), id, { student_verified: true });
+      await upsertUserMeta(sb(), id, { last_applied_coupon: couponCode, last_coupon_applied_at: new Date().toISOString() })
+        .catch(e => console.error("[apply_coupon] meta write failed:", e));
+      return NextResponse.json({ success: true, applied: couponCode, studentVerified: isFullyFree });
     } catch (err) {
       console.error("❌ apply_coupon error:", err);
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
@@ -1544,10 +1879,9 @@ export async function POST(req: NextRequest) {
       } else {
         console.log("📧 [DRAFT — no RESEND_API_KEY]\nTo:", toEmail, "\nSubject:", subject, "\nBody:", emailBody);
       }
-      await getDb().collection("users").doc(id).update({
-        lastContactedAt: new Date().toISOString(), lastContactSubject: subject,
-        lastContactSentBy: fromEmail, updatedAt: new Date().toISOString(),
-      });
+      await upsertUserMeta(sb(), id, {
+        last_contacted_at: new Date().toISOString(), last_contact_subject: subject, last_contact_sent_by: fromEmail,
+      }).catch(e => console.error("[contact_email] meta write failed:", e));
       return NextResponse.json({ success: true, sent: !!resendKey, draft: !resendKey });
     } catch (err) {
       console.error("❌ contact_email error:", err);

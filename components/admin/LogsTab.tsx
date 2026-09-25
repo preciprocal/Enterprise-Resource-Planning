@@ -2,7 +2,20 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { User, Avatar, Card, CardTitle, SL, Spinner, LineChart, BarChart, Donut, useIsMobile } from "./admin-shared";
+import { User, USAGE_FIELDS, Avatar, Card, CardTitle, SL, Spinner, LineChart, BarChart, Donut, useIsMobile, Select } from "./admin-shared";
+
+// Map derived action keys → display label + color (matches USAGE_FIELDS colors)
+const FEATURE_ACTIONS: Record<string, { label: string; color: string }> = {
+  resume_analyse:  { label: "Resume",        color: "#0070f3" },
+  cover_letter:    { label: "Cover Letter",  color: "#3ecf8e" },
+  interview_start: { label: "Interview",     color: "#f5a623" },
+  study_plan:      { label: "Study Plan",    color: "#a855f7" },
+  debrief:         { label: "Debrief",       color: "#ec4899" },
+  linkedin_opt:    { label: "LinkedIn",      color: "#0ea5e9" },
+  cold_outreach:   { label: "Cold Outreach", color: "#f44"    },
+  find_contacts:   { label: "Contacts",      color: "#06b6d4" },
+  job_tracker:     { label: "Job Tracker",   color: "#888"    },
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,8 +49,8 @@ interface Props { users: User[]; token?: string; }
 
 function fmtRelative(iso: string, now: number) {
   const diff = now - new Date(iso).getTime();
-  if (diff < 60_000)   return "just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 60_000)    return "just now";
+  if (diff < 3_600_000)  return `${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`;
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
@@ -55,17 +68,40 @@ function deviceIcon(device?: string) {
 
 function typeBadge(type: LogEntry["type"]) {
   const map: Record<string, { label: string; cls: string }> = {
-    login:    { label: "Login",    cls: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-    signup:   { label: "Signup",   cls: "bg-green-50 text-green-700 border-green-200"   },
-    action:   { label: "Action",   cls: "bg-blue-50 text-blue-700 border-blue-200"      },
-    logout:   { label: "Logout",   cls: "bg-gray-50 text-gray-600 border-gray-200"      },
-    error:    { label: "Error",    cls: "bg-red-50 text-red-700 border-red-200"         },
-    pageview: { label: "Page",     cls: "bg-gray-50 text-gray-500 border-gray-100"      },
+    login:    { label: "Login",   cls: "bg-[rgba(0,112,243,0.08)] text-[#0070f3] border-[rgba(0,112,243,0.2)]"     },
+    signup:   { label: "Signup",  cls: "bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border-[rgba(62,207,142,0.2)]" },
+    action:   { label: "Action",  cls: "bg-[rgba(0,112,243,0.06)] text-[#4da3ff] border-[rgba(0,112,243,0.15)]"   },
+    logout:   { label: "Logout",  cls: "bg-[#111] text-[#888] border-[#2a2a2a]"                                   },
+    error:    { label: "Error",   cls: "bg-[rgba(255,68,68,0.08)] text-[#f44] border-[rgba(255,68,68,0.2)]"       },
+    pageview: { label: "Page",    cls: "bg-[#0a0a0a] text-[#555] border-[#1a1a1a]"                                },
   };
-  const { label, cls } = map[type] ?? { label: type, cls: "bg-gray-50 text-gray-600 border-gray-200" };
+  const { label, cls } = map[type] ?? { label: type, cls: "bg-[#111] text-[#888] border-[#2a2a2a]" };
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${cls} whitespace-nowrap shrink-0`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border ${cls} whitespace-nowrap shrink-0`}>
       {label}
+    </span>
+  );
+}
+
+function actionBadge(action: string) {
+  const meta = FEATURE_ACTIONS[action];
+  if (!meta) {
+    // Subscription events
+    if (action.startsWith("subscribed_")) {
+      const plan = action.replace("subscribed_", "");
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border-[rgba(62,207,142,0.2)] whitespace-nowrap">
+          Subscribed · {plan}
+        </span>
+      );
+    }
+    return <span className="text-[11px] text-[#555] font-mono">{action.replace(/_/g, " ")}</span>;
+  }
+  const bg = meta.color + "12", border = meta.color + "40";
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border whitespace-nowrap"
+      style={{ color: meta.color, background: bg, borderColor: border }}>
+      {meta.label}
     </span>
   );
 }
@@ -75,20 +111,17 @@ function countryFlag(code?: string) {
   return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
 }
 
-// Maps a Firebase auth provider to the most likely browser
 function providerToBrowser(provider?: string): string {
   if (provider === "google")   return "Chrome";
   if (provider === "facebook") return "Facebook App";
   if (provider === "apple")    return "Safari";
   if (provider === "github")   return "Chrome";
-  return "Browser";  // email/password — unknown but at least not "Unknown"
+  return "Browser";
 }
 
-// Derive synthetic log entries from user collection (fallback if no logs collection exists)
 function deriveLogsFromUsers(users: User[]): LogEntry[] {
   const entries: LogEntry[] = [];
   users.forEach(u => {
-    // Signup event
     if (u.createdAt) {
       entries.push({
         id: `signup_${u.id}`, userId: u.id,
@@ -101,7 +134,6 @@ function deriveLogsFromUsers(users: User[]): LogEntry[] {
       });
     }
 
-    // Login event — use lastLogin if available, else fall back to updatedAt/createdAt
     const loginTs = u.lastLogin ?? u.updatedAt ?? u.createdAt;
     if (loginTs) {
       entries.push({
@@ -115,7 +147,6 @@ function deriveLogsFromUsers(users: User[]): LogEntry[] {
       });
     }
 
-    // Action events — one per feature that has non-zero usage
     if (u.usage) {
       const fields = [
         ["resumesUsed",               "resume_analyse"  ],
@@ -144,7 +175,6 @@ function deriveLogsFromUsers(users: User[]): LogEntry[] {
       });
     }
 
-    // Plan entry — show subscription events
     const plan = u.subscription?.plan;
     if (plan && plan !== "free" && u.subscription?.currentPeriodStart) {
       entries.push({
@@ -165,14 +195,14 @@ function deriveLogsFromUsers(users: User[]): LogEntry[] {
 
 function StatCard({ label, value, sub, color, icon }: { label: string; value: string | number; sub?: string; color: string; icon: React.ReactNode }) {
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-start gap-3">
+    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-4 flex items-start gap-3">
       <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: color + "18" }}>
         <span style={{ color }}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{label}</div>
+        <div className="text-[11px] font-bold text-[#555] uppercase tracking-widest mb-0.5">{label}</div>
         <div className="text-2xl font-extrabold tracking-tight leading-none" style={{ color }}>{value}</div>
-        {sub && <div className="text-[11px] text-gray-400 mt-1">{sub}</div>}
+        {sub && <div className="text-[12px] text-[#888] mt-1">{sub}</div>}
       </div>
     </div>
   );
@@ -180,47 +210,71 @@ function StatCard({ label, value, sub, color, icon }: { label: string; value: st
 
 // ─── Log Row ──────────────────────────────────────────────────────────────────
 
-function LogRow({ log, isMobile, onClick, selected, now }: { log: LogEntry; isMobile: boolean; onClick: () => void; selected: boolean; now: number }) {
+type ActivityEntry = { feats: { key: string; label: string; color: string; count: number }[]; total: number };
+
+function LogRow({ log, isMobile, onClick, selected, now, activityMap }: {
+  log: LogEntry; isMobile: boolean; onClick: () => void; selected: boolean; now: number;
+  activityMap: Record<string, ActivityEntry>;
+}) {
+  const activity = activityMap[log.userId];
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50/80 transition-colors cursor-pointer border-none border-l-2 ${selected ? "bg-indigo-50/40 border-l-indigo-400" : "bg-white border-l-transparent"}`}
-      style={{ borderLeft: selected ? "2px solid #6366F1" : "2px solid transparent" }}>
+      className={`w-full text-left px-4 py-3 border-b border-[#111] transition-colors cursor-pointer border-none ${selected ? "bg-[#111]" : "bg-black hover:bg-[#0a0a0a]"}`}
+      style={{ borderLeft: selected ? "2px solid #0070f3" : "2px solid transparent" }}>
       <div className="flex items-start gap-3">
         <Avatar name={log.userName ?? log.userEmail ?? "?"} size={28} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
-            <span className="text-[12px] font-semibold text-gray-800 truncate max-w-[140px]">
+            <span className="text-[13px] font-semibold text-[#ededed] truncate max-w-[140px]">
               {log.userName ?? log.userEmail?.split("@")[0] ?? "Unknown"}
             </span>
             {typeBadge(log.type)}
-            {log.action && (
-              <span className="text-[10px] text-gray-400 font-mono truncate">{log.action.replace(/_/g, " ")}</span>
+            {log.action && actionBadge(log.action)}
+            {log.type === "action" && typeof log.details?.count === "number" && log.details.count > 1 && (
+              <span className="text-[11px] text-[#555]">×{log.details.count}</span>
             )}
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="text-[11px] text-gray-400">{log.userEmail ?? log.userId.slice(0, 12)}</span>
+            <span className="text-[12px] text-[#888]">{log.userEmail ?? log.userId.slice(0, 12)}</span>
             {!isMobile && log.city && (
-              <span className="text-[11px] text-gray-400 flex items-center gap-1">
+              <span className="text-[12px] text-[#555] flex items-center gap-1">
                 <span>{countryFlag(log.countryCode)}</span>
                 <span>{log.city}, {log.country}</span>
               </span>
             )}
             {!isMobile && log.device && (
-              <span className="text-[11px] text-gray-400 flex items-center gap-1">
-                <span className="text-gray-300">{deviceIcon(log.device)}</span>
+              <span className="text-[12px] text-[#555] flex items-center gap-1">
+                <span className="text-[#333]">{deviceIcon(log.device)}</span>
                 <span className="capitalize">{log.browser ?? log.device}</span>
               </span>
             )}
             {log.ip && !isMobile && (
-              <span className="text-[10px] font-mono text-gray-300">{log.ip}</span>
+              <span className="text-[11px] font-mono text-[#333]">{log.ip}</span>
             )}
           </div>
+          {activity && !isMobile && (
+            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+              {activity.feats.slice(0, 4).map(f => (
+                <span key={f.key}
+                  className="text-[11px] px-1.5 py-0.5 rounded border font-semibold whitespace-nowrap"
+                  style={{ color: f.color, background: f.color + "12", borderColor: f.color + "33" }}>
+                  {f.label} {f.count}
+                </span>
+              ))}
+              {activity.feats.length > 4 && (
+                <span className="text-[11px] text-[#444]">+{activity.feats.length - 4} more</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[11px] text-gray-400 whitespace-nowrap">{fmtRelative(log.timestamp, now)}</div>
+          <div className="text-[12px] text-[#555] whitespace-nowrap">{fmtRelative(log.timestamp, now)}</div>
           {!isMobile && (
-            <div className="text-[10px] text-gray-300 mt-0.5 whitespace-nowrap">{new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+            <div className="text-[11px] text-[#333] mt-0.5 whitespace-nowrap">{new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+          )}
+          {activity && !isMobile && (
+            <div className="text-[11px] font-bold text-[#3ecf8e] mt-1">{activity.total} uses</div>
           )}
         </div>
       </div>
@@ -232,36 +286,36 @@ function LogRow({ log, isMobile, onClick, selected, now }: { log: LogEntry; isMo
 
 function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
   return (
-    <div className="w-72 shrink-0 border-l border-gray-100 bg-white flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <span className="text-[13px] font-bold text-gray-900">Event Detail</span>
-        <button onClick={onClose} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer border-none bg-transparent text-gray-400">
+    <div className="w-72 shrink-0 border-l border-[#1a1a1a] bg-[#0a0a0a] flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
+        <span className="text-[14px] font-bold text-[#ededed]">Event Detail</span>
+        <button onClick={onClose} className="w-6 h-6 rounded-full hover:bg-[#1a1a1a] flex items-center justify-center cursor-pointer border-none bg-transparent text-[#555] hover:text-[#ededed] transition-colors">
           <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* User */}
-        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+        <div className="flex items-center gap-3 p-3 bg-[#111] border border-[#1a1a1a] rounded-xl">
           <Avatar name={log.userName ?? log.userEmail ?? "?"} size={36} />
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-gray-800 truncate">{log.userName ?? "Unknown"}</div>
-            <div className="text-[11px] text-gray-400 truncate">{log.userEmail ?? log.userId}</div>
+            <div className="text-[14px] font-semibold text-[#ededed] truncate">{log.userName ?? "Unknown"}</div>
+            <div className="text-[12px] text-[#888] truncate">{log.userEmail ?? log.userId}</div>
           </div>
         </div>
 
         {/* Event */}
         <div>
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Event</div>
+          <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Event</div>
           <div className="space-y-2">
             {[
-              ["Type",      typeBadge(log.type)],
-              ["Time",      <span key="t" className="text-[12px] text-gray-700">{fmtFull(log.timestamp)}</span>],
-              ["User ID",   <span key="u" className="font-mono text-[11px] text-indigo-600">{log.userId.slice(0,16)}…</span>],
-              log.action ? ["Action",  <span key="a" className="text-[12px] text-gray-700 font-mono">{log.action}</span>] : null,
-              log.path   ? ["Path",    <span key="p" className="text-[12px] text-gray-700 font-mono">{log.path}</span>]   : null,
+              ["Type",    typeBadge(log.type)],
+              ["Time",    <span key="t" className="text-[13px] text-[#ededed]">{fmtFull(log.timestamp)}</span>],
+              ["User ID", <span key="u" className="font-mono text-[12px] text-[#0070f3]">{log.userId.slice(0,16)}…</span>],
+              log.action ? ["Action", <span key="a" className="text-[13px] text-[#ededed] font-mono">{log.action}</span>] : null,
+              log.path   ? ["Path",   <span key="p" className="text-[13px] text-[#ededed] font-mono">{log.path}</span>]   : null,
             ].filter(Boolean).map((row, i) => (
               <div key={i} className="flex items-start justify-between gap-2">
-                <span className="text-[10px] font-semibold text-gray-400 shrink-0 mt-0.5">{(row as [string, React.ReactNode])[0]}</span>
+                <span className="text-[11px] font-semibold text-[#555] shrink-0 mt-0.5">{(row as [string, React.ReactNode])[0]}</span>
                 <span className="text-right">{(row as [string, React.ReactNode])[1]}</span>
               </div>
             ))}
@@ -271,11 +325,11 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* Location */}
         {(log.ip || log.city || log.country) && (
           <div>
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Location</div>
+            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Location</div>
             <div className="space-y-2">
-              {log.ip      && <div className="flex justify-between"><span className="text-[10px] text-gray-400 font-semibold">IP</span><span className="font-mono text-[11px] text-gray-700">{log.ip}</span></div>}
-              {log.city    && <div className="flex justify-between"><span className="text-[10px] text-gray-400 font-semibold">City</span><span className="text-[12px] text-gray-700">{log.city}</span></div>}
-              {log.country && <div className="flex justify-between"><span className="text-[10px] text-gray-400 font-semibold">Country</span><span className="text-[12px] text-gray-700">{countryFlag(log.countryCode)} {log.country}</span></div>}
+              {log.ip      && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">IP</span><span className="font-mono text-[12px] text-[#ededed]">{log.ip}</span></div>}
+              {log.city    && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">City</span><span className="text-[13px] text-[#ededed]">{log.city}</span></div>}
+              {log.country && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">Country</span><span className="text-[13px] text-[#ededed]">{countryFlag(log.countryCode)} {log.country}</span></div>}
             </div>
           </div>
         )}
@@ -283,11 +337,11 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* Device */}
         {(log.device || log.browser || log.os) && (
           <div>
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Device</div>
+            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Device</div>
             <div className="space-y-2">
-              {log.device  && <div className="flex justify-between"><span className="text-[10px] text-gray-400 font-semibold">Type</span><span className="text-[12px] text-gray-700 capitalize flex items-center gap-1">{deviceIcon(log.device)} {log.device}</span></div>}
-              {log.browser && <div className="flex justify-between"><span className="text-[10px] text-gray-400 font-semibold">Browser</span><span className="text-[12px] text-gray-700">{log.browser}</span></div>}
-              {log.os      && <div className="flex justify-between"><span className="text-[10px] text-gray-400 font-semibold">OS</span><span className="text-[12px] text-gray-700">{log.os}</span></div>}
+              {log.device  && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">Type</span><span className="text-[13px] text-[#ededed] capitalize flex items-center gap-1">{deviceIcon(log.device)} {log.device}</span></div>}
+              {log.browser && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">Browser</span><span className="text-[13px] text-[#ededed]">{log.browser}</span></div>}
+              {log.os      && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">OS</span><span className="text-[13px] text-[#ededed]">{log.os}</span></div>}
             </div>
           </div>
         )}
@@ -295,9 +349,9 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* Extra details */}
         {log.details && Object.keys(log.details).length > 0 && (
           <div>
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Details</div>
-            <div className="bg-gray-50 rounded-lg p-2.5 overflow-x-auto">
-              <pre className="text-[10px] font-mono text-gray-600 whitespace-pre-wrap">{JSON.stringify(log.details, null, 2)}</pre>
+            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Details</div>
+            <div className="bg-[#050505] border border-[#1a1a1a] rounded-lg p-2.5 overflow-x-auto">
+              <pre className="text-[11px] font-mono text-[#888] whitespace-pre-wrap">{JSON.stringify(log.details, null, 2)}</pre>
             </div>
           </div>
         )}
@@ -305,14 +359,27 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* UA */}
         {log.userAgent && (
           <div>
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">User Agent</div>
-            <div className="bg-gray-50 rounded-lg p-2.5">
-              <p className="text-[10px] font-mono text-gray-500 break-all leading-relaxed">{log.userAgent}</p>
+            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">User Agent</div>
+            <div className="bg-[#050505] border border-[#1a1a1a] rounded-lg p-2.5">
+              <p className="text-[11px] font-mono text-[#555] break-all leading-relaxed">{log.userAgent}</p>
             </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Filter chip ─────────────────────────────────────────────────────────────
+
+function FilterChip({ label, color, onClear }: { label: string; color: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-semibold whitespace-nowrap"
+      style={{ color, background: color + "14", borderColor: color + "44" }}>
+      {label}
+      <button onClick={onClear} className="ml-0.5 border-none bg-transparent cursor-pointer p-0 leading-none hover:opacity-70 transition-opacity"
+        style={{ color }}>✕</button>
+    </span>
   );
 }
 
@@ -326,27 +393,24 @@ export default function LogsTab({ users, token = "" }: Props) {
   const [error,     setError]     = useState("");
   const [isDerived, setIsDerived] = useState(false);
 
-  // Filters
   const [search,     setSearch]     = useState("");
   const [typeF,      setTypeF]      = useState<FilterType>("all");
   const [deviceF,    setDeviceF]    = useState<FilterDevice>("all");
+  const [featureF,   setFeatureF]   = useState<string>("all");
+  const [planF,      setPlanF]      = useState<string>("all");
   const [timeRange,  setTimeRange]  = useState<TimeRange>("30d");
   const [userFilter, setUserFilter] = useState<string>("all");
   const [page,       setPage]       = useState(0);
   const PAGE_SIZE = 50;
   const [selected,   setSelected]   = useState<LogEntry | null>(null);
   const [showDetail, setShowDetail] = useState(false);
-  // Snapshot of "now" — updated after each load so memos stay pure
   const [now, setNow] = useState(() => Date.now());
 
-  // ── Fetch logs ──────────────────────────────────────────────────────────────
-  // All setState calls live inside the async chain, never synchronously in the
-  // effect body, so the React compiler's cascading-render rule is satisfied.
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [totalFetched, setTotalFetched] = useState(0);
+  const [loadingMore, setLoadingMore]       = useState(false);
+  const [totalFetched, setTotalFetched]     = useState(0);
+  const [activitySearch, setActivitySearch] = useState("");
 
   const loadLogs = useCallback(() => {
-    // Fetch all pages from Firebase by following the cursor until hasMore is false
     void (async () => {
       setLoading(true);
       setError("");
@@ -356,7 +420,7 @@ export default function LogsTab({ users, token = "" }: Props) {
       const allLogs: LogEntry[] = [];
       let cursor: string | null = null;
       let page = 0;
-      const MAX_PAGES = 20; // safety cap — 20 × 500 = 10 000 logs max
+      const MAX_PAGES = 20;
 
       try {
         while (page < MAX_PAGES) {
@@ -365,7 +429,7 @@ export default function LogsTab({ users, token = "" }: Props) {
             : "/api/admin?action=logs&limit=500";
 
           const r = await fetch(url, {
-            headers: token ? { "x-firebase-token": token } : {},
+            headers: token ? { "x-admin-token": token } : {},
           });
           const json = await r.json() as { logs?: LogEntry[]; hasMore?: boolean; oldestTimestamp?: string | null; error?: string };
 
@@ -379,35 +443,27 @@ export default function LogsTab({ users, token = "" }: Props) {
           cursor = json.oldestTimestamp;
           page++;
 
-          // Show progress to the user while fetching
           if (page === 1) setLoadingMore(true);
         }
 
-        // Always derive entries from ALL users in the users collection,
-        // then merge with any real Firebase logs — real logs take precedence
-        // for users who have them, derived entries fill the gap for everyone else.
         if (users.length > 0) {
           const derived = deriveLogsFromUsers(users);
           if (allLogs.length === 0) {
-            // No real logs at all — use fully derived
             setLogs(derived);
             setIsDerived(true);
           } else {
-            // Merge: keep all real logs, add derived entries only for users
-            // who have zero real logs (so every user appears in the list)
             const realUserIds = new Set(allLogs.map(l => l.userId));
             const derivedForMissing = derived.filter(l => !realUserIds.has(l.userId));
             const merged = [...allLogs, ...derivedForMissing]
               .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setLogs(merged);
-            setIsDerived(derivedForMissing.length > 0); // partial derive
+            setIsDerived(derivedForMissing.length > 0);
           }
         } else {
           setLogs(allLogs);
           setIsDerived(false);
         }
       } catch {
-        // On error, fall back to fully derived logs for all users
         if (users.length > 0) {
           setLogs(deriveLogsFromUsers(users));
           setIsDerived(true);
@@ -423,17 +479,14 @@ export default function LogsTab({ users, token = "" }: Props) {
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
-  // Re-derive whenever users array changes — ensures all users always appear
   useEffect(() => {
     if (users.length === 0) return;
     void Promise.resolve().then(() => {
       setLogs(prev => {
         const realLogs = prev.filter(l => !l.id.startsWith("signup_") && !l.id.startsWith("login_") && !l.id.startsWith("action_") && !l.id.startsWith("sub_"));
         if (realLogs.length === 0) {
-          // No real logs yet — fully derived
           return deriveLogsFromUsers(users);
         }
-        // Merge: real logs + derived for users with no real logs
         const realUserIds = new Set(realLogs.map(l => l.userId));
         const derived = deriveLogsFromUsers(users);
         const derivedForMissing = derived.filter(l => !realUserIds.has(l.userId));
@@ -446,22 +499,31 @@ export default function LogsTab({ users, token = "" }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [users]);
 
-  // ── Time range filter ───────────────────────────────────────────────────────
   const cutoff = useMemo(() => {
     if (timeRange === "all") return 0;
     const ms = { "1h": 3_600_000, "24h": 86_400_000, "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 };
     return now - (ms[timeRange] ?? ms["24h"]);
   }, [timeRange, now]);
 
-  // ── Filtered & searched logs ────────────────────────────────────────────────
+  const userPlanMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    users.forEach(u => { m[u.id] = u.subscription?.plan ?? "free"; });
+    return m;
+  }, [users]);
+
   const filtered = useMemo(() => {
-    // For derived data or "all" range skip the time cutoff
     let f = (isDerived || timeRange === "all")
       ? [...logs]
       : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     if (typeF      !== "all") f = f.filter(l => l.type === typeF);
     if (deviceF    !== "all") f = f.filter(l => l.device === deviceF);
     if (userFilter !== "all") f = f.filter(l => l.userId === userFilter);
+    if (featureF   !== "all") f = f.filter(l =>
+      featureF === "subscribed"
+        ? l.action?.startsWith("subscribed_")
+        : l.action === featureF
+    );
+    if (planF !== "all") f = f.filter(l => (userPlanMap[l.userId] ?? "free") === planF);
     if (search.trim()) {
       const q = search.toLowerCase();
       f = f.filter(l =>
@@ -474,9 +536,8 @@ export default function LogsTab({ users, token = "" }: Props) {
       );
     }
     return f;
-  }, [logs, cutoff, typeF, deviceF, search, userFilter, timeRange]);
+  }, [logs, cutoff, typeF, deviceF, search, userFilter, timeRange, featureF, planF, userPlanMap]);
 
-  // ── Unique users in logs (for the user filter dropdown) ────────────────────
   const logUsers = useMemo(() => {
     const seen = new Map<string, { id: string; name?: string; email?: string }>();
     logs.forEach(l => {
@@ -485,7 +546,6 @@ export default function LogsTab({ users, token = "" }: Props) {
     return [...seen.values()].sort((a, b) => (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? ""));
   }, [logs]);
 
-  // ── CSV export ──────────────────────────────────────────────────────────────
   const exportCSV = useCallback(() => {
     const header = ["Time", "User Name", "Email", "User ID", "Type", "Action", "Device", "Browser", "OS", "IP", "City", "Country"];
     const rows = filtered.map(l => [
@@ -510,17 +570,17 @@ export default function LogsTab({ users, token = "" }: Props) {
     a.click(); URL.revokeObjectURL(url);
   }, [filtered]);
 
-  // ── Stats ───────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
-    const today   = isDerived ? logs : logs.filter(l => now - new Date(l.timestamp).getTime() < 86_400_000);
+    const today   = logs.filter(l => now - new Date(l.timestamp).getTime() < 86_400_000);
 
-    const logins          = today.filter(l => l.type === "login").length;
+    // Count unique users who logged in today — not raw event count (same user can fire many login events)
+    const logins          = new Set(today.filter(l => l.type === "login").map(l => l.userId)).size;
     const uniqueUsers     = new Set(inRange.map(l => l.userId)).size;
     const devices         = inRange.reduce((m, l) => { if (l.device) m[l.device] = (m[l.device] ?? 0) + 1; return m; }, {} as Record<string, number>);
-    const topDevice       = Object.entries(devices).sort((a,b) => b[1]-a[1])[0]?.[0] ?? "—";
+    const topDevice       = Object.entries(devices).sort((a,b) => b[1]-a[1])[0]?.[0] ?? "";
     const countries       = inRange.reduce((m, l) => { if (l.country) m[l.country] = (m[l.country] ?? 0) + 1; return m; }, {} as Record<string, number>);
-    const topCountry      = Object.entries(countries).sort((a,b) => b[1]-a[1])[0]?.[0] ?? "—";
+    const topCountry      = Object.entries(countries).sort((a,b) => b[1]-a[1])[0]?.[0] ?? "";
     const mobileCount     = devices["mobile"] ?? 0;
     const mobilePercent   = inRange.length ? Math.round(mobileCount / inRange.length * 100) : 0;
     const errors          = inRange.filter(l => l.type === "error").length;
@@ -528,7 +588,6 @@ export default function LogsTab({ users, token = "" }: Props) {
     return { logins, uniqueUsers, topDevice, topCountry, mobilePercent, errors, total: inRange.length };
   }, [logs, cutoff, now]);
 
-  // ── Activity chart (logins per hour / day) ──────────────────────────────────
   const activityChart = useMemo(() => {
     const buckets = timeRange === "1h"
       ? Array.from({ length: 60 }, (_, i) => { const d = new Date(now - (59 - i) * 60_000); return { label: `${d.getHours()}:${String(d.getMinutes()).padStart(2,"0")}`, key: d.toISOString().slice(0, 16) }; })
@@ -544,8 +603,8 @@ export default function LogsTab({ users, token = "" }: Props) {
 
     logs.filter(l => new Date(l.timestamp).getTime() >= cutoff).forEach(l => {
       const ts = l.timestamp;
-      const key = timeRange === "1h"   ? ts.slice(0, 16) :
-                  timeRange === "24h"  ? ts.slice(0, 13) :
+      const key = timeRange === "1h"  ? ts.slice(0, 16) :
+                  timeRange === "24h" ? ts.slice(0, 13) :
                   ts.slice(0, 10);
       if (key in loginMap) {
         if (l.type === "login")  loginMap[key]++;
@@ -560,16 +619,14 @@ export default function LogsTab({ users, token = "" }: Props) {
     };
   }, [logs, cutoff, timeRange, now]);
 
-  // ── Device breakdown for donut ───────────────────────────────────────────────
   const deviceBreakdown = useMemo(() => {
     const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, number> = {};
     inRange.forEach(l => { const d = l.device ?? "unknown"; m[d] = (m[d] ?? 0) + 1; });
-    const colors: Record<string, string> = { desktop: "#6366F1", mobile: "#10B981", tablet: "#F59E0B", unknown: "#D1D5DB" };
-    return Object.entries(m).map(([d, v]) => ({ label: d, value: v, color: colors[d] ?? "#9CA3AF" }));
+    const colors: Record<string, string> = { desktop: "#0070f3", mobile: "#3ecf8e", tablet: "#f5a623", unknown: "#333" };
+    return Object.entries(m).map(([d, v]) => ({ label: d, value: v, color: colors[d] ?? "#555" }));
   }, [logs, cutoff, now]);
 
-  // ── Browser breakdown ────────────────────────────────────────────────────────
   const browserChart = useMemo(() => {
     const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, number> = {};
@@ -578,7 +635,6 @@ export default function LogsTab({ users, token = "" }: Props) {
     return { labels: sorted.map(e => e[0]), values: sorted.map(e => e[1]) };
   }, [logs, cutoff, now]);
 
-  // ── Country breakdown ─────────────────────────────────────────────────────── 
   const countryData = useMemo(() => {
     const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, { count: number; code?: string }> = {};
@@ -591,7 +647,47 @@ export default function LogsTab({ users, token = "" }: Props) {
     return Object.entries(m).sort((a,b) => b[1].count - a[1].count).slice(0, 8);
   }, [logs, cutoff, now]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  const featureUsage = useMemo(() => {
+    return USAGE_FIELDS.map(({ key, label, color }) => ({
+      key, label, color,
+      total: users.reduce((sum, u) => sum + ((u.usage?.[key] as number) ?? 0), 0),
+    })).sort((a, b) => b.total - a.total);
+  }, [users]);
+
+  const mostActiveUsers = useMemo(() => {
+    return users.map(u => ({
+      id: u.id, name: u.name, email: u.email,
+      totalUsage: USAGE_FIELDS.reduce((s, { key }) => s + ((u.usage?.[key] as number) ?? 0), 0),
+    })).filter(u => u.totalUsage > 0).sort((a, b) => b.totalUsage - a.totalUsage);
+  }, [users]);
+
+  const userActivityMap = useMemo(() => {
+    const m: Record<string, { feats: { key: string; label: string; color: string; count: number }[]; total: number }> = {};
+    users.forEach(u => {
+      const feats = USAGE_FIELDS
+        .map(({ key, label, color }) => ({ key: key as string, label, color, count: (u.usage?.[key] as number) ?? 0 }))
+        .filter(f => f.count > 0)
+        .sort((a, b) => b.count - a.count);
+      if (feats.length > 0) m[u.id] = { feats, total: feats.reduce((s, f) => s + f.count, 0) };
+    });
+    return m;
+  }, [users]);
+
+  const userActivity = useMemo(() => {
+    const q = activitySearch.toLowerCase();
+    return users
+      .map(u => {
+        const feats = USAGE_FIELDS
+          .map(({ key, label, color }) => ({ key, label, color, count: (u.usage?.[key] as number) ?? 0 }))
+          .filter(f => f.count > 0)
+          .sort((a, b) => b.count - a.count);
+        const total = feats.reduce((s, f) => s + f.count, 0);
+        const lastActive = u.lastLogin ?? u.updatedAt ?? u.createdAt ?? "";
+        return { ...u, feats, total, lastActive };
+      })
+      .filter(u => u.total > 0 && (!q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)))
+      .sort((a, b) => b.total - a.total);
+  }, [users, activitySearch]);
 
   if (loading && !loadingMore) return <Spinner />;
 
@@ -601,21 +697,32 @@ export default function LogsTab({ users, token = "" }: Props) {
     { id: "all", label: "All" },
   ];
   const TYPES: { id: FilterType; label: string }[] = [
-    { id: "all", label: "All" }, { id: "login",  label: "Logins" },
-    { id: "signup", label: "Signups" }, { id: "action", label: "Actions" },
-    { id: "logout", label: "Logouts" }, { id: "error", label: "Errors" },
+    { id: "all", label: "All" }, { id: "login",  label: "Login" },
+    { id: "signup", label: "Signup" }, { id: "action", label: "Action" },
+    { id: "logout", label: "Logout" }, { id: "error", label: "Error" },
+  ];
+  const FEATURES = [
+    { value: "all",         label: "All Features" },
+    ...Object.entries(FEATURE_ACTIONS).map(([k, { label }]) => ({ value: k, label })),
+    { value: "subscribed",  label: "Subscription" },
   ];
 
+  const hasActiveFilters = search.trim() || typeF !== "all" || featureF !== "all" || planF !== "all" || deviceF !== "all" || userFilter !== "all";
+
+  function clearAllFilters() {
+    setSearch(""); setTypeF("all"); setFeatureF("all"); setPlanF("all"); setDeviceF("all"); setUserFilter("all"); setPage(0);
+  }
+
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden bg-black">
       {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {/* Fetch-progress banner */}
           {loadingMore && (
-            <div className="mb-4 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center gap-3">
-              <svg width="14" height="14" fill="none" stroke="#6366F1" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 animate-spin"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-              <div className="text-[12px] text-indigo-800">
+            <div className="mb-4 px-4 py-3 bg-[rgba(0,112,243,0.06)] border border-[rgba(0,112,243,0.15)] rounded-xl flex items-center gap-3">
+              <svg width="14" height="14" fill="none" stroke="#0070f3" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 animate-spin"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              <div className="text-[13px] text-[#0070f3]">
                 <strong>Fetching all historical logs…</strong> {totalFetched.toLocaleString()} events loaded so far. This may take a moment.
               </div>
             </div>
@@ -624,19 +731,128 @@ export default function LogsTab({ users, token = "" }: Props) {
           {/* Stats row */}
           <section className="mb-5">
             <SL>Activity Summary · Last {timeRange === "1h" ? "Hour" : timeRange === "24h" ? "24 Hours" : timeRange === "7d" ? "7 Days" : "30 Days"}</SL>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatCard label="Logins Today" value={stats.logins} color="#6366F1"
-                sub="Unique sign-ins"
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <StatCard label="Unique Logins Today" value={stats.logins} color="#0070f3"
+                sub="Distinct users"
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>} />
-              <StatCard label="Unique Users" value={stats.uniqueUsers} color="#10B981"
+              <StatCard label="Unique Users" value={stats.uniqueUsers} color="#3ecf8e"
                 sub={`in last ${timeRange}`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>} />
-              <StatCard label="Mobile" value={`${stats.mobilePercent}%`} color="#F59E0B"
+              <StatCard label="Mobile" value={`${stats.mobilePercent}%`} color="#f5a623"
                 sub={`Top: ${stats.topDevice}`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>} />
-              <StatCard label="Top Country" value={stats.topCountry} color="#8B5CF6"
+              <StatCard label="Top Country" value={stats.topCountry} color="#888"
                 sub={`${stats.total} total events`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>} />
+            </div>
+          </section>
+
+          {/* Feature Usage */}
+          <section className="mb-5">
+            <SL>Feature Usage · All Users</SL>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardTitle>Top Features</CardTitle>
+                <div className="space-y-2.5 mt-1">
+                  {featureUsage.filter(f => f.total > 0).slice(0, 9).map(f => {
+                    const max = featureUsage.find(x => x.total > 0)?.total || 1;
+                    const pct = Math.round(f.total / max * 100);
+                    return (
+                      <div key={f.key as string} className="flex items-center gap-2.5">
+                        <span className="text-[12px] text-[#ededed] font-medium shrink-0 w-36 truncate">{f.label}</span>
+                        <div className="flex-1 bg-[#1a1a1a] rounded-full h-1.5 overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: f.color }} />
+                        </div>
+                        <span className="text-[12px] font-bold shrink-0 w-7 text-right" style={{ color: f.color }}>{f.total}</span>
+                      </div>
+                    );
+                  })}
+                  {featureUsage.every(f => f.total === 0) && (
+                    <div className="text-center py-4 text-[13px] text-[#555]">No feature usage data</div>
+                  )}
+                </div>
+              </Card>
+              <Card>
+                <CardTitle>Most Active Users</CardTitle>
+                <div className="space-y-1 mt-1">
+                  {mostActiveUsers.slice(0, 6).map((u, i) => (
+                    <div key={u.id} className="flex items-center gap-2.5 py-1.5 border-b border-[#111] last:border-0">
+                      <span className="text-[11px] font-bold text-[#333] w-4 shrink-0 text-center">{i + 1}</span>
+                      <Avatar name={u.name} size={26} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-semibold text-[#ededed] truncate">{u.name ?? "Unknown"}</div>
+                        <div className="text-[11px] text-[#555] truncate">{u.email}</div>
+                      </div>
+                      <span className="text-[12px] font-bold text-[#3ecf8e] shrink-0">{u.totalUsage}</span>
+                    </div>
+                  ))}
+                  {mostActiveUsers.length === 0 && (
+                    <div className="text-center py-4 text-[13px] text-[#555]">No usage data</div>
+                  )}
+                </div>
+              </Card>
+            </div>
+          </section>
+
+          {/* User Activity Monitor */}
+          <section className="mb-5">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <SL>User Activity Monitor · {userActivity.length} active users</SL>
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#555] pointer-events-none" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input value={activitySearch} onChange={e => setActivitySearch(e.target.value)}
+                  placeholder="Filter users..."
+                  className="pl-7 pr-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg text-[12px] text-[#ededed] placeholder:text-[#444] outline-none focus:border-[#555] transition-colors font-[inherit] w-44" />
+              </div>
+            </div>
+            <div className="bg-black border border-[#1a1a1a] rounded-xl overflow-hidden">
+              {userActivity.length === 0 ? (
+                <div className="text-center py-8 text-[13px] text-[#555]">No feature usage recorded yet</div>
+              ) : (
+                <>
+                  {userActivity.slice(0, 20).map((u, i) => (
+                    <button key={u.id}
+                      onClick={() => { setUserFilter(u.id); setPage(0); }}
+                      className={`w-full text-left flex items-center gap-3 px-4 py-3 border-b border-[#111] last:border-0 cursor-pointer transition-colors font-[inherit] border-none ${
+                        userFilter === u.id ? "bg-[#111]" : "bg-black hover:bg-[#0a0a0a]"
+                      }`}
+                      style={{ borderLeft: userFilter === u.id ? "2px solid #0070f3" : "2px solid transparent" }}>
+                      <span className="text-[11px] font-bold text-[#333] w-4 shrink-0 text-center">{i + 1}</span>
+                      <Avatar name={u.name} size={30} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[13px] font-semibold text-[#ededed] truncate">{u.name ?? "Unknown"}</span>
+                          <span className="text-[11px] text-[#555] truncate hidden sm:block">{u.email}</span>
+                        </div>
+                        <div className="flex gap-1 flex-wrap">
+                          {u.feats.slice(0, 7).map(f => (
+                            <span key={f.key as string}
+                              className="text-[11px] px-1.5 py-0.5 rounded border font-bold whitespace-nowrap"
+                              style={{ color: f.color, background: f.color + "12", borderColor: f.color + "44" }}>
+                              {f.label} {f.count}
+                            </span>
+                          ))}
+                          {u.feats.length > 7 && (
+                            <span className="text-[11px] text-[#555] px-1">+{u.feats.length - 7} more</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        <div className="text-[13px] font-bold text-[#ededed]">{u.total}</div>
+                        <div className="text-[11px] text-[#555]">{u.lastActive ? fmtRelative(u.lastActive, now) : "—"}</div>
+                      </div>
+                    </button>
+                  ))}
+                  {userFilter !== "all" && (
+                    <div className="px-4 py-2 flex items-center gap-2 bg-[#0a0a0a] border-t border-[#111]">
+                      <span className="text-[12px] text-[#0070f3]">Showing log for 1 user</span>
+                      <button onClick={() => setUserFilter("all")} className="text-[12px] text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer transition-colors">
+                        Clear filter
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </section>
 
@@ -646,27 +862,17 @@ export default function LogsTab({ users, token = "" }: Props) {
               {/* Activity line chart */}
               <div className="md:col-span-2">
                 <Card>
-                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <CardTitle>Login Activity</CardTitle>
-                    <div className="flex gap-1">
-                      {RANGES.map(r => (
-                        <button key={r.id} onClick={() => setTimeRange(r.id)}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer border-none transition-colors ${timeRange === r.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <CardTitle>Login Activity · {timeRange === "all" ? "All time" : `Last ${timeRange}`}</CardTitle>
                   <LineChart
                     data={[activityChart.logins, activityChart.signups]}
                     labels={activityChart.labels}
-                    color="#6366F1"
+                    color="#0070f3"
                     h={isMobile ? 80 : 110}
                     area
                   />
                   <div className="flex items-center gap-4 mt-2">
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500"/><span className="text-[11px] text-gray-400">Logins</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-green-500"/><span className="text-[11px] text-gray-400">Signups</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#0070f3]"/><span className="text-[12px] text-[#888]">Logins</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#3ecf8e]"/><span className="text-[12px] text-[#888]">Signups</span></div>
                   </div>
                 </Card>
               </div>
@@ -684,16 +890,16 @@ export default function LogsTab({ users, token = "" }: Props) {
                           return (
                             <div key={d.label} className="flex items-center gap-2">
                               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-                              <span className="text-[11px] text-gray-500 flex-1 capitalize">{d.label}</span>
-                              <span className="text-[11px] font-bold text-gray-800">{d.value}</span>
-                              <span className="text-[10px] text-gray-400 w-7 text-right">{pct}%</span>
+                              <span className="text-[12px] text-[#888] flex-1 capitalize">{d.label}</span>
+                              <span className="text-[12px] font-bold text-[#ededed]">{d.value}</span>
+                              <span className="text-[11px] text-[#555] w-7 text-right">{pct}%</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-6 text-[12px] text-gray-400">No device data</div>
+                    <div className="text-center py-6 text-[13px] text-[#555]">No device data</div>
                   )}
                 </Card>
               </div>
@@ -706,9 +912,9 @@ export default function LogsTab({ users, token = "" }: Props) {
               <Card>
                 <CardTitle>Top Browsers</CardTitle>
                 {browserChart.labels.length > 0 ? (
-                  <BarChart data={browserChart.labels.map((l, i) => ({ l, v: browserChart.values[i] }))} color="#0EA5E9" h={isMobile ? 60 : 90} />
+                  <BarChart data={browserChart.labels.map((l, i) => ({ l, v: browserChart.values[i] }))} color="#0070f3" h={isMobile ? 60 : 90} />
                 ) : (
-                  <div className="text-center py-6 text-[12px] text-gray-400">No browser data</div>
+                  <div className="text-center py-6 text-[13px] text-[#555]">No browser data</div>
                 )}
               </Card>
               <Card>
@@ -721,31 +927,43 @@ export default function LogsTab({ users, token = "" }: Props) {
                       return (
                         <div key={country} className="flex items-center gap-2.5">
                           <span className="text-[14px] leading-none">{countryFlag(code)}</span>
-                          <span className="text-[11px] text-gray-700 font-medium shrink-0 w-24 truncate">{country}</span>
-                          <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "#8B5CF6" }} />
+                          <span className="text-[12px] text-[#ededed] font-medium shrink-0 w-24 truncate">{country}</span>
+                          <div className="flex-1 bg-[#1a1a1a] rounded-full h-1.5 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "#888" }} />
                           </div>
-                          <span className="text-[11px] font-bold text-gray-800 shrink-0 w-5 text-right">{count}</span>
+                          <span className="text-[12px] font-bold text-[#ededed] shrink-0 w-5 text-right">{count}</span>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="text-center py-6 text-[12px] text-gray-400">No location data</div>
+                  <div className="text-center py-6 text-[13px] text-[#555]">No location data</div>
                 )}
               </Card>
             </div>
           </section>
 
-          {/* Log table section header */}
+          {/* Log table header */}
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <SL>Event Log · {filtered.length} events across {logUsers.length} users</SL>
             <div className="flex items-center gap-2">
-              <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 cursor-pointer bg-white">
+              <span className="text-[12px] font-bold text-[#555] uppercase tracking-widest">Event Log</span>
+              <span className="text-[12px] text-[#555]">
+                {filtered.length} event{filtered.length !== 1 ? "s" : ""}{hasActiveFilters ? " (filtered)" : ""} · {logUsers.length} users
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <button onClick={clearAllFilters}
+                  className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-[#f44] border border-[rgba(255,68,68,0.2)] rounded-lg hover:bg-[rgba(255,68,68,0.06)] cursor-pointer bg-transparent transition-colors">
+                  <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Clear filters
+                </button>
+              )}
+              <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#0070f3] border border-[rgba(0,112,243,0.2)] rounded-lg hover:bg-[rgba(0,112,243,0.06)] cursor-pointer bg-transparent transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export CSV
               </button>
-              <button onClick={loadLogs} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer bg-white">
+              <button onClick={loadLogs} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#888] border border-[#2a2a2a] rounded-lg hover:text-[#ededed] hover:border-[#555] cursor-pointer bg-transparent transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                 Refresh
               </button>
@@ -753,57 +971,103 @@ export default function LogsTab({ users, token = "" }: Props) {
           </div>
 
           {/* Filter bar */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            {/* Search */}
-            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]">
-              <svg width="12" height="12" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
-                placeholder="Search name, email, IP, action…"
-                className="text-[12px] bg-transparent border-none outline-none text-gray-700 placeholder-gray-400 flex-1 min-w-0" />
-              {search && <button onClick={() => setSearch("")} className="text-gray-300 hover:text-gray-500 border-none bg-transparent cursor-pointer text-[12px]">✕</button>}
+          <div className="flex flex-col gap-2 mb-3">
+            {/* Row 1: Search + Time range */}
+            <div className="flex gap-2 items-center flex-wrap">
+              <div className="flex items-center gap-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-1.5 flex-1 min-w-52">
+                <svg width="12" height="12" fill="none" stroke="#555" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
+                  placeholder="Search name, email, IP, city, action…"
+                  className="text-[13px] bg-transparent border-none outline-none text-[#ededed] placeholder:text-[#444] flex-1 min-w-0 font-[inherit]" />
+                {search && (
+                  <button onClick={() => { setSearch(""); setPage(0); }}
+                    className="text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer text-[13px] transition-colors shrink-0">✕</button>
+                )}
+              </div>
+              <div className="flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0">
+                {RANGES.map(r => (
+                  <button key={r.id} onClick={() => { setTimeRange(r.id); setPage(0); }}
+                    className={`px-2.5 py-1 rounded text-[12px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap ${timeRange === r.id ? "bg-[#0070f3] text-white" : "bg-transparent text-[#555] hover:text-[#888]"}`}>
+                    {r.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* User filter */}
-            <select value={userFilter} onChange={e => { setUserFilter(e.target.value); setPage(0); }}
-              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-600 bg-white outline-none cursor-pointer font-[inherit] max-w-[180px]">
-              <option value="all">All Users ({logUsers.length})</option>
-              {logUsers.map(u => (
-                <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id.slice(0,12)}</option>
-              ))}
-            </select>
+            {/* Row 2: Type | Feature | Plan | User | Device */}
+            <div className="flex gap-2 items-center flex-wrap">
+              {/* Event type pills */}
+              <div className="flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0 h-9 items-center">
+                {TYPES.map(t => (
+                  <button key={t.id} onClick={() => { setTypeF(t.id); setPage(0); }}
+                    className={`px-2.5 h-7 rounded text-[13px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap ${typeF === t.id ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#555] hover:text-[#888]"}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
 
-            {/* Type filter */}
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
-              {TYPES.map(t => (
-                <button key={t.id} onClick={() => { setTypeF(t.id); setPage(0); }}
-                  className={`px-2.5 py-1 rounded text-[11px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap ${typeF === t.id ? "bg-white text-gray-900 shadow-sm" : "bg-transparent text-gray-500 hover:text-gray-700"}`}>
-                  {t.label}
-                </button>
-              ))}
+              {/* Feature */}
+              <Select value={featureF} onChange={e => { setFeatureF(e.target.value); setPage(0); }} className="text-[13px] h-9" wrapperClassName="min-w-[130px]">
+                {FEATURES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </Select>
+
+              {/* Plan */}
+              <Select value={planF} onChange={e => { setPlanF(e.target.value); setPage(0); }} className="text-[13px] h-9" wrapperClassName="min-w-[100px]">
+                <option value="all">All Plans</option>
+                <option value="free">Free</option>
+                <option value="pro">Pro</option>
+                <option value="premium">Premium</option>
+                <option value="enterprise">Enterprise</option>
+              </Select>
+
+              {/* User */}
+              <Select value={userFilter} onChange={e => { setUserFilter(e.target.value); setPage(0); }} className="text-[13px] h-9" wrapperClassName="max-w-44">
+                <option value="all">All Users ({logUsers.length})</option>
+                {logUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id.slice(0,12)}</option>
+                ))}
+              </Select>
+
+              {/* Device */}
+              <Select value={deviceF} onChange={e => { setDeviceF(e.target.value as FilterDevice); setPage(0); }} className="text-[13px] h-9" wrapperClassName="min-w-[110px]">
+                <option value="all">All Devices</option>
+                <option value="desktop">Desktop</option>
+                <option value="mobile">Mobile</option>
+                <option value="tablet">Tablet</option>
+              </Select>
             </div>
 
-            {/* Device filter */}
-            <select value={deviceF} onChange={e => { setDeviceF(e.target.value as FilterDevice); setPage(0); }}
-              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-600 bg-white outline-none cursor-pointer font-[inherit]">
-              <option value="all">All Devices</option>
-              <option value="desktop">Desktop</option>
-              <option value="mobile">Mobile</option>
-              <option value="tablet">Tablet</option>
-            </select>
+            {/* Row 3: Active filter chips — only when something is active */}
+            {hasActiveFilters && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-[#555] uppercase tracking-wider shrink-0 mr-0.5">Active:</span>
+                {typeF      !== "all" && <FilterChip label={typeF}                                                  color="#0070f3" onClear={() => { setTypeF("all");      setPage(0); }} />}
+                {featureF   !== "all" && <FilterChip label={FEATURE_ACTIONS[featureF]?.label ?? featureF}           color="#3ecf8e" onClear={() => { setFeatureF("all");   setPage(0); }} />}
+                {planF      !== "all" && <FilterChip label={`${planF} plan`}                                        color="#f5a623" onClear={() => { setPlanF("all");      setPage(0); }} />}
+                {userFilter !== "all" && <FilterChip label={logUsers.find(u => u.id === userFilter)?.name ?? "1 user"} color="#a855f7" onClear={() => { setUserFilter("all"); setPage(0); }} />}
+                {deviceF    !== "all" && <FilterChip label={deviceF}                                                color="#888"    onClear={() => { setDeviceF("all");   setPage(0); }} />}
+                {search.trim()        && <FilterChip label={`"${search}"`}                                          color="#888"    onClear={() => { setSearch("");        setPage(0); }} />}
+              </div>
+            )}
           </div>
 
           {/* Log list */}
           {error ? (
-            <div className="text-center py-8 text-[13px] text-red-500">{error}</div>
+            <div className="text-center py-8 text-[14px] text-[#f44]">{error}</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-[#555]">
               <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mx-auto mb-2 opacity-40">
                 <path d="M9 12h6M9 16h6M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l5 5v11a2 2 0 0 1-2 2z"/>
               </svg>
-              <p className="text-[12px]">{search || typeF !== "all" ? "No events match your filters" : "No events in this time range"}</p>
+              <p className="text-[13px]">{hasActiveFilters ? "No events match the current filters" : "No events in this time range"}</p>
+              {hasActiveFilters && (
+                <button onClick={clearAllFilters} className="mt-2 text-[12px] text-[#0070f3] font-semibold border-none bg-transparent cursor-pointer hover:text-[#4da3ff] transition-colors">
+                  Clear all filters
+                </button>
+              )}
             </div>
           ) : (
-            <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+            <div className="bg-black border border-[#1a1a1a] rounded-xl overflow-hidden">
               {filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(log => (
                 <LogRow
                   key={log.id}
@@ -811,6 +1075,7 @@ export default function LogsTab({ users, token = "" }: Props) {
                   isMobile={isMobile}
                   selected={selected?.id === log.id}
                   now={now}
+                  activityMap={userActivityMap}
                   onClick={() => {
                     setSelected(log);
                     setShowDetail(true);
@@ -819,24 +1084,24 @@ export default function LogsTab({ users, token = "" }: Props) {
               ))}
               {/* Pagination footer */}
               {filtered.length > PAGE_SIZE && (
-                <div className="px-4 py-3 flex items-center justify-between border-t border-gray-50">
-                  <span className="text-[11px] text-gray-400">
+                <div className="px-4 py-3 flex items-center justify-between border-t border-[#111]">
+                  <span className="text-[12px] text-[#555]">
                     Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} events
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setPage(p => Math.max(0, p - 1))}
                       disabled={page === 0}
-                      className="px-2.5 py-1 text-[11px] font-semibold border border-gray-200 rounded-lg bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-30 cursor-pointer disabled:cursor-default">
+                      className="px-2.5 py-1 text-[12px] font-semibold border border-[#2a2a2a] rounded-lg bg-transparent text-[#888] hover:text-[#ededed] hover:border-[#555] disabled:opacity-30 cursor-pointer disabled:cursor-default transition-colors">
                       ← Prev
                     </button>
-                    <span className="text-[11px] text-gray-400 px-2">
+                    <span className="text-[12px] text-[#555] px-2">
                       {page + 1} / {Math.ceil(filtered.length / PAGE_SIZE)}
                     </span>
                     <button
                       onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / PAGE_SIZE) - 1, p + 1))}
                       disabled={(page + 1) * PAGE_SIZE >= filtered.length}
-                      className="px-2.5 py-1 text-[11px] font-semibold border border-gray-200 rounded-lg bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-30 cursor-pointer disabled:cursor-default">
+                      className="px-2.5 py-1 text-[12px] font-semibold border border-[#2a2a2a] rounded-lg bg-transparent text-[#888] hover:text-[#ededed] hover:border-[#555] disabled:opacity-30 cursor-pointer disabled:cursor-default transition-colors">
                       Next →
                     </button>
                   </div>
@@ -852,12 +1117,12 @@ export default function LogsTab({ users, token = "" }: Props) {
         <DetailPanel log={selected} onClose={() => { setShowDetail(false); setSelected(null); }} />
       )}
 
-      {/* Detail panel (mobile — bottom sheet) */}
+      {/* Detail panel (mobile - bottom sheet) */}
       {showDetail && selected && isMobile && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setShowDetail(false)}>
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-t-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="w-8 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-2" />
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-[#0a0a0a] border-t border-[#1a1a1a] rounded-t-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="w-8 h-1 bg-[#2a2a2a] rounded-full mx-auto mt-3 mb-2" />
             <DetailPanel log={selected} onClose={() => { setShowDetail(false); setSelected(null); }} />
           </div>
         </div>

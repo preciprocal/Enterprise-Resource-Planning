@@ -1,8 +1,10 @@
 // lib/logUserEvent.ts
 // ─────────────────────────────────────────────────────────────────────────────
 // Call this from your main app whenever a user logs in, signs up, or performs
-// an action. It writes to the admin `logs` Firestore collection so the admin
+// an action. It writes to the Supabase `erp_logs` table so the admin
 // dashboard shows ALL users' activity — not just the admin's.
+// NOTE: the Dashboard's own sign-ins already appear in the Logs tab via its
+// user_sessions table, so this is only needed for extra custom events.
 //
 // SETUP:
 //   1. Drop this file into your main app at lib/logUserEvent.ts
@@ -40,7 +42,8 @@ export async function logUserEvent(
       method: "POST",
       headers: {
         "Content-Type":     "application/json",
-        "x-firebase-token": idToken,
+        // Supabase access token of an ADMIN user — write_log is admin-only
+        "x-admin-token": idToken,
       },
       body: JSON.stringify({
         action: "write_log",

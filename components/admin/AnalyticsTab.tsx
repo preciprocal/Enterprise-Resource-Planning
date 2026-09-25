@@ -31,6 +31,7 @@ interface Props {
   users: User[];
   loading: boolean;
   token?: string;
+  theme?: "dark" | "light";
 }
 
 // ─── Tab definitions ─────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ const TABS: { id: TabId; label: string; emoji: string; hint: string }[] = [
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function AnalyticsTab({ users, loading, token = "" }: Props) {
+export default function AnalyticsTab({ users, loading, token = "", theme = "dark" }: Props) {
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<TabId>("overview");
   const [data, setData] = useState<AppPayload | null>(null);
@@ -61,7 +62,7 @@ export default function AnalyticsTab({ users, loading, token = "" }: Props) {
       setError(null);
       try {
         const res = await fetch("/api/admin?action=analytics", {
-          headers: token ? { "x-firebase-token": token } : undefined,
+          headers: token ? { "x-admin-token": token } : undefined,
         });
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const json = await res.json();
@@ -94,10 +95,10 @@ export default function AnalyticsTab({ users, loading, token = "" }: Props) {
   // ── Error ──────────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="flex-1 overflow-auto p-4 md:p-7 flex flex-col min-w-0">
-        <div className="p-5 bg-rose-50 border border-rose-200 rounded-lg">
-          <div className="text-sm font-bold text-rose-900 mb-1">Couldn&apos;t load analytics</div>
-          <div className="text-xs text-rose-700">{error}</div>
+      <div className={`${theme !== "light" ? "analytics-dark" : ""} flex-1 overflow-auto p-4 md:p-7 flex flex-col min-w-0`}>
+        <div className="px-4 py-3 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg">
+          <div className="text-[14px] font-semibold text-[#f44] mb-1">Could not load analytics</div>
+          <div className="text-[13px] text-[#f44]/70">{error}</div>
         </div>
       </div>
     );
@@ -120,21 +121,19 @@ export default function AnalyticsTab({ users, loading, token = "" }: Props) {
   };
 
   return (
-    <div className="flex-1 overflow-auto p-4 md:p-7 flex flex-col gap-5 min-w-0">
+    <div className={`${theme !== "light" ? "analytics-dark" : ""} flex-1 overflow-auto p-4 md:p-6 flex flex-col gap-5 min-w-0 bg-black`}>
 
-      {/* ═══ Sub-tab nav ═══ */}
+      {/* Sub-tab nav */}
       <div>
         <SL>Analytics</SL>
 
-        {/* Desktop: pills with hints — full width, evenly distributed.
-            Uses inline styles to bypass any Tailwind content-scanning issues
-            and guarantee the layout regardless of cached CSS. */}
         {!isMobile && (
           <div
-            className="bg-white border border-gray-100 rounded-xl p-1 gap-1"
+            className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-1"
             style={{
               display: "grid",
               gridTemplateColumns: `repeat(${TABS.length}, 1fr)`,
+              gap: "2px",
               width: "100%",
             }}
           >
@@ -142,18 +141,22 @@ export default function AnalyticsTab({ users, loading, token = "" }: Props) {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border-none cursor-pointer flex items-center justify-center gap-1.5 ${tab === t.id ? "bg-indigo-50 text-indigo-700" : "bg-transparent text-gray-500 hover:bg-gray-50"}`}
+                className={`px-1.5 lg:px-3 py-2 rounded-lg text-[13px] font-semibold transition-all border-none cursor-pointer flex items-center justify-center gap-1.5 ${
+                  tab === t.id
+                    ? "bg-[#ededed] text-black"
+                    : "bg-transparent text-[#555] hover:text-[#ededed] hover:bg-[#111]"
+                }`}
                 style={{ width: "100%", minWidth: 0 }}
                 title={t.hint}
               >
-                <span>{t.emoji}</span>
-                <span>{t.label}</span>
+                {/* Emoji only when there's room — 6 equal columns get tight on tablets */}
+                <span className="hidden lg:inline">{t.emoji}</span>
+                <span className="truncate">{t.label}</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* Mobile: scrollable horizontal pills */}
         {isMobile && (
           <div className="overflow-x-auto -mx-1 px-1">
             <div className="flex gap-1.5 pb-1">
@@ -161,7 +164,11 @@ export default function AnalyticsTab({ users, loading, token = "" }: Props) {
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`shrink-0 px-3 py-2 rounded-lg text-xs font-bold transition-all border cursor-pointer flex items-center gap-1.5 ${tab === t.id ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-white text-gray-500 border-gray-100"}`}
+                  className={`shrink-0 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all border cursor-pointer flex items-center gap-1.5 ${
+                    tab === t.id
+                      ? "bg-[#ededed] text-black border-transparent"
+                      : "bg-[#0a0a0a] text-[#555] border-[#1a1a1a] hover:text-[#ededed]"
+                  }`}
                 >
                   <span>{t.emoji}</span>
                   <span>{t.label}</span>
@@ -171,13 +178,11 @@ export default function AnalyticsTab({ users, loading, token = "" }: Props) {
           </div>
         )}
 
-        {/* Active tab hint */}
-        <div className="text-[11px] text-gray-400 mt-2">
+        <div className="text-[12px] text-[#555] mt-2">
           {TABS.find(t => t.id === tab)?.hint}
         </div>
       </div>
 
-      {/* ═══ Rendered sub-tab ═══ */}
       {renderTab()}
 
     </div>
