@@ -83,7 +83,10 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
     let f = [...users];
     const q = search.toLowerCase();
     if (q) f = f.filter(u => [u.name, u.email, u.id, u.subscription?.stripeCustomerId, u.subscription?.stripeSubscriptionId].some(v => typeof v === "string" && v.toLowerCase().includes(q)));
-    if (planF !== "all") f = f.filter(u => (u.subscription?.plan ?? "free") === planF);
+    // "student" = any .edu status; "student:<status>" = that status only
+    if (planF === "student") f = f.filter(u => !!u.student);
+    else if (planF.startsWith("student:")) f = f.filter(u => u.student?.status === planF.slice(8));
+    else if (planF !== "all") f = f.filter(u => (u.subscription?.plan ?? "free") === planF);
     return [...f].sort((a, b) => {
       const av = sortF === "createdAt" ? (a.createdAt ?? "") : sortF === "plan" ? (a.subscription?.plan ?? "") : (a.name ?? "");
       const bv = sortF === "createdAt" ? (b.createdAt ?? "") : sortF === "plan" ? (b.subscription?.plan ?? "") : (b.name ?? "");

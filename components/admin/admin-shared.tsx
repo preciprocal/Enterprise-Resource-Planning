@@ -32,11 +32,37 @@ export interface PackSummary {
   balance: Record<string, number>; totalCredits: number;
   lastPurchasedAt?: string; keys: string[];
 }
+// .edu student perk (student_verifications) — see StudentInfo in lib/erp-data.ts
+export interface StudentInfo {
+  status: "pending" | "verified" | "claimed";
+  eduEmail?: string; domain?: string; method?: string;
+  verifiedAt?: string; claimedAt?: string; startedAt?: string; attempts?: number;
+}
 export interface User {
   id: string; name?: string; email?: string; provider?: string; isAdmin?: boolean;
   createdAt?: string; updatedAt?: string; lastLogin?: string;
   lastContactedAt?: string; lastContactSubject?: string;
-  subscription?: Subscription; usage?: Usage; packs?: PackSummary; [key: string]: unknown;
+  subscription?: Subscription; usage?: Usage; packs?: PackSummary; student?: StudentInfo; [key: string]: unknown;
+}
+
+const STUDENT_META: Record<StudentInfo["status"], { label: string; tw: string; title: string }> = {
+  claimed:  { label: "Student · claimed", tw: "bg-[rgba(168,85,247,0.08)] text-[#a855f7] border-[rgba(168,85,247,0.25)]", title: "Verified .edu email and claimed the free student month" },
+  verified: { label: "Student",           tw: "bg-[rgba(168,85,247,0.05)] text-[#c084fc] border-[rgba(168,85,247,0.18)]", title: "Verified .edu email — hasn't claimed the free month" },
+  pending:  { label: "Student · pending", tw: "bg-[rgba(136,136,136,0.06)] text-[#777] border-[rgba(136,136,136,0.18)]", title: "Started .edu verification but never entered the code" },
+};
+
+/** Badge for a user's .edu student status; renders nothing for non-students. */
+export function StudentChip({ student, compact = false, className = "" }: { student?: StudentInfo; compact?: boolean; className?: string }) {
+  if (!student) return null;
+  const m = STUDENT_META[student.status];
+  return (
+    <span title={m.title} className={`inline-flex items-center gap-1 font-medium rounded-md whitespace-nowrap border ${compact ? "text-[11px] px-1.5 py-0" : "text-[12px] px-2 py-0.5"} ${m.tw} ${className}`}>
+      <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.1 2.7 3 6 3s6-1.9 6-3v-5"/>
+      </svg>
+      {m.label}
+    </span>
+  );
 }
 export interface PlanColor   { bg: string; text: string; border: string; dot: string; accent: string; tw: string }
 export interface StatusColor { bg: string; text: string; dot: string }

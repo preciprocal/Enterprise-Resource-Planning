@@ -35,6 +35,12 @@ function fmtNum(n = 0) {
 
 export default function OverviewTab({ analytics, users, loading, token = "" }: Props) {
   const isMobile = useIsMobile();
+  // .edu student perk: claimed the free month / verified email (any) / started but unverified
+  const studentStats = useMemo(() => ({
+    claimed:  users.filter(u => u.student?.status === "claimed").length,
+    verified: users.filter(u => u.student && u.student.status !== "pending").length,
+    pending:  users.filter(u => u.student?.status === "pending").length,
+  }), [users]);
   const [cf, setCf]           = useState<CFSummary | null>(null);
   const [cfLoading, setCfLoad] = useState(false);
   const [cfErr, setCfErr]     = useState("");
@@ -112,12 +118,14 @@ export default function OverviewTab({ analytics, users, loading, token = "" }: P
       {/* User Health */}
       <section>
         <SL>User Health</SL>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
           <MetricCard label="Total Users"    value={analytics.total}                color="#ededed" />
           <MetricCard label="New This Month" value={analytics.newThisMonth}          color={analytics.growthDelta >= 0 ? "#3ecf8e" : "#f44"} sub={`${analytics.growthDelta >= 0 ? "+" : ""}${analytics.growthDelta}% vs last mo`} />
           <MetricCard label="Pro"            value={analytics.planCounts.pro}        color="#0070f3" />
           <MetricCard label="Premium"        value={analytics.planCounts.premium}    color="#f5a623" />
           <MetricCard label="Canceled"       value={analytics.canceledCount}         color="#f44" />
+          <MetricCard label="Students"       value={studentStats.claimed}            color="#a855f7"
+            sub={`claimed · ${studentStats.verified} verified${studentStats.pending ? ` · ${studentStats.pending} pending` : ""}`} />
         </div>
       </section>
 

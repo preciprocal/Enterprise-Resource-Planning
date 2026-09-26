@@ -5,11 +5,18 @@ import { useState, useEffect, ReactNode } from "react";
 import {
   User, AnalyticsData, PLANS, USAGE_FIELDS, LIMITS,
   planColor, statusColor, fmtFull, daysAgo,
-  Avatar, Chip, CodeRef, Spinner, HBar, StatusDot,
+  Avatar, Chip, CodeRef, Spinner, HBar, StatusDot, StudentChip,
   inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable,
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel, ContactPanel } from "./StripeTab";
 import { FEATURE_LABELS } from "@/lib/packs";
+
+// student_verifications.verification_method values written by the Dashboard
+const STUDENT_METHOD_LABELS: Record<string, string> = {
+  email_otp:      "Email code",
+  legacy_import:  "Imported (Firebase)",
+  legacy_coupon:  "Student coupon (legacy)",
+};
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -111,6 +118,12 @@ export default function UsersTab({
           {PLANS.map(p => (
             <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
           ))}
+          <optgroup label="Students (.edu)">
+            <option value="student">All students</option>
+            <option value="student:claimed">Claimed free month</option>
+            <option value="student:verified">Verified, not claimed</option>
+            <option value="student:pending">Pending verification</option>
+          </optgroup>
         </Select>
 
         {/* Row count */}
@@ -159,6 +172,7 @@ export default function UsersTab({
                         {u.subscription?.stripeCustomerId && (
                           <Chip label="Stripe" className="bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border border-[rgba(62,207,142,0.15)] text-[12px] font-medium" />
                         )}
+                        <StudentChip student={u.student} />
                       </div>
                     </div>
                     <svg className="text-[#222] shrink-0 mt-1" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -223,7 +237,10 @@ export default function UsersTab({
                         />
                         <Avatar name={u.name} size={36} />
                         <div className="min-w-0">
-                          <div className="text-[14px] font-semibold text-[#e0e0e0] truncate leading-tight">{u.name ?? "Unknown"}</div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[14px] font-semibold text-[#e0e0e0] truncate leading-tight">{u.name ?? "Unknown"}</span>
+                            <StudentChip student={u.student} compact className="shrink-0" />
+                          </div>
                           <div className="text-[13px] text-[#555] truncate mt-0.5">{u.email}</div>
                         </div>
                       </div>
@@ -443,6 +460,7 @@ function UserDetail({
           {user.isAdmin && (
             <Chip label="Admin" className="bg-[rgba(245,166,35,0.08)] text-[#f5a623] border border-[rgba(245,166,35,0.2)] text-[12px] font-medium" />
           )}
+          <StudentChip student={user.student} />
         </div>
       </div>
 
@@ -760,6 +778,37 @@ function UserDetail({
                 {Object.entries(user.packs?.balance ?? {}).filter(([, v]) => v > 0).map(([k, v]) => (
                   <FRow key={k} label={FEATURE_LABELS[k] ?? k} value={`${v} credit${v === 1 ? "" : "s"} left`} />
                 ))}
+              </Card>
+
+              {/* .edu student perk (student_verifications) */}
+              <Card>
+                <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+                  <CardTitle>Student (.edu)</CardTitle>
+                  <StudentChip student={user.student} />
+                </div>
+                {user.student ? (
+                  <>
+                    <FRow label="Status" value={
+                      user.student.status === "claimed"  ? "Verified and claimed the free student month" :
+                      user.student.status === "verified" ? "Verified — free month not claimed" :
+                                                           "Started verification, never entered the code"} />
+                    <FRow label="Edu email"   value={user.student.eduEmail} copyable />
+                    <FRow label="School"      value={user.student.domain} />
+                    <FRow label="Method"      value={STUDENT_METHOD_LABELS[user.student.method ?? ""] ?? user.student.method} />
+                    {/* For imported accounts this is the migration date, not when they verified */}
+                    <FRow label={user.student.method === "email_otp" ? "Started" : "Record created"} value={fmtFull(user.student.startedAt)} />
+                    <FRow label="Verified"    value={fmtFull(user.student.verifiedAt)} />
+                    <FRow label="Claimed"     value={fmtFull(user.student.claimedAt)} />
+                    {user.student.status === "claimed" && (
+                      <FRow label="Trial ends" value={fmtFull(user.subscription?.trialEndsAt)} />
+                    )}
+                    {user.student.status === "pending" && (user.student.attempts ?? 0) > 0 && (
+                      <FRow label="Code attempts" value={user.student.attempts} />
+                    )}
+                  </>
+                ) : (
+                  <div className="text-[13px] text-[#555]">Hasn&apos;t verified a student email.</div>
+                )}
               </Card>
             </>
           )}

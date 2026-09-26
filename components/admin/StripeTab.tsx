@@ -97,11 +97,15 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
   coupons: StripeCoupon[]; loadingCoupons: boolean;
 }) {
   const sub = user.subscription ?? {};
+  // Start on the user's CURRENT plan. (This used to require billing === "Monthly",
+  // which Free never matches, so free users defaulted to Pro — one click on Apply
+  // away from creating a real Pro subscription.)
   const [priceId,setPriceId]         = useState(() => {
-    return Object.entries(PRICE_IDS_MAP).find(([,v])=>v.plan===(sub.plan??"free")&&v.billing==="Monthly")?.[0]
-      ?? Object.entries(PRICE_IDS_MAP).find(([,v])=>v.plan==="pro"&&v.billing==="Monthly")?.[0]
-      ?? "";
+    const plan = sub.plan ?? "free";
+    const matches = Object.entries(PRICE_IDS_MAP).filter(([,v]) => v.plan === plan);
+    return (matches.find(([,v]) => v.billing === "Monthly") ?? matches[0])?.[0] ?? "";
   });
+  const unchanged = PRICE_IDS_MAP[priceId]?.plan === (sub.plan ?? "free");
   const [periodStart,setPeriodStart] = useState(toDateInput(sub.currentPeriodStart));
   const [periodEnd,  setPeriodEnd]   = useState(toDateInput(sub.currentPeriodEnd));
   const [trialEnd,   setTrialEnd]    = useState(toDateInput(sub.trialEndsAt));
@@ -111,6 +115,11 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
   const [err,        setErr]         = useState("");
   const selectedPrice  = PRICE_IDS_MAP[priceId];
   const selectedCoupon = coupons.find(c => c.id === couponId);
+  // Nothing to send to Stripe — keep Apply disabled so a stray click is harmless.
+  const noChanges = unchanged && !couponId && !cancelEoP
+    && periodStart === toDateInput(sub.currentPeriodStart)
+    && periodEnd   === toDateInput(sub.currentPeriodEnd)
+    && trialEnd    === toDateInput(sub.trialEndsAt);
 
   async function apply() {
     setWorking(true); setErr("");
@@ -144,7 +153,11 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
         <label className="block text-[12px] font-semibold text-[#555] uppercase tracking-wide mb-1.5">Plan & Price</label>
         <Select value={priceId} onChange={e=>setPriceId(e.target.value)}>
           <option value="">Select price</option>
-          {Object.entries(PRICE_IDS_MAP).map(([id,info]) => <option key={id} value={id}>{info.plan} · {info.billing} · {info.price}</option>)}
+          {Object.entries(PRICE_IDS_MAP).map(([id,info]) => (
+            <option key={id} value={id}>
+              {info.plan}{info.billing ? ` · ${info.billing}` : ""} · {info.price}{info.plan === (sub.plan ?? "free") ? " (current)" : ""}
+            </option>
+          ))}
           <option value="__free__">free (cancel)</option>
         </Select>
         {selectedPrice && (
@@ -155,13 +168,17 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
         )}
       </div>
 
-      {!sub.stripeSubscriptionId && (
-        <div className={`px-3.5 py-2.5 rounded-lg text-xs border ${!priceId || priceId === "__free__" ? "bg-[rgba(245,166,35,0.06)] border-[rgba(245,166,35,0.2)] text-[#f5a623]" : "bg-[rgba(0,112,243,0.06)] border-[rgba(0,112,243,0.15)] text-[#0070f3]"}`}>
-          {!priceId || priceId === "__free__"
+      {!sub.stripeSubscriptionId && (() => {
+        // Free (or nothing) selected → nothing will be created in Stripe
+        const noPaid = !priceId || priceId === "__free__" || selectedPrice?.plan === "free";
+        return (
+        <div className={`px-3.5 py-2.5 rounded-lg text-xs border ${noPaid ? "bg-[rgba(245,166,35,0.06)] border-[rgba(245,166,35,0.2)] text-[#f5a623]" : "bg-[rgba(0,112,243,0.06)] border-[rgba(0,112,243,0.15)] text-[#0070f3]"}`}>
+          {noPaid
             ? "No Stripe subscription. Select a paid plan to create one in Stripe."
             : "No existing subscription. A new Stripe customer & subscription will be created automatically."}
         </div>
-      )}
+        );
+      })()}
 
       {/* Coupon (optional) */}
       <div>
@@ -199,8 +216,8 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
       </label>
 
       {err && <div className="px-3 py-2 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg text-xs text-[#f44]">{err}</div>}
-      <button onClick={apply} disabled={working}
-        className={`self-start px-5 py-2 rounded-lg text-sm font-bold border-none cursor-pointer transition-colors ${working ? "bg-[#1a1a1a] text-[#555] cursor-wait" : "bg-[#0070f3] text-white hover:bg-[#0060df]"}`}>
+      <button onClick={apply} disabled={working || noChanges} title={noChanges ? "Pick a different plan, change a date or add a coupon first" : undefined}
+        className={`self-start px-5 py-2 rounded-lg text-sm font-bold border-none cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${working ? "bg-[#1a1a1a] text-[#555] cursor-wait" : "bg-[#0070f3] text-white hover:bg-[#0060df]"}`}>
         {working ? "Applying…" : couponId ? "Apply Plan + Coupon" : "Apply to Stripe + Supabase"}
       </button>
     </div>

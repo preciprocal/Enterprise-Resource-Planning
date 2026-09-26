@@ -80,6 +80,43 @@ interface SubRow {
 }
 interface PackRow { user_id: string; pack_key: string; granted: Record<string, number>; consumed: Record<string, number>; price_cents: number; purchased_at: string; refunded_at: string | null }
 interface MetaRow { user_id: string; last_contacted_at: string | null; last_contact_subject: string | null; last_applied_coupon: string | null; last_coupon_applied_at: string | null }
+interface StudentRow {
+  user_id: string; edu_email: string | null; email_domain: string | null; verification_method: string;
+  verified_at: string | null; edu_perk_redeemed: boolean; redeemed_at: string | null; attempts: number; created_at: string;
+}
+
+/**
+ * .edu student perk, from student_verifications (the Dashboard's ledger):
+ *   pending  — started verifying an .edu email, never entered the code
+ *   verified — .edu email confirmed by one-time code (verified_at)
+ *   claimed  — redeemed the free student month (edu_perk_redeemed)
+ * Falls back to subscriptions.student_verified for accounts with no ledger row.
+ * Device fingerprint and signup IP are deliberately not exposed.
+ */
+export interface StudentInfo {
+  status: "pending" | "verified" | "claimed";
+  eduEmail?: string; domain?: string; method?: string;
+  verifiedAt?: string; claimedAt?: string; startedAt?: string; attempts?: number;
+}
+
+function studentInfo(row: StudentRow | undefined, sub: SubRow | undefined): StudentInfo | undefined {
+  if (row) {
+    return {
+      status:     row.edu_perk_redeemed ? "claimed" : row.verified_at ? "verified" : "pending",
+      eduEmail:   row.edu_email ?? sub?.student_edu_email ?? undefined,
+      domain:     row.email_domain ?? row.edu_email?.split("@")[1] ?? undefined,
+      method:     row.verification_method,
+      verifiedAt: row.verified_at ?? undefined,
+      claimedAt:  row.redeemed_at ?? undefined,
+      startedAt:  row.created_at,
+      attempts:   row.attempts,
+    };
+  }
+  if (sub?.student_verified) {
+    return { status: "verified", eduEmail: sub.student_edu_email ?? undefined, domain: sub.student_edu_email?.split("@")[1], method: "subscription flag" };
+  }
+  return undefined;
+}
 
 export interface PackSummary {
   purchases: number;
@@ -112,7 +149,7 @@ function summarisePacks(rows: PackRow[]): PackSummary {
 
 export async function loadUsers(sb: SupabaseClient) {
   const today = new Date().toISOString().slice(0, 10);
-  const [profiles, subs, counters, packs, metas, sessions] = await Promise.all([
+  const [profiles, subs, counters, packs, metas, sessions, students] = await Promise.all([
     fetchAll<ProfileRow>((a, b) => sb.from("profiles").select("user_id,name,email,provider,is_admin,created_at,updated_at,last_login").range(a, b)),
     fetchAll<SubRow>((a, b) => sb.from("subscriptions").select("*").range(a, b)),
     fetchAll<Row>((a, b) => sb.from("usage_counters").select("*").gte("period_end", today).range(a, b)),
@@ -120,7 +157,11 @@ export async function loadUsers(sb: SupabaseClient) {
     // erp_user_meta only exists once supabase/erp_schema.sql has been run.
     fetchAll<MetaRow>((a, b) => sb.from("erp_user_meta").select("*").range(a, b)).catch(() => [] as MetaRow[]),
     fetchAll<{ user_id: string; last_seen_at: string }>((a, b) => sb.from("user_sessions").select("user_id,last_seen_at").range(a, b)).catch(() => []),
+    fetchAll<StudentRow>((a, b) => sb.from("student_verifications")
+      .select("user_id,edu_email,email_domain,verification_method,verified_at,edu_perk_redeemed,redeemed_at,attempts,created_at").range(a, b))
+      .catch(() => [] as StudentRow[]),
   ]);
+  const studentBy = new Map(students.map(s => [s.user_id, s]));
 
   const subBy  = new Map(subs.map(s => [s.user_id, s]));
   const metaBy = new Map(metas.map(m => [m.user_id, m]));
@@ -169,6 +210,7 @@ export async function loadUsers(sb: SupabaseClient) {
       },
       usage,
       packs: summarisePacks(packsBy.get(p.user_id) ?? []),
+      student: studentInfo(studentBy.get(p.user_id), sub),
     };
   });
 }
