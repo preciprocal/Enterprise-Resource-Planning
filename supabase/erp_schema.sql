@@ -93,7 +93,23 @@ create table if not exists public.erp_allowed_emails (
   created_at timestamptz not null default now()
 );
 
+-- ── Support-ticket automation state (see lib/ticket-automation.ts) ──────────
+-- One row per ticket the ERP has acted on:
+--   task_card_id      — the Tasks-board card created for it (never re-added once set,
+--                       so deleting the card from the board sticks)
+--   reminder_for      — the "customer waiting since" timestamp the last 24h reminder
+--                       covered, so each wait is reminded about at most once
+create table if not exists public.erp_ticket_automation (
+  ticket_id        uuid primary key references public.support_tickets(id) on delete cascade,
+  task_card_id     text,
+  task_added_at    timestamptz,
+  reminder_sent_at timestamptz,
+  reminder_for     timestamptz,
+  updated_at       timestamptz not null default now()
+);
+
 -- RLS on with no policies = service role only.
+alter table public.erp_ticket_automation enable row level security;
 alter table public.erp_allowed_emails  enable row level security;
 alter table public.erp_logs            enable row level security;
 alter table public.erp_user_meta       enable row level security;

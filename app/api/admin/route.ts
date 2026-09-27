@@ -1589,7 +1589,11 @@ export async function POST(req: NextRequest) {
         body: message.trim(), from_email: admin.email || null,
       }).select("id,created_at").single();
       if (error) throw new Error(error.message);
-      return NextResponse.json({ success: true, id: data.id, createdAt: data.created_at });
+      // Replying moves an Open ticket to In Progress. The sync_ticket_on_reply
+      // trigger already does this; this is a no-op backstop for projects where
+      // the trigger is missing (only touches tickets still 'open').
+      await sb().from("support_tickets").update({ status: "in-progress" }).eq("id", ticketId).eq("status", "open");
+      return NextResponse.json({ success: true, id: data.id, createdAt: data.created_at, status: "in-progress" });
     } catch (e) {
       return NextResponse.json({ error: (e as Error).message }, { status: 500 });
     }

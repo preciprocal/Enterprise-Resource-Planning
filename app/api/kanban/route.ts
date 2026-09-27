@@ -4,7 +4,7 @@
 // (erp_kanban_boards / erp_kanban_comments — see supabase/erp_schema.sql).
 // Also returns the list of admin users for the assignee picker.
 //
-// GET  ?action=board          → returns { columns }
+// GET  ?action=board          → returns { columns } (adds cards for new support tickets first)
 // GET  ?action=admins         → returns { admins: AdminUser[] }
 // POST ?action=save-board     → body: { columns } → saves full board state
 // POST ?action=add-comment    → body: { cardId, colId, comment } → appends comment
@@ -17,6 +17,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getAdmin, allowedEmails } from "@/lib/admin-auth";
+import { syncTicketCards } from "@/lib/ticket-automation";
 
 const BOARD_ID = "board";
 const sb = () => getSupabaseAdmin();
@@ -68,7 +69,10 @@ export async function GET(req: NextRequest) {
 
   // ── Return saved board ────────────────────────────────────────────────────
   try {
-    return NextResponse.json({ columns: await loadColumns() }); // null on first load
+    // New support tickets become To Do cards before the board is returned.
+    // Never blocks the board: a sync failure just means no new cards this time.
+    const added = await syncTicketCards(sb(), admin.userId).catch(e => { console.error("[tickets→tasks]", e); return 0; });
+    return NextResponse.json({ columns: await loadColumns(), ticketCardsAdded: added }); // null on first load
   } catch (e) {
     return NextResponse.json({ columns: null, error: (e as Error).message }, { status: 500 });
   }

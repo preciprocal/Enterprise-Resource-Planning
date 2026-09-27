@@ -197,6 +197,18 @@ function TicketsView({ token }: { token?: string }) {
   useEffect(() => { void loadTickets(); }, [loadTickets]);
   useLiveRefetch("support_tickets", undefined, loadTickets);
 
+  // Deep link from a Tasks card or reminder email: /?tab=support&ticket=<id>
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current || !tickets.length) return;
+    deepLinked.current = true;
+    const id = new URLSearchParams(window.location.search).get("ticket");
+    if (!id) return;
+    const t = tickets.find(x => x.id === id);
+    if (t) setSelected(t);
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [tickets]);
+
   const filtered = tickets.filter(t => {
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
     if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
@@ -348,11 +360,18 @@ function TicketDetail({
   const [priority, setPriority]       = useState<TicketPriority>(ticket.priority);
   const threadRef                     = useRef<HTMLDivElement>(null);
 
+  // Adopt changes made elsewhere (e.g. the reply trigger moving Open → In
+  // Progress, or another admin) unless there's an unsaved edit to that field —
+  // otherwise "Save changes" would write the stale value back.
+  const synced = useRef({ status: ticket.status, priority: ticket.priority, notes: ticket.notes ?? "" });
   useEffect(() => {
-    setStatus(ticket.status);
-    setPriority(ticket.priority);
-    setNotes(ticket.notes ?? "");
-  }, [ticket.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    const prev = synced.current;
+    const next = { status: ticket.status, priority: ticket.priority, notes: ticket.notes ?? "" };
+    if (next.status   !== prev.status)   setStatus(s => (s === prev.status ? next.status : s));
+    if (next.priority !== prev.priority) setPriority(p => (p === prev.priority ? next.priority : p));
+    if (next.notes    !== prev.notes)    setNotes(n => (n === prev.notes ? next.notes : n));
+    synced.current = next;
+  }, [ticket.status, ticket.priority, ticket.notes]);
 
   // Live thread — replies written from Dashboard (user) or here (staff) show
   // up on both sides via Supabase realtime.
@@ -391,6 +410,8 @@ function TicketDetail({
       if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
       setReplyText("");
       void loadReplies();
+      // A staff reply moves Open → In Progress (done server-side); reflect it now.
+      if (ticket.status === "open") onUpdate({ status: "in-progress" });
 
       // Best-effort email to the customer — the reply above is already saved.
       fetch("/api/admin", {
