@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   AnalyticsData, User, USAGE_FIELDS,
   MetricCard, HBar, Donut, BarChart, SL, Card, CardTitle, Spinner,
-  SkeletonMetricCard, useIsMobile,
+  SkeletonMetricCard, useIsMobile, Select,
 } from "./admin-shared";
 import PacksPanel from "./PacksPanel";
 
@@ -315,15 +315,9 @@ export default function OverviewTab({ analytics, users, loading, token = "" }: P
 
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
-    <label className="flex items-center gap-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg pl-2.5 pr-1 py-1.5 cursor-pointer hover:border-[#333] transition-colors">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-[#444]">{label}</span>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="text-[12px] font-medium text-[#888] bg-transparent border-none outline-none cursor-pointer pr-1"
-      >
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </label>
+    <Select value={value} onChange={e => onChange(e.target.value)} leading={label}
+      wrapperClassName="w-auto" className="h-8 rounded-lg text-[12px] font-medium text-[#bbb]">
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </Select>
   );
 }

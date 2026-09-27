@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useState, useEffect, ReactNode, createContext, useContext } from "react";
+import { Select as RadixSelect } from "radix-ui";
+import { cn } from "@/lib/utils";
 import { BarChart as MuiBarChart }  from "@mui/x-charts/BarChart";
 import { PieChart  as MuiPieChart } from "@mui/x-charts/PieChart";
 import { LineChart as MuiLineChart } from "@mui/x-charts/LineChart";
@@ -237,25 +239,153 @@ export const selectCls = inputCls + " cursor-pointer";
 
 // ─── Select ───────────────────────────────────────────────────────────────────
 
-type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
-  wrapperClassName?: string;
+// Themed dropdown built on Radix Select. The native <select> popup is drawn by
+// the OS (white list, bright blue highlight) and can't be styled, so this
+// replaces it everywhere while keeping the native-select API: pass <option> /
+// <optgroup> children and read e.target.value in onChange. Uses the same hex
+// colour classes as the rest of the app so the light-theme overrides in
+// globals.css apply to the portalled list too.
+
+type SelectProps = {
+  value?: string;
+  onChange?: (e: { target: { value: string }; currentTarget: { value: string } }) => void;
+  children?: ReactNode;
+  className?: string;          // trigger styling (e.g. text size, height)
+  wrapperClassName?: string;   // trigger width/layout (e.g. "flex-1", "min-w-[120px]")
+  leading?: ReactNode;         // inline label inside the trigger, e.g. "Time"
+  placeholder?: string;
+  disabled?: boolean;
+  id?: string;
+  title?: string;
+  "aria-label"?: string;
 };
 
-export function Select({ wrapperClassName = "w-full", className = "", children, ...props }: SelectProps) {
+interface SelectOpt { value: string; label: ReactNode; text: string; disabled?: boolean }
+interface SelectGroup { label?: string; options: SelectOpt[] }
+
+// Radix reserves "" (it means "no value"), so an empty-valued <option> is mapped through a sentinel.
+const EMPTY = "__adm_empty__";
+const toRadix   = (v: string) => (v === "" ? EMPTY : v);
+const fromRadix = (v: string) => (v === EMPTY ? "" : v);
+
+function nodeText(n: ReactNode): string {
+  if (n == null || typeof n === "boolean") return "";
+  if (typeof n === "string" || typeof n === "number") return String(n);
+  if (Array.isArray(n)) return n.map(nodeText).join("");
+  if (React.isValidElement(n)) return nodeText((n.props as { children?: ReactNode }).children);
+  return "";
+}
+
+function parseOptions(children: ReactNode): SelectGroup[] {
+  const groups: SelectGroup[] = [{ options: [] }];
+  const walk = (nodes: ReactNode, into: SelectGroup) => {
+    React.Children.forEach(nodes, child => {
+      if (!React.isValidElement(child)) return;
+      const props = child.props as { value?: string | number; children?: ReactNode; label?: string; disabled?: boolean };
+      if (child.type === React.Fragment) { walk(props.children, into); return; }
+      if (child.type === "optgroup") {
+        const g: SelectGroup = { label: props.label, options: [] };
+        groups.push(g); walk(props.children, g); return;
+      }
+      if (child.type === "option") {
+        const text = nodeText(props.children);
+        into.options.push({ value: String(props.value ?? text), label: props.children, text, disabled: props.disabled });
+      }
+    });
+  };
+  walk(children, groups[0]);
+  return groups.filter(g => g.options.length > 0);
+}
+
+const Chevron = ({ className = "" }: { className?: string }) => (
+  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <path d="M6 9l6 6 6-6"/>
+  </svg>
+);
+
+export function Select({
+  value, onChange, children, className = "", wrapperClassName = "w-full",
+  leading, placeholder, disabled, id, title, "aria-label": ariaLabel,
+}: SelectProps) {
+  const groups = parseOptions(children);
+  const all    = groups.flatMap(g => g.options);
+  const current = all.find(o => o.value === (value ?? ""));
+
   return (
-    <div className={`relative ${wrapperClassName}`}>
-      <select
-        className={`appearance-none w-full border border-[#2a2a2a] rounded-md px-3 py-2 pr-8 text-[14px] text-[#ededed] bg-[#0a0a0a] outline-none hover:border-[#333] focus:border-[#555] transition-colors cursor-pointer font-[inherit] ${className}`}
-        {...props}
+    <RadixSelect.Root
+      value={current ? toRadix(current.value) : undefined}
+      onValueChange={v => { const val = fromRadix(v); onChange?.({ target: { value: val }, currentTarget: { value: val } }); }}
+      disabled={disabled}
+    >
+      <RadixSelect.Trigger
+        id={id} title={title} aria-label={ariaLabel ?? (typeof leading === "string" ? leading : undefined)}
+        className={cn(
+          "group inline-flex items-center gap-2 min-w-0 h-9 border border-[#2a2a2a] rounded-md pl-3 pr-2.5 text-[14px] text-[#ededed] bg-[#0a0a0a]",
+          "outline-none hover:border-[#333] focus-visible:border-[#555] focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.06)]",
+          "data-[state=open]:border-[#555] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer font-[inherit] text-left",
+          wrapperClassName, className,
+        )}
       >
-        {children}
-      </select>
-      <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#555]">
-        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
-      </div>
-    </div>
+        {leading && <span className="text-[11px] font-medium uppercase tracking-wider text-[#555] shrink-0">{leading}</span>}
+        <span className="flex-1 min-w-0 truncate group-data-placeholder:text-[#555]">
+          <RadixSelect.Value placeholder={placeholder ?? all[0]?.text ?? "Select…"}>
+            {current ? current.text : undefined}
+          </RadixSelect.Value>
+        </span>
+        <RadixSelect.Icon asChild>
+          <Chevron className="shrink-0 text-[#555] transition-transform duration-150 group-data-[state=open]:rotate-180" />
+        </RadixSelect.Icon>
+      </RadixSelect.Trigger>
+
+      <RadixSelect.Portal>
+        <RadixSelect.Content
+          position="popper" side="bottom" align="start" sideOffset={6} collisionPadding={8}
+          className={cn(
+            "z-[10000] min-w-(--radix-select-trigger-width) max-w-[min(360px,calc(100vw-16px))]",
+            "max-h-[min(320px,var(--radix-select-content-available-height))] overflow-hidden",
+            "rounded-lg border border-[#2a2a2a] bg-[#0a0a0a] shadow-[0_16px_40px_-8px_rgba(0,0,0,0.6)]",
+            "adm-select-content",
+          )}
+        >
+          <RadixSelect.ScrollUpButton className="flex items-center justify-center h-6 text-[#555] bg-[#0a0a0a] cursor-default">
+            <Chevron className="rotate-180" />
+          </RadixSelect.ScrollUpButton>
+          <RadixSelect.Viewport className="p-1">
+            {groups.map((g, gi) => (
+              <RadixSelect.Group key={gi}>
+                {gi > 0 && <RadixSelect.Separator className="h-px bg-[#1a1a1a] my-1 mx-1" />}
+                {g.label && (
+                  <RadixSelect.Label className="px-2.5 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#555]">
+                    {g.label}
+                  </RadixSelect.Label>
+                )}
+                {g.options.map(o => (
+                  <RadixSelect.Item
+                    key={o.value} value={toRadix(o.value)} disabled={o.disabled} textValue={o.text}
+                    className={cn(
+                      "relative flex items-center gap-2 rounded-md pl-2.5 pr-8 py-1.5 text-[13px] text-[#ccc] select-none outline-none cursor-pointer",
+                      "data-highlighted:bg-[#1a1a1a] data-highlighted:text-[#ededed]",
+                      "data-[state=checked]:text-[#ededed] data-[state=checked]:font-medium",
+                      "data-disabled:opacity-40 data-disabled:cursor-not-allowed",
+                    )}
+                  >
+                    <RadixSelect.ItemText>{o.label}</RadixSelect.ItemText>
+                    <RadixSelect.ItemIndicator className="absolute right-2.5 inline-flex items-center text-[#ededed]">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </RadixSelect.ItemIndicator>
+                  </RadixSelect.Item>
+                ))}
+              </RadixSelect.Group>
+            ))}
+          </RadixSelect.Viewport>
+          <RadixSelect.ScrollDownButton className="flex items-center justify-center h-6 text-[#555] bg-[#0a0a0a] cursor-default">
+            <Chevron />
+          </RadixSelect.ScrollDownButton>
+        </RadixSelect.Content>
+      </RadixSelect.Portal>
+    </RadixSelect.Root>
   );
 }
 
@@ -343,11 +473,19 @@ export function SkeletonTable({ rows = 6, cols = 4 }: { rows?: number; cols?: nu
 
 // ─── MetricCard ───────────────────────────────────────────────────────────────
 
+// Neutral text colours → classes that have light-theme overrides in globals.css
+const NEUTRAL_TEXT: Record<string, string> = {
+  "#ededed": "text-[#ededed]", "#e0e0e0": "text-[#e0e0e0]", "#ccc": "text-[#ccc]", "#888": "text-[#888]", "#444": "text-[#444]",
+};
+
 export function MetricCard({ label, value, color = "#ededed", sub }: { label: string; value: ReactNode; color?: string; sub?: string }) {
   return (
     <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-4 flex flex-col gap-1 min-w-0">
       <div className="text-[11px] font-semibold text-[#444] uppercase tracking-[0.08em]">{label}</div>
-      <div className="text-[26px] font-bold leading-none tracking-tight mt-1.5" style={{ color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {/* Neutral values use a class, not an inline colour, so the light theme can
+          darken them (inline #ededed was near-invisible on light cards). */}
+      <div className={`text-[26px] font-bold leading-none tracking-tight mt-1.5 ${NEUTRAL_TEXT[color.toLowerCase()] ?? ""}`}
+        style={{ color: NEUTRAL_TEXT[color.toLowerCase()] ? undefined : color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
       {sub && <div className="text-[12px] text-[#555] mt-1">{sub}</div>}
     </div>
   );
