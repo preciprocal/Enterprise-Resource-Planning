@@ -37,8 +37,11 @@ export interface LogEntry {
   action?:    string;
   path?:      string;
   details?:   Record<string, unknown>;
+  app?:       LogApp;
 }
 
+type LogApp = "erp" | "dashboard";
+type FilterApp = "all" | LogApp;
 type FilterType = "all" | "login" | "signup" | "action" | "logout" | "error";
 type FilterDevice = "all" | "desktop" | "mobile" | "tablet";
 type TimeRange = "1h" | "24h" | "7d" | "30d" | "all";
@@ -78,6 +81,23 @@ function typeBadge(type: LogEntry["type"]) {
   const { label, cls } = map[type] ?? { label: type, cls: "bg-[#111] text-[#888] border-[#2a2a2a]" };
   return (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border ${cls} whitespace-nowrap shrink-0`}>
+      {label}
+    </span>
+  );
+}
+
+// Which product the event happened in. Older rows without `app` are Dashboard.
+const APPS: Record<LogApp, { label: string; dot: string }> = {
+  dashboard: { label: "Dashboard", dot: "#06b6d4" },
+  erp:       { label: "ERP",       dot: "#a855f7" },
+};
+
+function appBadge(app: LogApp = "dashboard") {
+  const { label, dot } = APPS[app];
+  return (
+    <span title={app === "erp" ? "Signed in to the admin ERP" : "Signed in to the Preciprocal app"}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold border bg-[#111] text-[#888] border-[#2a2a2a] whitespace-nowrap shrink-0">
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
       {label}
     </span>
   );
@@ -188,7 +208,9 @@ function deriveLogsFromUsers(users: User[]): LogEntry[] {
       });
     }
   });
-  return entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return entries
+    .map(e => ({ ...e, app: "dashboard" as const }))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
@@ -230,6 +252,7 @@ function LogRow({ log, isMobile, onClick, selected, now, activityMap }: {
               {log.userName ?? log.userEmail?.split("@")[0] ?? "Unknown"}
             </span>
             {typeBadge(log.type)}
+            {appBadge(log.app)}
             {log.action && actionBadge(log.action)}
             {log.type === "action" && typeof log.details?.count === "number" && log.details.count > 1 && (
               <span className="text-[11px] text-[#555]">×{log.details.count}</span>
@@ -309,6 +332,7 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
           <div className="space-y-2">
             {[
               ["Type",    typeBadge(log.type)],
+              ["App",     appBadge(log.app)],
               ["Time",    <span key="t" className="text-[13px] text-[#ededed]">{fmtFull(log.timestamp)}</span>],
               ["User ID", <span key="u" className="font-mono text-[12px] text-[#0070f3]">{log.userId.slice(0,16)}…</span>],
               log.action ? ["Action", <span key="a" className="text-[13px] text-[#ededed] font-mono">{log.action}</span>] : null,
@@ -394,6 +418,7 @@ export default function LogsTab({ users, token = "" }: Props) {
   const [isDerived, setIsDerived] = useState(false);
 
   const [search,     setSearch]     = useState("");
+  const [appF,       setAppF]       = useState<FilterApp>("all");
   const [typeF,      setTypeF]      = useState<FilterType>("all");
   const [deviceF,    setDeviceF]    = useState<FilterDevice>("all");
   const [featureF,   setFeatureF]   = useState<string>("all");
@@ -499,6 +524,13 @@ export default function LogsTab({ users, token = "" }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [users]);
 
+  // The app filter scopes the whole tab (stats, charts and the log), so
+  // "Dashboard" gives a customer-only picture without admin sign-ins.
+  const scoped = useMemo(
+    () => appF === "all" ? logs : logs.filter(l => (l.app ?? "dashboard") === appF),
+    [logs, appF],
+  );
+
   const cutoff = useMemo(() => {
     if (timeRange === "all") return 0;
     const ms = { "1h": 3_600_000, "24h": 86_400_000, "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 };
@@ -513,8 +545,8 @@ export default function LogsTab({ users, token = "" }: Props) {
 
   const filtered = useMemo(() => {
     let f = (isDerived || timeRange === "all")
-      ? [...logs]
-      : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+      ? [...scoped]
+      : scoped.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     if (typeF      !== "all") f = f.filter(l => l.type === typeF);
     if (deviceF    !== "all") f = f.filter(l => l.device === deviceF);
     if (userFilter !== "all") f = f.filter(l => l.userId === userFilter);
@@ -536,20 +568,21 @@ export default function LogsTab({ users, token = "" }: Props) {
       );
     }
     return f;
-  }, [logs, cutoff, typeF, deviceF, search, userFilter, timeRange, featureF, planF, userPlanMap]);
+  }, [scoped, cutoff, typeF, deviceF, search, userFilter, timeRange, featureF, planF, userPlanMap]);
 
   const logUsers = useMemo(() => {
     const seen = new Map<string, { id: string; name?: string; email?: string }>();
-    logs.forEach(l => {
+    scoped.forEach(l => {
       if (!seen.has(l.userId)) seen.set(l.userId, { id: l.userId, name: l.userName, email: l.userEmail });
     });
     return [...seen.values()].sort((a, b) => (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? ""));
-  }, [logs]);
+  }, [scoped]);
 
   const exportCSV = useCallback(() => {
-    const header = ["Time", "User Name", "Email", "User ID", "Type", "Action", "Device", "Browser", "OS", "IP", "City", "Country"];
+    const header = ["Time", "App", "User Name", "Email", "User ID", "Type", "Action", "Device", "Browser", "OS", "IP", "City", "Country"];
     const rows = filtered.map(l => [
       fmtFull(l.timestamp),
+      APPS[l.app ?? "dashboard"].label,
       l.userName ?? "",
       l.userEmail ?? "",
       l.userId,
@@ -571,11 +604,15 @@ export default function LogsTab({ users, token = "" }: Props) {
   }, [filtered]);
 
   const stats = useMemo(() => {
-    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
-    const today   = logs.filter(l => now - new Date(l.timestamp).getTime() < 86_400_000);
+    const inRange = isDerived ? scoped : scoped.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const today   = scoped.filter(l => now - new Date(l.timestamp).getTime() < 86_400_000);
 
     // Count unique users who logged in today — not raw event count (same user can fire many login events)
-    const logins          = new Set(today.filter(l => l.type === "login").map(l => l.userId)).size;
+    const todayLogins     = today.filter(l => l.type === "login");
+    const logins          = new Set(todayLogins.map(l => l.userId)).size;
+    const loginsByApp     = (app: LogApp) => new Set(todayLogins.filter(l => (l.app ?? "dashboard") === app).map(l => l.userId)).size;
+    const dashLogins      = loginsByApp("dashboard");
+    const erpLogins       = loginsByApp("erp");
     const uniqueUsers     = new Set(inRange.map(l => l.userId)).size;
     const devices         = inRange.reduce((m, l) => { if (l.device) m[l.device] = (m[l.device] ?? 0) + 1; return m; }, {} as Record<string, number>);
     const topDevice       = Object.entries(devices).sort((a,b) => b[1]-a[1])[0]?.[0] ?? "";
@@ -585,8 +622,8 @@ export default function LogsTab({ users, token = "" }: Props) {
     const mobilePercent   = inRange.length ? Math.round(mobileCount / inRange.length * 100) : 0;
     const errors          = inRange.filter(l => l.type === "error").length;
 
-    return { logins, uniqueUsers, topDevice, topCountry, mobilePercent, errors, total: inRange.length };
-  }, [logs, cutoff, now]);
+    return { logins, dashLogins, erpLogins, uniqueUsers, topDevice, topCountry, mobilePercent, errors, total: inRange.length };
+  }, [scoped, cutoff, now]);
 
   const activityChart = useMemo(() => {
     const buckets = timeRange === "1h"
@@ -601,7 +638,7 @@ export default function LogsTab({ users, token = "" }: Props) {
     const signupMap: Record<string, number> = {};
     buckets.forEach(b => { loginMap[b.key] = 0; signupMap[b.key] = 0; });
 
-    logs.filter(l => new Date(l.timestamp).getTime() >= cutoff).forEach(l => {
+    scoped.filter(l => new Date(l.timestamp).getTime() >= cutoff).forEach(l => {
       const ts = l.timestamp;
       const key = timeRange === "1h"  ? ts.slice(0, 16) :
                   timeRange === "24h" ? ts.slice(0, 13) :
@@ -617,26 +654,26 @@ export default function LogsTab({ users, token = "" }: Props) {
       logins:  buckets.map(b => loginMap[b.key] ?? 0),
       signups: buckets.map(b => signupMap[b.key] ?? 0),
     };
-  }, [logs, cutoff, timeRange, now]);
+  }, [scoped, cutoff, timeRange, now]);
 
   const deviceBreakdown = useMemo(() => {
-    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const inRange = isDerived ? scoped : scoped.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, number> = {};
     inRange.forEach(l => { const d = l.device ?? "unknown"; m[d] = (m[d] ?? 0) + 1; });
     const colors: Record<string, string> = { desktop: "#0070f3", mobile: "#3ecf8e", tablet: "#f5a623", unknown: "#333" };
     return Object.entries(m).map(([d, v]) => ({ label: d, value: v, color: colors[d] ?? "#555" }));
-  }, [logs, cutoff, now]);
+  }, [scoped, cutoff, now]);
 
   const browserChart = useMemo(() => {
-    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const inRange = isDerived ? scoped : scoped.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, number> = {};
     inRange.forEach(l => { if (l.browser) m[l.browser] = (m[l.browser] ?? 0) + 1; });
     const sorted = Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0, 6);
     return { labels: sorted.map(e => e[0]), values: sorted.map(e => e[1]) };
-  }, [logs, cutoff, now]);
+  }, [scoped, cutoff, now]);
 
   const countryData = useMemo(() => {
-    const inRange = isDerived ? logs : logs.filter(l => new Date(l.timestamp).getTime() >= cutoff);
+    const inRange = isDerived ? scoped : scoped.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, { count: number; code?: string }> = {};
     inRange.forEach(l => {
       if (l.country) {
@@ -645,7 +682,7 @@ export default function LogsTab({ users, token = "" }: Props) {
       }
     });
     return Object.entries(m).sort((a,b) => b[1].count - a[1].count).slice(0, 8);
-  }, [logs, cutoff, now]);
+  }, [scoped, cutoff, now]);
 
   const featureUsage = useMemo(() => {
     return USAGE_FIELDS.map(({ key, label, color }) => ({
@@ -701,16 +738,21 @@ export default function LogsTab({ users, token = "" }: Props) {
     { id: "signup", label: "Signup" }, { id: "action", label: "Action" },
     { id: "logout", label: "Logout" }, { id: "error", label: "Error" },
   ];
+  const APP_FILTERS: { id: FilterApp; label: string }[] = [
+    { id: "all", label: "All apps" },
+    { id: "dashboard", label: APPS.dashboard.label },
+    { id: "erp", label: APPS.erp.label },
+  ];
   const FEATURES = [
     { value: "all",         label: "All Features" },
     ...Object.entries(FEATURE_ACTIONS).map(([k, { label }]) => ({ value: k, label })),
     { value: "subscribed",  label: "Subscription" },
   ];
 
-  const hasActiveFilters = search.trim() || typeF !== "all" || featureF !== "all" || planF !== "all" || deviceF !== "all" || userFilter !== "all";
+  const hasActiveFilters = search.trim() || appF !== "all" || typeF !== "all" || featureF !== "all" || planF !== "all" || deviceF !== "all" || userFilter !== "all";
 
   function clearAllFilters() {
-    setSearch(""); setTypeF("all"); setFeatureF("all"); setPlanF("all"); setDeviceF("all"); setUserFilter("all"); setPage(0);
+    setSearch(""); setAppF("all"); setTypeF("all"); setFeatureF("all"); setPlanF("all"); setDeviceF("all"); setUserFilter("all"); setPage(0);
   }
 
   return (
@@ -733,7 +775,7 @@ export default function LogsTab({ users, token = "" }: Props) {
             <SL>Activity Summary · Last {timeRange === "1h" ? "Hour" : timeRange === "24h" ? "24 Hours" : timeRange === "7d" ? "7 Days" : "30 Days"}</SL>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <StatCard label="Unique Logins Today" value={stats.logins} color="#0070f3"
-                sub="Distinct users"
+                sub={appF === "all" ? `${stats.dashLogins} Dashboard · ${stats.erpLogins} ERP` : `${APPS[appF].label} only`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>} />
               <StatCard label="Unique Users" value={stats.uniqueUsers} color="#3ecf8e"
                 sub={`in last ${timeRange}`}
@@ -994,8 +1036,19 @@ export default function LogsTab({ users, token = "" }: Props) {
               </div>
             </div>
 
-            {/* Row 2: Type | Feature | Plan | User | Device */}
+            {/* Row 2: App | Type | Feature | Plan | User | Device */}
             <div className="flex gap-2 items-center flex-wrap">
+              {/* App */}
+              <div role="group" aria-label="App" className="flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0 h-9 items-center">
+                {APP_FILTERS.map(a => (
+                  <button key={a.id} onClick={() => { setAppF(a.id); setPage(0); }} aria-pressed={appF === a.id}
+                    className={`px-2.5 h-7 rounded text-[13px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1.5 ${appF === a.id ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#555] hover:text-[#888]"}`}>
+                    {a.id !== "all" && <span className="w-1.5 h-1.5 rounded-full" style={{ background: APPS[a.id].dot }} />}
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Event type pills */}
               <div className="flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0 h-9 items-center">
                 {TYPES.map(t => (
@@ -1041,6 +1094,7 @@ export default function LogsTab({ users, token = "" }: Props) {
             {hasActiveFilters && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[11px] font-bold text-[#555] uppercase tracking-wider shrink-0 mr-0.5">Active:</span>
+                {appF       !== "all" && <FilterChip label={APPS[appF].label}                                       color={APPS[appF].dot} onClear={() => { setAppF("all");   setPage(0); }} />}
                 {typeF      !== "all" && <FilterChip label={typeF}                                                  color="#0070f3" onClear={() => { setTypeF("all");      setPage(0); }} />}
                 {featureF   !== "all" && <FilterChip label={FEATURE_ACTIONS[featureF]?.label ?? featureF}           color="#3ecf8e" onClear={() => { setFeatureF("all");   setPage(0); }} />}
                 {planF      !== "all" && <FilterChip label={`${planF} plan`}                                        color="#f5a623" onClear={() => { setPlanF("all");      setPage(0); }} />}

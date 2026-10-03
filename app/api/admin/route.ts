@@ -13,6 +13,13 @@ import {
 import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
 
+// Which product an erp_logs row came from. ERP sign-ins are written by
+// `verify` with source "admin_erp"; write_log callers may pass details.app.
+function logApp(details: unknown): "erp" | "dashboard" {
+  const d = (details ?? {}) as Record<string, unknown>;
+  return d.source === "admin_erp" || d.app === "erp" ? "erp" : "dashboard";
+}
+
 // ─── UA Parser (no deps) ─────────────────────────────────────────────────────
 
 function parseUA(ua: string): { browser: string; os: string; device: string } {
@@ -1240,6 +1247,8 @@ export async function GET(req: NextRequest) {
   //   erp_logs       — ERP admin logins + anything POSTed via write_log
   //   user_sessions  — the Dashboard's own session table (one row per sign-in,
   //                    with IP/geo/UA), surfaced as "login" events
+  // Each entry carries `app` ("erp" | "dashboard") so the Logs tab can tell
+  // admin sign-ins apart from product sign-ins.
   if (action === "logs") {
     try {
       const db     = sb();
@@ -1271,6 +1280,7 @@ export async function GET(req: NextRequest) {
           country: r.country ?? undefined, countryCode: r.country_code ?? undefined, device: r.device ?? undefined,
           browser: r.browser ?? undefined, os: r.os ?? undefined, userAgent: r.user_agent ?? undefined,
           action: r.action ?? undefined, path: r.path ?? undefined, details: r.details ?? {},
+          app: logApp(r.details),
         })),
         ...sessRows.map(s => {
           const ua = parseUA(s.user_agent ?? "");
@@ -1281,6 +1291,7 @@ export async function GET(req: NextRequest) {
             city: s.geo_city ?? undefined, countryCode: s.geo_country ?? undefined, country: s.geo_country ?? undefined,
             device: ua.device, browser: ua.browser, os: ua.os, userAgent: s.user_agent ?? undefined,
             details: { source: "dashboard_session", ...(s.revoked_at ? { revokedAt: s.revoked_at, revokedReason: s.revoked_reason } : {}) },
+            app: "dashboard" as const,
           };
         }),
       ].sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? ""))).slice(0, limit);
