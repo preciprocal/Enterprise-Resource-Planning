@@ -452,3 +452,9 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    SCROLLBAR — already handled in @layer base above
    ───────────────────────────────────────────────────────────────────────────── */
+
+/* MUI X charts (admin-shared LineChart/BarChart) hard-code dark grid/axis
+   strokes (#1a1a1a), which read as heavy black lines on the light theme. */
+[data-theme="light"] .MuiChartsGrid-line  { stroke: #e6e6e6 !important; }
+[data-theme="light"] .MuiChartsAxis-line,
+[data-theme="light"] .MuiChartsAxis-tick  { stroke: #d4d4d4 !important; }
