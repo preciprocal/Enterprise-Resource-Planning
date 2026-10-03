@@ -188,7 +188,9 @@ export async function loadUsers(sb: SupabaseClient) {
       isAdmin: p.is_admin,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
-      lastLogin: p.last_login ?? lastSeen.get(p.user_id),
+      // profiles.last_login is no longer kept up to date by the Dashboard, so
+      // take whichever is newer: it or the latest session activity.
+      lastLogin: [p.last_login, lastSeen.get(p.user_id)].filter((v): v is string => !!v).sort().pop(),
       lastContactedAt: meta?.last_contacted_at ?? undefined,
       lastContactSubject: meta?.last_contact_subject ?? undefined,
       subscription: {

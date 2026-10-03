@@ -10,6 +10,7 @@ import {
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel, ContactPanel } from "./StripeTab";
 import { FEATURE_LABELS } from "@/lib/packs";
+import { useUser360, OverviewPanel, JobSearchPanel, ActivityPanel, SupportPanel, AboutCard } from "./UserInsights";
 
 // student_verifications.verification_method values written by the Dashboard
 const STUDENT_METHOD_LABELS: Record<string, string> = {
@@ -237,8 +238,9 @@ export default function UsersTab({
                         />
                         <Avatar name={u.name} size={36} />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-[14px] font-semibold text-[#e0e0e0] truncate leading-tight">{u.name ?? "Unknown"}</span>
+                          {/* Name never shrinks below its width; the badge wraps under it when the column is narrow */}
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                            <span className="text-[14px] font-semibold text-[#e0e0e0] truncate leading-tight shrink-0 max-w-full">{u.name ?? "Unknown"}</span>
                             <StudentChip student={u.student} compact className="shrink-0" />
                           </div>
                           <div className="text-[13px] text-[#555] truncate mt-0.5">{u.email}</div>
@@ -320,6 +322,16 @@ function EmptyState({ search }: { search: string }) {
 
 const DETAIL_TABS = [
   {
+    id: "overview",
+    label: "Overview",
+    icon: (
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/>
+        <rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+      </svg>
+    ),
+  },
+  {
     id: "profile",
     label: "Profile",
     icon: (
@@ -345,6 +357,33 @@ const DETAIL_TABS = [
     icon: (
       <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path d="M18 20V10M12 20V4M6 20v-6"/>
+      </svg>
+    ),
+  },
+  {
+    id: "jobsearch",
+    label: "Job search",
+    icon: (
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+      </svg>
+    ),
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    icon: (
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+    ),
+  },
+  {
+    id: "support",
+    label: "Support",
+    icon: (
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
     ),
   },
@@ -381,14 +420,17 @@ function UserDetail({
   const isMobile = useIsMobile();
   const [user, setUser] = useState<User>(initialUser);
   const [edit, setEdit] = useState<User>(JSON.parse(JSON.stringify(initialUser)));
-  const [tab, setTab]   = useState<DetailTab>("profile");
+  const [tab, setTab]   = useState<DetailTab>("overview");
+  const insights        = useUser360(initialUser.id, token);
+  const panelProps      = { user, d: insights.data, loading: insights.loading, error: insights.error, reload: insights.reload, token };
   const [coupons, setCoupons]           = useState<StripeCoupon[]>([]);
   const [loadingCoupons, setLoadingCoupons] = useState(true);
   const [couponMsg, setCouponMsg]       = useState("");
   const pc = planColor(user.subscription?.plan);
   const sc = statusColor(user.subscription?.status);
   const totalUsage = USAGE_FIELDS.reduce((s, { key }) => s + ((user.usage?.[key] as number) ?? 0), 0);
-  const isEditableTab = tab !== "raw" && tab !== "contact";
+  // Save / Discard only apply to the tabs with editable fields
+  const isEditableTab = tab === "profile" || tab === "subscription" || tab === "usage";
 
   useEffect(() => {
     setLoadingCoupons(true);
@@ -470,7 +512,7 @@ function UserDetail({
           { label: "Joined",      value: daysAgo(user.createdAt) },
           { label: "Last active", value: daysAgo(user.lastLogin ?? user.updatedAt) },
           { label: "Provider",    value: user.provider ?? "email" },
-          { label: "Total uses",  value: String(totalUsage) },
+          { label: "Uses this period", value: String(totalUsage) },
         ].map(({ label, value }) => (
           <div key={label} className="bg-[#0a0a0a] border border-[#141414] rounded-lg px-3 py-2.5">
             <div className="text-[11px] font-semibold text-[#2a2a2a] uppercase tracking-wider mb-1">{label}</div>
@@ -561,12 +603,12 @@ function UserDetail({
       )}
 
       {/* Tab bar + actions */}
-      <div className="flex items-center px-5 border-b border-[#141414] h-12 shrink-0 bg-black gap-1">
+      <div className="flex items-center px-3 md:px-5 border-b border-[#141414] h-12 shrink-0 bg-black gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {DETAIL_TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 h-8 rounded-md text-[13px] font-medium transition-all cursor-pointer border-none whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-3 h-8 rounded-md text-[13px] font-medium transition-all cursor-pointer border-none whitespace-nowrap shrink-0 ${
               tab === t.id
                 ? "bg-[#111] text-[#e0e0e0]"
                 : "bg-transparent text-[#444] hover:text-[#777] hover:bg-[#080808]"
@@ -609,6 +651,12 @@ function UserDetail({
       {/* Content area */}
       <div className="flex-1 overflow-auto">
         <div className="p-6 md:p-8 flex flex-col gap-7 w-full">
+
+          {/* ── Overview / Job search / Activity / Support (UserInsights.tsx) ── */}
+          {tab === "overview"  && <OverviewPanel  {...panelProps} />}
+          {tab === "jobsearch" && <JobSearchPanel {...panelProps} />}
+          {tab === "activity"  && <ActivityPanel  {...panelProps} />}
+          {tab === "support"   && <SupportPanel   {...panelProps} />}
 
           {/* ── Profile ── */}
           {tab === "profile" && (
@@ -681,6 +729,9 @@ function UserDetail({
               </Section>
             </>
           )}
+
+          {/* Read-only career profile under the editable identity fields */}
+          {tab === "profile" && <AboutCard {...panelProps} />}
 
           {/* ── Subscription ── */}
           {tab === "subscription" && (

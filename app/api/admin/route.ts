@@ -11,6 +11,7 @@ import {
   upsertUserMeta, writeUsage, UUID_RE,
 } from "@/lib/erp-data";
 import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
+import { loadUser360 } from "@/lib/user-360";
 
 // ─── UA Parser (no deps) ─────────────────────────────────────────────────────
 
@@ -208,6 +209,17 @@ export async function GET(req: NextRequest) {
           id: r.id, userId: r.user_id, status: r.archived ? "archived" : "active", createdAt: r.created_at,
         })),
       }, { headers: { "Cache-Control": "private, max-age=60" } });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── user_360 — everything about one user, for the user page ─────────────────
+  if (action === "user_360") {
+    const id = req.nextUrl.searchParams.get("id") ?? "";
+    if (!UUID_RE.test(id)) return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+    try {
+      return NextResponse.json(await loadUser360(sb(), id), { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -1659,6 +1671,20 @@ export async function POST(req: NextRequest) {
       console.error("❌ ticket_notify_reply error:", e);
       return NextResponse.json({ error: (e as Error).message }, { status: 500 });
     }
+  }
+
+  // ── Sign a user out of every device ───────────────────────────────────────
+  // Uses the Dashboard's revoke_other_user_sessions (0044): marks user_sessions
+  // revoked and deletes the GoTrue sessions + refresh tokens, so devices can't
+  // refresh their way back in. p_keep matches nothing, so ALL sessions end.
+  if (action === "revoke_sessions") {
+    const userId = String(body.id ?? "");
+    if (!UUID_RE.test(userId)) return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+    const { data, error } = await sb().rpc("revoke_other_user_sessions", {
+      p_user_id: userId, p_keep: "", p_reason: `admin:${admin.email || "erp"}`,
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, revoked: data ?? 0 });
   }
 
   // ── ERP access list: add / remove ─────────────────────────────────────────
