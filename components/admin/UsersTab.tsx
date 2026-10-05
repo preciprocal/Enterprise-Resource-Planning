@@ -8,7 +8,8 @@ import {
   Avatar, Chip, CodeRef, Spinner, HBar, StatusDot, StudentChip,
   inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable,
 } from "./admin-shared";
-import { StripeCoupon, PlanEditorPanel, CouponPanel, ContactPanel } from "./StripeTab";
+import { StripeCoupon, PlanEditorPanel, CouponPanel } from "./StripeTab";
+import { FollowUpPanel } from "./FollowUp";
 import { FEATURE_LABELS } from "@/lib/packs";
 import { useUser360, OverviewPanel, JobSearchPanel, ActivityPanel, SupportPanel, AboutCard } from "./UserInsights";
 
@@ -915,10 +916,7 @@ function UserDetail({
 
           {/* ── Contact ── */}
           {tab === "contact" && (
-            <Card>
-              <CardTitle>Contact User</CardTitle>
-              <ContactPanel user={user} token={token} onDone={() => {}} />
-            </Card>
+            <FollowUpPanel user={user} token={token} />
           )}
 
           {/* ── Raw ── */}

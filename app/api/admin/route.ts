@@ -12,6 +12,7 @@ import {
 } from "@/lib/erp-data";
 import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
+import { sendFollowUp, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
 
 // Which product an erp_logs row came from. ERP sign-ins are written by
 // `verify` with source "admin_erp"; write_log callers may pass details.app.
@@ -227,6 +228,17 @@ export async function GET(req: NextRequest) {
     if (!UUID_RE.test(id)) return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
     try {
       return NextResponse.json(await loadUser360(sb(), id), { headers: { "Cache-Control": "private, no-store" } });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── user_emails — emails sent to one user, with delivery / open / click status ─
+  if (action === "user_emails") {
+    const id = req.nextUrl.searchParams.get("id") ?? "";
+    if (!UUID_RE.test(id)) return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+    try {
+      return NextResponse.json(await userEmails(sb(), id), { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -1723,6 +1735,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
+  // ── Cancel a scheduled follow-up email ────────────────────────────────────
+  if (action === "cancel_email") {
+    const resendId = String(body.resendId ?? "");
+    if (!resendId) return NextResponse.json({ error: "Missing resendId" }, { status: 400 });
+    try {
+      return NextResponse.json(await cancelFollowUp(sb(), resendId, admin));
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: err instanceof EmailError ? err.status : 500 });
+    }
+  }
+
   const id = body.id as string;
   if (!id) {
     return NextResponse.json({ error: "Missing user id" }, { status: 400 });
@@ -1900,33 +1923,21 @@ export async function POST(req: NextRequest) {
 
   // ── 4. Contact user via email ─────────────────────────────────────────────
   if (action === "contact_email") {
-    const { subject, body: emailBody, toEmail } = body as { subject: string; body: string; toEmail: string };
-    if (!subject || !emailBody || !toEmail) {
-      return NextResponse.json({ error: "Missing subject, body, or toEmail" }, { status: 400 });
-    }
-    const fromEmail = process.env.ADMIN_FROM_EMAIL ?? "support@preciprocal.com";
-    const resendKey = process.env.RESEND_API_KEY;
+    // Optional: template (id from lib/followup-email) and scheduledAt (ISO, ≤ 30 days out).
+    const { subject, body: emailBody, toEmail, template, scheduledAt } =
+      body as { subject: string; body: string; toEmail: string; template?: string; scheduledAt?: string };
     try {
-      if (resendKey) {
-        const res = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from: fromEmail, to: [toEmail], subject,
-            html: `<p>${emailBody.replace(/\n/g, "<br/>")}</p><hr/><small style="color:#9ca3af">Sent from Preciprocal Admin</small>`,
-          }),
-        });
-        if (!res.ok) throw new Error(`Resend error: ${await res.text()}`);
-      } else {
-        console.log("📧 [DRAFT — no RESEND_API_KEY]\nTo:", toEmail, "\nSubject:", subject, "\nBody:", emailBody);
-      }
-      await upsertUserMeta(sb(), id, {
-        last_contacted_at: new Date().toISOString(), last_contact_subject: subject, last_contact_sent_by: fromEmail,
+      const r = await sendFollowUp(sb(), {
+        userId: id, toEmail, subject, text: emailBody, templateId: template, scheduledAt: scheduledAt || undefined, sentBy: admin,
+      });
+      if (!r.scheduledAt) await upsertUserMeta(sb(), id, {
+        last_contacted_at: new Date().toISOString(), last_contact_subject: subject,
+        last_contact_sent_by: admin.email || (process.env.ADMIN_FROM_EMAIL ?? "support@preciprocal.com"),
       }).catch(e => console.error("[contact_email] meta write failed:", e));
-      return NextResponse.json({ success: true, sent: !!resendKey, draft: !resendKey });
+      return NextResponse.json({ success: true, sent: !r.draft, draft: r.draft, resendId: r.resendId, scheduledAt: r.scheduledAt });
     } catch (err) {
       console.error("❌ contact_email error:", err);
-      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+      return NextResponse.json({ error: (err as Error).message }, { status: err instanceof EmailError ? err.status : 500 });
     }
   }
 

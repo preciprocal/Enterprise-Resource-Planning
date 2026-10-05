@@ -7,6 +7,7 @@ import {
   MetricCard, Chip, StatusDot, Avatar, CodeRef, SL, Card, CardTitle, Spinner, FRow, useIsMobile,
   inputCls, Select,
 } from "./admin-shared";
+import { FollowUpPanel } from "./FollowUp";
 
 interface Props { analytics: AnalyticsData | null; users: User[]; loading: boolean; token?: string; }
 
@@ -306,111 +307,9 @@ export function CouponPanel({ user, onDone, token = "", coupons, loadingCoupons 
   );
 }
 
+/** Follow-up emails to one user: templates, scheduling and open tracking (see FollowUp.tsx). */
 export function ContactPanel({ user, onDone, token = "" }: { user:User; onDone:(m:string)=>void; token?: string }) {
-  const email = user.email ?? "";
-  const name  = user.name  ?? "there";
-
-  const buildTemplate = (bodyContent: string) =>
-    `Hi ${name},\n\n${bodyContent}\n\nIf you have any questions, feel free to reply to this email. We typically respond within 24 hours.\n\nWarm regards,\nSam Stein\nTech Support, Preciprocal\nsupport@preciprocal.com`;
-
-  type Template = { id: string; label: string; subject: string; body: string };
-  const TEMPLATES: Template[] = [
-    { id: "welcome",      label: "Welcome",         subject: "Welcome to Preciprocal: Here's How to Get Started",          body: buildTemplate(`Welcome to Preciprocal! We're thrilled to have you on board.\n\nHere's what you can do right now:\n• Analyse your resume and get an ATS score\n• Practice mock interviews with AI feedback\n• Optimise your LinkedIn profile\n• Track all your job applications in one place\n\nHead to https://app.preciprocal.com to get started.`) },
-    { id: "upgrade",      label: "Upgrade offer",   subject: "An Exclusive Offer: Upgrade to Preciprocal Pro",             body: buildTemplate(`I wanted to personally reach out with an exclusive offer.\n\nAs a valued Preciprocal user, we'd love to offer you a special discount on Pro. Here's what you unlock:\n• Unlimited cover letters\n• 30 mock interviews per month\n• Full analytics dashboard\n• Resume editor with PDF & Word export\n• And much more\n\nUse code [COUPON_CODE] at checkout for [X]% off your first month.\n\nUpgrade here: https://app.preciprocal.com/pricing`) },
-    { id: "payment",      label: "Payment issue",   subject: "Action Required: Payment Issue on Your Preciprocal Account",  body: buildTemplate(`We noticed there's an issue with the payment method on your Preciprocal account. To avoid any interruption to your subscription, please update your billing details at your earliest convenience.\n\nUpdate billing: https://app.preciprocal.com/settings/billing\n\nIf you believe this is an error or need assistance, please don't hesitate to reply to this email.`) },
-    { id: "cancellation", label: "Win-back",         subject: "We Miss You: Here's What's New at Preciprocal",              body: buildTemplate(`We noticed you recently cancelled your Preciprocal subscription, and we wanted to reach out.\n\nWe've been busy shipping new features since you left:\n• [New feature 1]\n• [New feature 2]\n• [New feature 3]\n\nWe'd love to have you back. As a returning user, use code [WINBACK_CODE] for [X]% off your first month back.\n\nReactivate here: https://app.preciprocal.com/pricing`) },
-    { id: "feedback",     label: "Feedback request", subject: "Quick Question: How Is Preciprocal Working for You?",        body: buildTemplate(`I'm reaching out personally to ask: how has your experience with Preciprocal been so far?\n\nYour feedback means a lot to us and directly shapes what we build next. It would take less than 2 minutes:\n\n[FEEDBACK_LINK]\n\nOr simply reply to this email with your thoughts. I read every response personally.`) },
-    { id: "custom",       label: "Custom",           subject: "Regarding your Preciprocal account",                          body: buildTemplate("[Write your message here]") },
-  ];
-
-  const [activeTemplate, setActiveTemplate] = useState<string>("welcome");
-  const [subject, setSubject] = useState(TEMPLATES[0].subject);
-  const [body,    setBody]    = useState(TEMPLATES[0].body);
-  const [working, setWorking] = useState(false);
-  const [err,     setErr]     = useState("");
-
-  function applyTemplate(tpl: Template) { setActiveTemplate(tpl.id); setSubject(tpl.subject); setBody(tpl.body); }
-
-  async function send() {
-    if (!email)                        { setErr("No email on this user"); return; }
-    if (!subject.trim()||!body.trim()) { setErr("Subject and body are required"); return; }
-    setWorking(true); setErr("");
-    try {
-      const res  = await apiCall("contact_email", { id:user.id, subject, body, toEmail:email, toName:name }, token);
-      const json = await res.json() as { success?:boolean; error?:string; draft?:boolean };
-      if (!res.ok||json.error) throw new Error(json.error??"Unknown error");
-      onDone(json.draft ? "Email drafted (add RESEND_API_KEY to send)" : `Email sent to ${email}`);
-    } catch (e) { setErr((e as Error).message); }
-    setWorking(false);
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3 px-3.5 py-3 bg-[#111] border border-[#1a1a1a] rounded-lg">
-        <Avatar name={user.name} size={38} />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-[#ededed]">{user.name ?? "Unknown"}</div>
-          <div className="text-xs text-[#888] truncate">{email || "No email on file"}</div>
-        </div>
-        {user.lastContactedAt
-          ? <div className="text-[11px] text-[#555] text-right shrink-0">Last contacted<br/><span className="font-semibold text-[#888]">{fmtFull(user.lastContactedAt)}</span></div>
-          : <div className="text-[11px] text-[#333] shrink-0 italic">Never contacted</div>}
-      </div>
-      <div>
-        <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Email Template</div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          {TEMPLATES.map(t => (
-            <button key={t.id} onClick={() => applyTemplate(t)}
-              className={`px-2.5 py-2 rounded-lg border text-[12px] font-medium cursor-pointer text-left transition-all ${
-                activeTemplate === t.id
-                  ? "bg-[rgba(0,112,243,0.08)] border-[rgba(0,112,243,0.3)] text-[#0070f3] font-semibold"
-                  : "bg-[#111] border-[#2a2a2a] text-[#888] hover:border-[#555] hover:text-[#ededed]"
-              }`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label className="block text-[12px] font-semibold text-[#555] uppercase tracking-wide mb-1.5">Subject</label>
-        <input value={subject} onChange={e => setSubject(e.target.value)} className={inputCls} />
-      </div>
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-[12px] font-semibold text-[#555] uppercase tracking-wide">Message</label>
-          <span className="text-[11px] text-[#555]">Edit content in [brackets] before sending</span>
-        </div>
-        <textarea value={body} onChange={e => setBody(e.target.value)} rows={10}
-          className={`${inputCls} resize-y leading-relaxed font-[inherit] text-[14px]`} spellCheck />
-      </div>
-      <div className="px-3 py-2.5 bg-[#111] border border-[#1a1a1a] rounded-lg">
-        <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-1">Email Preview</div>
-        <div className="text-[12px] text-[#888]">
-          <span className="font-semibold text-[#ededed]">To:</span> {email || ""}
-          &nbsp;&nbsp;<span className="font-semibold text-[#ededed]">From:</span> support@preciprocal.com
-        </div>
-        <div className="text-[12px] text-[#888] mt-0.5">
-          <span className="font-semibold text-[#ededed]">Subject:</span> {subject || ""}
-        </div>
-      </div>
-      {err && <div className="px-3 py-2 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg text-xs text-[#f44]">{err}</div>}
-      <div className="flex items-center gap-3">
-        <button onClick={send} disabled={working || !email}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold border-none cursor-pointer disabled:opacity-40 transition-colors ${working ? "bg-[#1a1a1a] text-[#555] cursor-wait" : "bg-[#ededed] text-black hover:bg-white"}`}>
-          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-          </svg>
-          {working ? "Sending…" : "Send Email"}
-        </button>
-        <div className="flex items-center gap-1.5 text-[12px] text-[#555]">
-          <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          Sent via Resend · Logged in Supabase
-        </div>
-      </div>
-    </div>
-  );
+  return <FollowUpPanel user={user} token={token} onDone={onDone} />;
 }
 
 // ─── Main StripeTab ───────────────────────────────────────────────────────────

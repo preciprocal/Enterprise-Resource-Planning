@@ -317,6 +317,7 @@
 
 [data-theme="light"] .text-\[\#ededed\]        { color: #111111 !important; }
 [data-theme="light"] .text-\[\#e0e0e0\]        { color: #1a1a1a !important; }
+[data-theme="light"] .text-\[\#ddd\]           { color: #222222 !important; }
 [data-theme="light"] .text-\[\#ccc\],
 [data-theme="light"] .text-\[\#cccccc\]        { color: #333333 !important; }
 [data-theme="light"] .text-\[\#c8c8c8\]        { color: #383838 !important; }
@@ -458,3 +459,7 @@
 [data-theme="light"] .MuiChartsGrid-line  { stroke: #e6e6e6 !important; }
 [data-theme="light"] .MuiChartsAxis-line,
 [data-theme="light"] .MuiChartsAxis-tick  { stroke: #d4d4d4 !important; }
+
+/* Native date/time pickers follow the ERP theme (FollowUp schedule input). */
+input[type="datetime-local"] { color-scheme: dark; }
+[data-theme="light"] input[type="datetime-local"] { color-scheme: light; }
