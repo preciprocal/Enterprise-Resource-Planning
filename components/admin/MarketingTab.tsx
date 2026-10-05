@@ -6,7 +6,7 @@
 // a signup, multi-day uniques are "avg daily", anon visitor rows are 1-day.
 "use client";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Select, LineChart, BarChart, daysAgo } from "./admin-shared";
+import { Select, LineChart, BarChart } from "./admin-shared";
 import { Block, Empty, Stat, Table, Muted, dash, human, Primary } from "./ui-kit";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -49,6 +49,13 @@ function dur(ms?: number | null) {
 // The section is labelled "times in UTC", so dates are formatted in UTC, not the browser zone.
 const fmt = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }) : "";
 const fmtFull = (iso?: string | null) => iso ? new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) : "";
+const clock = (iso?: string | null, seconds = false) => iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(seconds ? { second: "2-digit" } : {}), timeZone: "UTC" }) : "";
+const dayMonth = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" }) : "";
+/** Wall-clock time in the visitor's own browser time zone, or null if it isn't a valid zone. */
+const localClock = (iso: string, tz?: string | null) => {
+  if (!tz || tz === "UTC") return null;
+  try { return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz }); } catch { return null; }
+};
 const shortDay = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
 // Definitions surfaced as hover hints (title attribute — keyboard focusable).
@@ -510,7 +517,10 @@ function VisitorsView({ token, days }: { token: string; days: string }) {
                         </span>
                         {v.reachedApp && <span className="ml-2 text-[11px] text-[#3ecf8e]">→ app</span>}
                       </span>
-                      <span className="text-[12px] text-[#555] shrink-0">{daysAgo(v.lastSeenAt)}</span>
+                      <time dateTime={v.lastSeenAt} className="text-[12px] text-[#888] shrink-0 tabular-nums"
+                        title={`${v.sessions > 1 ? `First visit ${fmtFull(v.firstSeenAt)} UTC · ` : ""}Last active ${fmtFull(v.lastSeenAt)} UTC`}>
+                        {dayMonth(v.lastSeenAt)}, {clock(v.lastSeenAt)} <span className="text-[#555]">UTC</span>
+                      </time>
                     </div>
                     <div className="mt-0.5 text-[12px] text-[#555] truncate">
                       {[v.country, human(v.device), v.browser, v.firstSource ?? human(v.firstChannel),
@@ -533,7 +543,7 @@ function VisitorsView({ token, days }: { token: string; days: string }) {
   );
 }
 
-interface SessionRow { session_id: string; started_at: string; duration_ms: number | null; entry_path: string | null; exit_path: string | null; page_count: number | null;
+interface SessionRow { session_id: string; started_at: string; last_seen_at: string | null; ended_at: string | null; timezone: string | null; duration_ms: number | null; entry_path: string | null; exit_path: string | null; page_count: number | null;
   is_bounce: boolean | null; source_name: string | null; channel: string | null; utm_campaign: string | null; device_type: string | null; browser: string | null; os: string | null; country: string | null }
 interface VisitorSection { path: string; section_id: string; section_name: string | null; times_seen: number; total_dwell_ms: number; avg_dwell_ms: number }
 
@@ -549,7 +559,9 @@ function VisitorDetail({ v, token, onBack }: { v: Visitor; token: string; onBack
           <button onClick={onBack} className="xl:hidden mb-2 text-[13px] text-[#888] hover:text-[#ededed] bg-transparent border-none p-0 cursor-pointer">‹ All visitors</button>
           <h2 className="text-[16px] font-semibold text-[#ededed]">{visitorLabel(v)}</h2>
           <p className="text-[12px] text-[#555] mt-0.5">
-            {v.persistent ? `Returning id · first seen ${fmt(v.firstSeenAt)}` : `1-day profile · ${fmt(v.lastSeenAt)} — id resets daily, so earlier or later visits can't be linked`}
+            {v.persistent
+              ? `Returning id · first visit ${fmtFull(v.firstSeenAt)} · last active ${fmtFull(v.lastSeenAt)} UTC`
+              : `1-day profile · ${fmt(v.lastSeenAt)} — id resets daily, so earlier or later visits can't be linked`}
           </p>
         </div>
         {v.reachedApp && <span className="shrink-0 text-[12px] font-medium text-[#3ecf8e] border border-[rgba(62,207,142,0.3)] rounded-md px-2 py-0.5">Clicked through to app</span>}
@@ -572,12 +584,18 @@ function VisitorDetail({ v, token, onBack }: { v: Visitor; token: string; onBack
       )}
 
       {q.error ? <Note>Couldn&apos;t load visits: {q.error}</Note> : q.loading && !q.data ? <div className="skeleton h-40 rounded-xl" /> : (<>
-        <Block title="Visits" count={sessions.length} action={sessions.length > 1 ? (
-          <Select value={current} onChange={e => setSid(e.target.value)} wrapperClassName="w-auto" className="h-7 text-[12px]" aria-label="Visit">
-            {sessions.map(s => <option key={s.session_id} value={s.session_id}>{fmtFull(s.started_at)}</option>)}
-          </Select>) : undefined}>
-          {current ? <Journey token={token} sessionId={current} /> : <Empty>No visits recorded</Empty>}
+        <Block title="Visits" count={sessions.length}>
+          {sessions.length ? (
+            <ul className="divide-y divide-[#0f0f0f] max-h-72 overflow-y-auto">
+              {sessions.map(s => <VisitRow key={s.session_id} s={s} active={s.session_id === current} onSelect={() => setSid(s.session_id)} />)}
+            </ul>
+          ) : <Empty>No visits recorded</Empty>}
         </Block>
+        {current && (
+          <Block title="Visit replay">
+            <Journey token={token} sessionId={current} />
+          </Block>
+        )}
         {(q.data?.sections.length ?? 0) > 0 && (
           <Block title="Sections read" count={q.data!.sections.length}>
             <Table rows={q.data!.sections} rowKey={(s, i) => `${s.path}|${s.section_id}|${i}`} empty="" cols={[
@@ -589,6 +607,34 @@ function VisitorDetail({ v, token, onBack }: { v: Visitor; token: string; onBack
         )}
       </>)}
     </div>
+  );
+}
+
+/** One visit: when it started and ended (UTC), the visitor's local time, and what it covered.
+ *  Session times are when the server received the tracker's batches (a few seconds after the
+ *  events), so they're shown to the minute; the replay carries exact per-event times. */
+function VisitRow({ s, active, onSelect }: { s: SessionRow; active: boolean; onSelect: () => void }) {
+  const end = s.ended_at ?? s.last_seen_at;
+  const endClock = end && clock(end) !== clock(s.started_at) ? clock(end) : null;
+  const local = localClock(s.started_at, s.timezone);
+  return (
+    <li>
+      <button onClick={onSelect} aria-pressed={active}
+        className={`w-full text-left px-4 py-2.5 border-none cursor-pointer transition-colors ${active ? "bg-[#111]" : "bg-transparent hover:bg-[#0d0d0d]"}`}
+        style={{ boxShadow: active ? "inset 2px 0 0 #0070f3" : undefined }}>
+        <div className="flex items-baseline justify-between gap-3">
+          <time dateTime={s.started_at} className="text-[13px] text-[#ddd] tabular-nums">
+            {fmt(s.started_at)}, {clock(s.started_at)}{endClock ? ` – ${endClock}` : ""} <span className="text-[#555]">UTC</span>
+          </time>
+          <span className="shrink-0 text-[12px] text-[#888] tabular-nums">{s.duration_ms != null ? dur(s.duration_ms) : "not timed"}</span>
+        </div>
+        <div className="mt-0.5 text-[12px] text-[#555] truncate">
+          {[local ? `${local} their time (${s.timezone})` : null,
+            `${s.page_count ?? 0} page${s.page_count === 1 ? "" : "s"}`,
+            s.entry_path, s.is_bounce ? "bounced" : null].filter(Boolean).join(" · ")}
+        </div>
+      </button>
+    </li>
   );
 }
 
@@ -644,7 +690,9 @@ function Journey({ token, sessionId }: { token: string; sessionId: string }) {
               <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-black" style={{ background: STEP_COLOR[d.kind] }} />
               <div className="flex items-baseline justify-between gap-3">
                 <span className={`text-[13px] ${d.kind === "app" ? "text-[#3ecf8e]" : d.kind === "leave" || d.kind === "end" ? "text-[#888]" : "text-[#ddd]"}`}>{d.title}</span>
-                <span className="shrink-0 text-[11px] text-[#555] tabular-nums">+{dur(t)}</span>
+                <span className="shrink-0 text-[11px] text-[#555] tabular-nums" title={`${fmtFull(s.occurred_at)} UTC`}>
+                  <time dateTime={s.occurred_at} className="text-[#888]">{clock(s.occurred_at, true)}</time> · +{dur(t)}
+                </span>
               </div>
               {d.detail && <div className="text-[12px] text-[#555] mt-0.5 break-all">{d.detail}</div>}
             </li>

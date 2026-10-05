@@ -293,7 +293,7 @@ export async function visitors(sb: SupabaseClient, r: Range) {
 /** One visitor: their sessions and what they read. Keyed by visitor_key + whether it's a persistent (consented) id. */
 export async function visitor(sb: SupabaseClient, key: string, persistent: boolean) {
   const uuid = /^[0-9a-f-]{36}$/i.test(key);
-  let sq = sb.from("web_sessions").select("session_id,started_at,ended_at,duration_ms,entry_path,exit_path,page_count,event_count,is_bounce,source_name,channel,utm_campaign,device_type,browser,os,country,region,consent")
+  let sq = sb.from("web_sessions").select("session_id,started_at,last_seen_at,ended_at,duration_ms,entry_path,exit_path,page_count,event_count,is_bounce,source_name,channel,utm_campaign,device_type,browser,os,country,region,timezone,consent")
     .order("started_at", { ascending: false }).limit(100);
   sq = persistent && uuid ? sq.eq("visitor_id", key) : sq.eq("anon_id", key);
   const [s, sec] = await Promise.all([
