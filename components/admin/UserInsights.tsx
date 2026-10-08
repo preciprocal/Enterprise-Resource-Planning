@@ -24,7 +24,7 @@ export function useUser360(userId: string, token: string) {
     } catch (e) { setError((e as Error).message); }
     setLoading(false);
   }, [userId, token]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void Promise.resolve().then(load); }, [load]);
   return { data, error, loading, reload: load };
 }
 
@@ -210,6 +210,13 @@ export function JobSearchPanel(p: PanelProps) {
               <Stat label="Best resume score" value={s.bestResumeScore ?? "—"} sub={`${s.resumes} resume${s.resumes === 1 ? "" : "s"}`} tone={scoreTone(s.bestResumeScore)} />
             </div>
 
+            {s.extensionJobs > 0 && (
+              <p className="text-[12px] text-[#888] -mt-3">
+                Uses the Chrome extension · <span className="text-[#ededed]">{s.extensionJobs}</span> job{s.extensionJobs === 1 ? "" : "s"} saved with it
+                {s.extensionLastAt ? <> · last used <span title={fmtFull(s.extensionLastAt)}>{daysAgo(s.extensionLastAt)}</span></> : null}
+              </p>
+            )}
+
             <Block title="Applications" count={d.applications.length}>
               <Table rows={d.applications} rowKey={a => a.id} empty="No jobs in the tracker yet" cols={[
                 { label: "Role", cell: a => <Primary sub={[a.company, a.location, a.workType].filter(Boolean).join(" · ") || undefined}>
@@ -218,7 +225,7 @@ export function JobSearchPanel(p: PanelProps) {
                 { label: "Status", cell: a => <Pill status={a.status} /> },
                 { label: "Applied", hide: "sm", cell: a => a.appliedDate ? fmt(a.appliedDate) : dash },
                 { label: "Response", hide: "md", cell: a => a.reachedInterviewAt ? <span className="text-[#3ecf8e]">Interview · {fmt(a.reachedInterviewAt)}</span> : a.firstResponseAt ? fmt(a.firstResponseAt) : dash },
-                { label: "Source", hide: "lg", cell: a => human(a.source) ?? dash },
+                { label: "Source", hide: "lg", cell: a => a.viaExtension ? <span title="Saved with the Chrome extension">Extension · {a.viaExtension}</span> : human(a.source) ?? dash },
                 { label: "Updated", hide: "lg", cell: a => <span title={fmtFull(a.updatedAt)}>{daysAgo(a.updatedAt)}</span> },
               ]} />
             </Block>

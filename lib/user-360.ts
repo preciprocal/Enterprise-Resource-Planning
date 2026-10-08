@@ -4,6 +4,7 @@
 // columns (resume text, transcripts, raw payloads) left out. Any table that's
 // missing or errors comes back empty rather than failing the whole page.
 import "server-only";
+import { extensionPlatform } from "@/lib/extension-usage";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 type Row = Record<string, unknown>;
@@ -55,7 +56,7 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
     q("tailored_resumes", "id,resume_id,job_title,company_name,ats_score_before,ats_score_after,created_at", { order: "created_at" }),
     q("interviews", "id,role,type,level,company,position,duration,status,finalized,created_at,abandoned_at,abandoned_reason", { order: "created_at" }),
     q("interview_feedback", "interview_id,total_score,created_at", { order: "created_at", limit: 200 }),
-    q("job_applications", "id,company,job_title,status,source,location,work_type,applied_date,job_url,created_at,updated_at,first_response_at,reached_interview_at", { order: "updated_at", limit: 100 }),
+    q("job_applications", "id,company,job_title,status,source,linkedin_job_id,location,work_type,applied_date,job_url,created_at,updated_at,first_response_at,reached_interview_at", { order: "updated_at", limit: 100 }),
     q("application_status_events", "application_id,from_status,to_status,outcome,created_at", { order: "created_at", limit: 200 }),
     q("cover_letters", "id,job_role,company_name,tone,word_count,created_at", { order: "created_at" }),
     q("interview_plans", "id,archived,created_at,updated_at,data", { order: "created_at", limit: 20 }),
@@ -109,7 +110,7 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
 
   const apps = applications.map(a => ({
     id: a.id as string, company: a.company as string | null, jobTitle: a.job_title as string | null, status: (a.status as string) ?? "saved",
-    source: a.source as string | null, location: a.location as string | null, workType: a.work_type as string | null,
+    source: a.source as string | null, viaExtension: extensionPlatform(a.source as string | null, a.linkedin_job_id as string | null), location: a.location as string | null, workType: a.work_type as string | null,
     appliedDate: a.applied_date as string | null, jobUrl: a.job_url as string | null, createdAt: a.created_at as string, updatedAt: a.updated_at as string,
     firstResponseAt: a.first_response_at as string | null, reachedInterviewAt: a.reached_interview_at as string | null,
     history: statusEvents.filter(e => e.application_id === a.id).map(e => ({ from: e.from_status as string | null, to: e.to_status as string, at: e.created_at as string })),
@@ -206,6 +207,8 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
       avgInterviewScore: scored.length ? Math.round(scored.reduce((s, i) => s + (i.score ?? 0), 0) / scored.length) : null,
       applications: apps.length, applied: applied.length, responseRate: applied.length ? Math.round((responded.length / applied.length) * 100) : null,
       interviewsLanded: apps.filter(a => a.reachedInterviewAt).length,
+      extensionJobs: apps.filter(a => a.viaExtension).length,
+      extensionLastAt: apps.filter(a => a.viaExtension).reduce<string | null>((m, a) => !m || a.createdAt > m ? a.createdAt : m, null),
       coverLetters: coverLetters.length, debriefs: debriefs.length, plans: plans.length,
       linkedin: nLinkedin, outreach: nOutreach, contactSearches: nContacts, jobAnalyses: nJobAnalyses,
       linkedinLastAt: (linkedinLast[0]?.created_at as string) ?? null, outreachLastAt: (outreachLast[0]?.created_at as string) ?? null,

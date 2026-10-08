@@ -13,6 +13,7 @@ import {
 import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
 import { sendFollowUp, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
+import { extensionOverview, extensionUserActivity } from "@/lib/extension-usage";
 
 // Which product an erp_logs row came from. ERP sign-ins are written by
 // `verify` with source "admin_erp"; write_log callers may pass details.app.
@@ -228,6 +229,25 @@ export async function GET(req: NextRequest) {
     if (!UUID_RE.test(id)) return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
     try {
       return NextResponse.json(await loadUser360(sb(), id), { headers: { "Cache-Control": "private, no-store" } });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  // ── extension — Chrome extension users and usage (see lib/extension-usage.ts) ─
+  if (action === "extension") {
+    const days = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("days") ?? "30") || 30, 1), 3650);
+    try {
+      return NextResponse.json(await extensionOverview(sb(), days), { headers: { "Cache-Control": "private, no-store" } });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+  if (action === "extension_user") {
+    const id = req.nextUrl.searchParams.get("id") ?? "";
+    if (!UUID_RE.test(id)) return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+    try {
+      return NextResponse.json(await extensionUserActivity(sb(), id), { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }

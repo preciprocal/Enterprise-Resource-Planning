@@ -17,6 +17,7 @@ import UsageTab     from "./admin/UsageTab";
 import SupportTab   from "./admin/SupportTab";
 import AccessTab    from "./admin/AccessTab";
 import MarketingTab from "./admin/MarketingTab";
+import ExtensionTab from "./admin/ExtensionTab";
 
 const SUPABASE_PROJECT = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/^https?:\/\//, "").split(".")[0] || "supabase";
 
@@ -25,6 +26,7 @@ const NAV = [
   { id: "users",     label: "Users",     icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
   { id: "analytics", label: "Analytics", icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
   { id: "marketing", label: "Marketing", icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg> },
+  { id: "extension", label: "Extension", icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M10 3h4v3a2 2 0 1 0 4 0V3h3v6h-3a2 2 0 1 0 0 4h3v8h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3h7z"/></svg> },
   { id: "logs",      label: "Logs",      icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M9 12h6M9 16h6M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l5 5v11a2 2 0 0 1-2 2z"/></svg> },
   { id: "email",     label: "Email",     icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg> },
   { id: "kanban",    label: "Tasks",     icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg> },
@@ -36,14 +38,14 @@ const NAV = [
 const NAV_GROUPS = [
   { g: "Dashboard", ids: ["overview", "users"] },
   { g: "Billing",   ids: ["analytics"] },
-  { g: "Growth",    ids: ["marketing"] },
+  { g: "Growth",    ids: ["marketing", "extension"] },
   { g: "Tools",     ids: ["logs", "email", "kanban", "usage", "support"] },
   { g: "Settings",  ids: ["access"] },
 ];
 
 const NAV_TITLES: Record<string, string> = {
   overview: "Overview", users: "Users",
-  analytics: "Analytics", logs: "Activity Logs", email: "Inbox", kanban: "Tasks", usage: "API Usage", support: "Support", access: "ERP Access", marketing: "Marketing",
+  analytics: "Analytics", logs: "Activity Logs", email: "Inbox", kanban: "Tasks", usage: "API Usage", support: "Support", access: "ERP Access", marketing: "Marketing", extension: "Extension",
 };
 
 export default function AdminDashboard({ onLogout, token = "", me }: {
@@ -172,7 +174,7 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
     setSaving(false);
   }, [token]);
 
-  const noRefreshTabs = new Set(["email", "logs", "kanban", "access", "marketing"]);
+  const noRefreshTabs = new Set(["email", "logs", "kanban", "access", "marketing", "extension"]);
 
   return (
     <div className="min-h-screen flex bg-[#000]" style={{ fontFamily: "var(--font-geist-sans), -apple-system, sans-serif" }}>
@@ -373,6 +375,7 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
             {nav === "support"   && <SupportTab  token={token} />}
             {nav === "access"    && <AccessTab   token={token} />}
             {nav === "marketing" && <MarketingTab token={token} />}
+            {nav === "extension" && <ExtensionTab token={token} />}
           </div>
         </AdminTokenContext.Provider>
       </div>
