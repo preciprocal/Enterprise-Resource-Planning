@@ -46,14 +46,21 @@ function dur(ms?: number | null) {
   const m = Math.floor(s / 60), r = Math.round(s % 60);
   return r ? `${m}m ${r}s` : `${m}m`;
 }
-// The section is labelled "times in UTC", so dates are formatted in UTC, not the browser zone.
-const fmt = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }) : "";
-const fmtFull = (iso?: string | null) => iso ? new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) : "";
-const clock = (iso?: string | null, seconds = false) => iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(seconds ? { second: "2-digit" } : {}), timeZone: "UTC" }) : "";
-const dayMonth = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" }) : "";
+// Visit times are shown in the viewer's own time zone (the browser's), labelled with its
+// abbreviation, e.g. PDT. Daily totals stay on UTC days: the web_* views bucket by UTC date.
+const fmt = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "";
+const fmtFull = (iso?: string | null) => iso ? new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+const clock = (iso?: string | null, seconds = false) => iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(seconds ? { second: "2-digit" } : {}) }) : "";
+const dayMonth = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "";
+/** Viewer's zone abbreviation at that instant (PDT in summer, PST in winter). */
+const zone = (iso?: string | null) => {
+  const d = iso ? new Date(iso) : new Date();
+  return new Intl.DateTimeFormat("en-US", { timeZoneName: "short" }).formatToParts(d).find(p => p.type === "timeZoneName")?.value ?? "";
+};
+const viewerTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** Wall-clock time in the visitor's own browser time zone, or null if it isn't a valid zone. */
 const localClock = (iso: string, tz?: string | null) => {
-  if (!tz || tz === "UTC") return null;
+  if (!tz || tz === "UTC" || tz === viewerTz()) return null;
   try { return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz }); } catch { return null; }
 };
 const shortDay = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -214,7 +221,7 @@ export default function MarketingTab({ token }: { token: string }) {
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
             <h1 className="text-[20px] font-semibold text-[#ededed] tracking-tight">Marketing site</h1>
-            <p className="text-[13px] text-[#666] mt-1">First-party analytics for preciprocal.com · times in UTC</p>
+            <p className="text-[13px] text-[#666] mt-1">First-party analytics for preciprocal.com · visit times in your time zone ({zone()}) · daily totals by UTC day</p>
           </div>
           <Select value={days} onChange={e => setDays(e.target.value)} leading="Range" wrapperClassName="w-auto" className="h-8 text-[12px]" aria-label="Date range">
             {RANGES.map(r => <option key={r.v} value={r.v}>{r.l}</option>)}
@@ -518,8 +525,8 @@ function VisitorsView({ token, days }: { token: string; days: string }) {
                         {v.reachedApp && <span className="ml-2 text-[11px] text-[#3ecf8e]">→ app</span>}
                       </span>
                       <time dateTime={v.lastSeenAt} className="text-[12px] text-[#888] shrink-0 tabular-nums"
-                        title={`${v.sessions > 1 ? `First visit ${fmtFull(v.firstSeenAt)} UTC · ` : ""}Last active ${fmtFull(v.lastSeenAt)} UTC`}>
-                        {dayMonth(v.lastSeenAt)}, {clock(v.lastSeenAt)} <span className="text-[#555]">UTC</span>
+                        title={`${v.sessions > 1 ? `First visit ${fmtFull(v.firstSeenAt)} ${zone(v.firstSeenAt)} · ` : ""}Last active ${fmtFull(v.lastSeenAt)} ${zone(v.lastSeenAt)}`}>
+                        {dayMonth(v.lastSeenAt)}, {clock(v.lastSeenAt)} <span className="text-[#555]">{zone(v.lastSeenAt)}</span>
                       </time>
                     </div>
                     <div className="mt-0.5 text-[12px] text-[#555] truncate">
@@ -560,7 +567,7 @@ function VisitorDetail({ v, token, onBack }: { v: Visitor; token: string; onBack
           <h2 className="text-[16px] font-semibold text-[#ededed]">{visitorLabel(v)}</h2>
           <p className="text-[12px] text-[#555] mt-0.5">
             {v.persistent
-              ? `Returning id · first visit ${fmtFull(v.firstSeenAt)} · last active ${fmtFull(v.lastSeenAt)} UTC`
+              ? `Returning id · first visit ${fmtFull(v.firstSeenAt)} · last active ${fmtFull(v.lastSeenAt)} ${zone(v.lastSeenAt)}`
               : `1-day profile · ${fmt(v.lastSeenAt)} — id resets daily, so earlier or later visits can't be linked`}
           </p>
         </div>
@@ -610,7 +617,7 @@ function VisitorDetail({ v, token, onBack }: { v: Visitor; token: string; onBack
   );
 }
 
-/** One visit: when it started and ended (UTC), the visitor's local time, and what it covered.
+/** One visit: when it started and ended (viewer's time zone), the visitor's own local time, and what it covered.
  *  Session times are when the server received the tracker's batches (a few seconds after the
  *  events), so they're shown to the minute; the replay carries exact per-event times. */
 function VisitRow({ s, active, onSelect }: { s: SessionRow; active: boolean; onSelect: () => void }) {
@@ -624,7 +631,7 @@ function VisitRow({ s, active, onSelect }: { s: SessionRow; active: boolean; onS
         style={{ boxShadow: active ? "inset 2px 0 0 #0070f3" : undefined }}>
         <div className="flex items-baseline justify-between gap-3">
           <time dateTime={s.started_at} className="text-[13px] text-[#ddd] tabular-nums">
-            {fmt(s.started_at)}, {clock(s.started_at)}{endClock ? ` – ${endClock}` : ""} <span className="text-[#555]">UTC</span>
+            {fmt(s.started_at)}, {clock(s.started_at)}{endClock ? ` – ${endClock}` : ""} <span className="text-[#555]">{zone(s.started_at)}</span>
           </time>
           <span className="shrink-0 text-[12px] text-[#888] tabular-nums">{s.duration_ms != null ? dur(s.duration_ms) : "not timed"}</span>
         </div>
@@ -679,7 +686,7 @@ function Journey({ token, sessionId }: { token: string; sessionId: string }) {
     <div className="px-4 py-4">
       <div className="text-[12px] text-[#666] mb-4">
         {[first.source_name ?? human(first.channel) ?? "Direct", first.utm_campaign ? `campaign ${first.utm_campaign}` : null, first.country, human(first.device_type), first.browser].filter(Boolean).join(" · ")}
-        {" · "}{fmtFull(first.occurred_at)} UTC
+        {" · "}{fmtFull(first.occurred_at)} {zone(first.occurred_at)}
       </div>
       <ol className="relative border-l border-[#1f1f1f] ml-1.5 flex flex-col gap-4">
         {steps.map(s => {
@@ -690,7 +697,7 @@ function Journey({ token, sessionId }: { token: string; sessionId: string }) {
               <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-black" style={{ background: STEP_COLOR[d.kind] }} />
               <div className="flex items-baseline justify-between gap-3">
                 <span className={`text-[13px] ${d.kind === "app" ? "text-[#3ecf8e]" : d.kind === "leave" || d.kind === "end" ? "text-[#888]" : "text-[#ddd]"}`}>{d.title}</span>
-                <span className="shrink-0 text-[11px] text-[#555] tabular-nums" title={`${fmtFull(s.occurred_at)} UTC`}>
+                <span className="shrink-0 text-[11px] text-[#555] tabular-nums" title={`${fmtFull(s.occurred_at)} ${zone(s.occurred_at)}`}>
                   <time dateTime={s.occurred_at} className="text-[#888]">{clock(s.occurred_at, true)}</time> · +{dur(t)}
                 </span>
               </div>
