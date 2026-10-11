@@ -64,7 +64,11 @@ interface Recipient { email: string; userId: string | null; name: string | null;
 const EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:"]+$/;
 
 async function resolveRecipients(sb: SupabaseClient, userIds: string[], emails: string[]): Promise<{ list: Recipient[]; invalid: string[] }> {
-  const cols = "user_id,name,email,activation_email_opt_out";
+  // Optional ERP emails skip anyone who unsubscribed from all optional
+  // email (which sets all three flags) or switched off "Product updates".
+  // Turning off one specific email (say next-step suggestions) does not stop
+  // these, because that is not what that toggle says it does.
+  const cols = "user_id,name,email,weekly_digest_opt_out,activation_email_opt_out,application_email_opt_out";
   const typed = [...new Set(emails.map(e => e.trim().toLowerCase()).filter(Boolean))];
   const invalid = typed.filter(e => !EMAIL_RE.test(e));
   const valid = typed.filter(e => EMAIL_RE.test(e));
@@ -79,9 +83,17 @@ async function resolveRecipients(sb: SupabaseClient, userIds: string[], emails: 
   const seen = new Set<string>();
   const list: Recipient[] = [];
   const add = (r: Recipient) => { const k = r.email.toLowerCase(); if (!seen.has(k)) { seen.add(k); list.push(r); } };
-  type P = { user_id: string; name: string | null; email: string | null; activation_email_opt_out: boolean | null };
-  for (const p of [...(byId.data ?? []), ...(byEmail.data ?? [])] as P[]) {
-    if (p.email) add({ email: p.email, userId: p.user_id, name: p.name, optedOut: p.activation_email_opt_out === true });
+  type P = { user_id: string; name: string | null; email: string | null; weekly_digest_opt_out: boolean | null; activation_email_opt_out: boolean | null; application_email_opt_out: boolean | null };
+  const people = [...(byId.data ?? []), ...(byEmail.data ?? [])] as P[];
+  const emailsLower = people.map(p => (p.email ?? "").toLowerCase().trim()).filter(Boolean);
+  const { data: news } = emailsLower.length
+    ? await sb.from("newsletter_subscribers").select("email,subscribed").in("email", emailsLower)
+    : { data: [] as { email: string; subscribed: boolean }[] };
+  const productUpdatesOff = new Set((news ?? []).filter(n => n.subscribed === false).map(n => String(n.email).toLowerCase()));
+  for (const p of people) {
+    if (!p.email) continue;
+    const allOff = p.weekly_digest_opt_out === true && p.activation_email_opt_out === true && p.application_email_opt_out === true;
+    add({ email: p.email, userId: p.user_id, name: p.name, optedOut: allOff || productUpdatesOff.has(p.email.toLowerCase().trim()) });
   }
   for (const e of valid) add({ email: e, userId: null, name: null, optedOut: false });
   return { list, invalid };
