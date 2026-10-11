@@ -39,29 +39,29 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
     }
     setContacting(r.user.id);
     try {
-      const subject = "We noticed you haven't been around — anything we can do?";
-      const body =
-        `Hi ${r.user.name ?? "there"},\n\n` +
-        `I wanted to check in personally. We noticed you haven't been active recently and ` +
-        `wanted to make sure everything's going well with your interview prep.\n\n` +
-        `Is there anything specific you're stuck on, or feedback we could act on? Even a ` +
-        `one-line reply helps us improve the product for you.\n\n` +
-        `Reply directly — this comes to my inbox.`;
+      // The same branded email and opt-out checks as Users > Contact
+      // (lib/erp-emails.ts). This used to send the Supabase token as
+      // x-admin-secret and the old request shape, so it could never succeed.
       const r2 = await fetch("/api/admin", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { "x-admin-secret": token } : {}) },
+        headers: { "Content-Type": "application/json", ...(token ? { "x-admin-token": token } : {}) },
         body: JSON.stringify({
-          action: "contact_email",
-          id: r.user.id,
-          subject,
-          body,
-          toEmail: r.user.email,
-          toName: r.user.name,
+          action: "send_emails",
+          userIds: [r.user.id],
+          draft: {
+            templateId: "check_in", sender: "francesca", optional: true,
+            eyebrow: "Checking in",
+            subject: "We noticed you haven't been around. Anything we can do?",
+            heading: "How's the search going, {{first_name}}?",
+            body: "I wanted to check in personally. We noticed you haven't been active recently and wanted to make sure everything's going well with your interview prep.\n\nIs there anything specific you're stuck on, or feedback we could act on? Even a one-line reply helps us improve the product for you.\n\nJust reply to this email. It comes straight to me.",
+            buttons: [{ label: "Open Preciprocal", url: "https://app.preciprocal.com" }],
+          },
         }),
       });
-      const j = await r2.json();
-      if (j.success) flashToast(j.draft ? "Draft logged (no Resend key)" : `Email sent to ${r.user.email}`, true);
-      else flashToast(j.error ?? "Send failed", false);
+      const j = await r2.json() as { success?: boolean; draft?: boolean; error?: string; results?: { status: string; reason?: string }[] };
+      const res = j.results?.[0];
+      if (j.success && res && (res.status === "sent" || res.status === "draft")) flashToast(j.draft ? "Draft logged (no Resend key)" : `Email sent to ${r.user.email}`, true);
+      else flashToast(res?.reason ?? j.error ?? "Send failed", false);
     } catch (e) {
       flashToast((e as Error).message, false);
     } finally {

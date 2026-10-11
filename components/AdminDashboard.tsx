@@ -165,14 +165,34 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
   const saveUser = useCallback(async (editUser: User) => {
     setSaving(true); setMsg("");
     try {
-      const { id, ...rest } = editUser;
-      const res = await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "x-admin-token": token } : {}) }, body: JSON.stringify({ id, data: rest }) });
+      const { id } = editUser;
+      // Only what was actually changed. The cached copy can be a minute old,
+      // and sending all of it rolled back anything that happened since: a
+      // webhook marking the plan past_due, or usage the person had consumed.
+      const orig = users.find(u => u.id === id);
+      const data: Record<string, unknown> = {};
+      for (const k of ["name", "email", "provider", "isAdmin"] as const) {
+        if (editUser[k] !== orig?.[k]) data[k] = editUser[k];
+      }
+      const sub: Record<string, unknown> = {};
+      for (const k of ["plan", "status", "studentVerified"] as const) {
+        const next = (editUser.subscription as Record<string, unknown> | undefined)?.[k];
+        if (next !== (orig?.subscription as Record<string, unknown> | undefined)?.[k]) sub[k] = next;
+      }
+      if (Object.keys(sub).length) data.subscription = sub;
+      const usage: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(editUser.usage ?? {})) {
+        if (v !== (orig?.usage as Record<string, unknown> | undefined)?.[k]) usage[k] = v;
+      }
+      if (Object.keys(usage).length) data.usage = usage;
+      if (!Object.keys(data).length) { setMsg("No changes"); setTimeout(() => setMsg(""), 2000); setSaving(false); return; }
+      const res = await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "x-admin-token": token } : {}) }, body: JSON.stringify({ id, data }) });
       if (!res.ok) { const e = await res.json() as { error?: string }; throw new Error(e.error ?? `HTTP ${res.status}`); }
       setUsers(p => p.map(u => u.id === id ? { ...editUser } : u));
       setMsg("✓ Saved"); setTimeout(() => setMsg(""), 2500);
     } catch (e) { setMsg("✗ " + (e as Error).message); }
     setSaving(false);
-  }, [token]);
+  }, [token, users]);
 
   const noRefreshTabs = new Set(["email", "logs", "kanban", "access", "marketing", "extension"]);
 

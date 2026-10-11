@@ -123,6 +123,12 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
     && trialEnd    === toDateInput(sub.trialEndsAt);
 
   async function apply() {
+    // These go straight to Stripe: a plan change bills the prorated difference
+    // at once, and cancelling ends their paid plan.
+    const what = priceId === "__free__" ? `cancel ${user.email ?? "this user"}'s subscription at the end of the period`
+      : !unchanged ? `change ${user.email ?? "this user"} to ${selectedPrice?.label ?? "this plan"}. Stripe charges or credits the difference immediately`
+      : `update ${user.email ?? "this user"}'s subscription in Stripe`;
+    if (!window.confirm(`This will ${what}. Continue?`)) return;
     setWorking(true); setErr("");
     try {
       const sd: Record<string,unknown> = { priceId, plan: selectedPrice?.plan ?? "free" };
@@ -239,6 +245,7 @@ export function CouponPanel({ user, onDone, token = "", coupons, loadingCoupons 
   async function apply(couponCode?: string) {
     const c = (couponCode ?? (selectedId || code)).trim();
     if (!c) { setErr("Select a coupon or enter a code"); return; }
+    if (!window.confirm(`Apply "${c}" to ${user.email ?? "this user"}'s subscription? It replaces any discount they already have, and a 100%-off coupon also marks them as a verified student.`)) return;
     setWorking(true); setErr("");
     try {
       const res  = await apiCall("apply_coupon", { id: user.id, couponCode: c }, token);

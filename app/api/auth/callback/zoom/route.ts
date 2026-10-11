@@ -2,11 +2,16 @@
 // Zoom redirects here → exchange code → store tokens
 export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyOAuthState } from "@/lib/oauth-state";
 import { saveIntegration } from "@/lib/integrations";
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   if (!code) return NextResponse.redirect(new URL("/?tab=kanban&error=zoom_denied", req.url));
+  // Only a connection an ERP admin started in the last 10 minutes (lib/oauth-state.ts).
+  if (!verifyOAuthState(req.nextUrl.searchParams.get("state"))) {
+    return NextResponse.redirect(new URL("/?tab=kanban&error=zoom_state", req.url));
+  }
 
   const creds = Buffer.from(
     `${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`

@@ -13,7 +13,7 @@ import {
 import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
 import { sendEmails, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
-import type { Draft } from "@/lib/followup-email";
+import { composeEmail, type Draft } from "@/lib/followup-email";
 import { extensionOverview, extensionUserActivity } from "@/lib/extension-usage";
 
 // Which product an erp_logs row came from. ERP sign-ins are written by
@@ -1722,31 +1722,47 @@ export async function POST(req: NextRequest) {
     const { ticketId, message } = body as { ticketId: string; message: string };
     if (!ticketId || !message) return NextResponse.json({ error: "Missing ticketId or message" }, { status: 400 });
     try {
-      const { data: ticket } = await sb().from("support_tickets").select("user_email,user_name,subject").eq("id", ticketId).maybeSingle();
+      const { data: ticket } = await sb().from("support_tickets").select("user_id,user_email,user_name,subject").eq("id", ticketId).maybeSingle();
       if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
       if (!ticket.user_email) return NextResponse.json({ error: "Ticket has no user email" }, { status: 400 });
 
-      const fromEmail = process.env.ADMIN_FROM_EMAIL ?? "support@preciprocal.com";
-      const resendKey = process.env.RESEND_API_KEY;
-      const shortId   = ticketId.slice(0, 8).toUpperCase();
-      const subject   = `[Ticket #${shortId}] Re: ${ticket.subject ?? "Your support ticket"}`;
+      // The customer may have turned emailed support replies off (Settings, or
+      // "unsubscribe from all"). The reply is still in the app either way,
+      // which is what the Dashboard's own reply path does too.
+      if (ticket.user_id) {
+        const { data: us } = await sb().from("user_settings").select("settings").eq("user_id", ticket.user_id).maybeSingle();
+        const notif = ((us?.settings as Record<string, unknown> | undefined)?.notifications ?? {}) as Record<string, unknown>;
+        if (notif.supportReplies === false) return NextResponse.json({ success: true, sent: false, skipped: "Customer has emailed support replies turned off; the reply is in the app." });
+      }
 
+      const shortId = ticketId.slice(0, 8).toUpperCase();
+      const m = composeEmail({
+        templateId: "reply", sender: "support", optional: false,
+        eyebrow: `Ticket #${shortId}`,
+        subject: `[Ticket #${shortId}] Re: ${ticket.subject ?? "Your support ticket"}`,
+        heading: "We replied to your ticket",
+        body: `Hi {{first_name}},\n\nOur support team replied to "${ticket.subject ?? "your ticket"}":\n\n${message}\n\nYou can reply from the ticket in the app.`,
+        buttons: [{ label: "View the conversation", url: `https://app.preciprocal.com/help?tab=tickets&ticket=${ticketId}` }],
+      }, { name: ticket.user_name });
+
+      const resendKey = process.env.RESEND_API_KEY;
       if (resendKey) {
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: fromEmail, to: [ticket.user_email], subject,
-            html: `<p>Hi ${ticket.user_name ?? "there"},</p>`
-              + `<p>Our support team replied to your ticket <strong>${ticket.subject ?? ""}</strong>:</p>`
-              + `<blockquote style="border-left:3px solid #4f46e5;margin:0;padding:8px 16px;color:#374151;white-space:pre-wrap;">${message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</blockquote>`
-              + `<p>Sign in to Preciprocal and go to Help & Support &gt; Tickets to view the full conversation and reply.</p>`
-              + `<hr/><small style="color:#9ca3af">Preciprocal Support · Ticket #${shortId}</small>`,
+            from: m.from, reply_to: m.replyTo, to: [ticket.user_email], subject: m.subject, html: m.html, text: m.text,
+            tags: [{ name: "source", value: "erp" }, { name: "email_type", value: "support_reply" }],
           }),
         });
         if (!res.ok) throw new Error(`Resend error: ${await res.text()}`);
+        const { id: resendId } = await res.json() as { id?: string };
+        if (resendId) {
+          const { error: logErr } = await sb().from("email_sends").insert({ resend_id: resendId, user_id: ticket.user_id ?? null, email_type: "support_reply", subject: m.subject.slice(0, 200) });
+          if (logErr) console.error("[ticket_notify_reply] email_sends insert failed:", logErr.message);
+        }
       } else {
-        console.log("📧 [DRAFT — no RESEND_API_KEY]\nTo:", ticket.user_email, "\nSubject:", subject);
+        console.log("📧 [DRAFT, no RESEND_API_KEY] To:", ticket.user_email, "Subject:", m.subject);
       }
       return NextResponse.json({ success: true, sent: !!resendKey });
     } catch (e) {
@@ -1887,7 +1903,7 @@ export async function POST(req: NextRequest) {
       let updatedSub: Record<string, unknown> = {};
       if (sd.priceId && sd.priceId !== "__free__") sd.priceId = planPriceId(sd.plan, sd.priceId);
 
-      if (subId && sd.priceId) {
+      if (subId && sd.priceId && sd.priceId !== "__free__") {
         const existing = await stripe.subscriptions.retrieve(subId);
         const itemId   = existing.items.data[0]?.id;
         const updateParams: Stripe.SubscriptionUpdateParams = {
@@ -1909,7 +1925,7 @@ export async function POST(req: NextRequest) {
         if (sd.periodEnd)   updatedSub.currentPeriodEnd   = new Date(sd.periodEnd).toISOString();
         if (sd.trialEnd)    updatedSub.trialEndsAt        = new Date(sd.trialEnd).toISOString();
 
-      } else if (sd.plan === "free" && subId) {
+      } else if ((sd.plan === "free" || sd.priceId === "__free__") && subId) {
         const updated = await stripe.subscriptions.update(subId, { cancel_at_period_end: true });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const upd = updated as any;
@@ -1940,9 +1956,14 @@ export async function POST(req: NextRequest) {
         const created = await (stripe.subscriptions.create as any)(createParams);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const c = created as any;
+        // Created with default_incomplete and no payment method: until it is
+        // paid (or on a trial) it must not grant the plan, or the account
+        // gets paid limits for free. The Dashboard webhook upgrades it the
+        // moment Stripe reports it active.
+        const granting = ["active", "trialing"].includes(String(c.status));
         updatedSub = {
           stripeCustomerId: custId, stripeSubscriptionId: c.id,
-          plan: sd.plan ?? sub.plan, status: c.status,
+          plan: granting ? (sd.plan ?? sub.plan) : (sub.plan ?? "free"), status: c.status,
           currentPeriodStart: new Date((c.current_period_start ?? c.billing_cycle_anchor ?? 0) * 1000).toISOString(),
           currentPeriodEnd:   new Date((c.current_period_end ?? 0) * 1000).toISOString(),
         };

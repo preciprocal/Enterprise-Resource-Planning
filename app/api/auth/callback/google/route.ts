@@ -2,6 +2,7 @@
 // Google redirects here after user approves → exchange code for tokens → store in erp_integrations
 export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyOAuthState } from "@/lib/oauth-state";
 import { saveIntegration } from "@/lib/integrations";
 
 export async function GET(req: NextRequest) {
@@ -9,6 +10,10 @@ export async function GET(req: NextRequest) {
   const redirectUri = process.env.GOOGLE_REDIRECT_URI!;
 
   if (!code) return NextResponse.redirect(new URL("/?tab=kanban&error=google_denied", req.url));
+  // Only a connection an ERP admin started in the last 10 minutes (lib/oauth-state.ts).
+  if (!verifyOAuthState(req.nextUrl.searchParams.get("state"))) {
+    return NextResponse.redirect(new URL("/?tab=kanban&error=google_state", req.url));
+  }
 
   // Exchange auth code for access + refresh tokens
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {

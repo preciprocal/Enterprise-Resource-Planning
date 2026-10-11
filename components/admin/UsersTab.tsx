@@ -764,7 +764,12 @@ function UserDetail({
                     <FormField label="Admin access">
                       <Select
                         value={String(edit.isAdmin ?? false)}
-                        onChange={e => setEdit(p => ({ ...p, isAdmin: e.target.value === "true" }))}
+                        onChange={e => {
+                          const on = e.target.value === "true";
+                          // Admin in the Dashboard means unlimited usage and the refund approval queue.
+                          if (on && !window.confirm(`Make ${edit.email ?? "this user"} an admin? They get unlimited usage and access to the refund review queue in the app. This takes effect when you save.`)) return;
+                          setEdit(p => ({ ...p, isAdmin: on }));
+                        }}
                       >
                         <option value="false">No</option>
                         <option value="true">Yes</option>

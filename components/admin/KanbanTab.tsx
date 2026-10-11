@@ -26,6 +26,18 @@ function getMsToken()   { return typeof window==="undefined"?null:localStorage.g
 // Supabase access token of the signed-in admin (kept current by app/page.tsx)
 function getAuthToken() { return getAdminToken()||null; }
 
+/** Starts a Google or Zoom connection: the server signs the request, then the browser goes to the provider. */
+async function startConnect(platform: "meet" | "zoom") {
+  const token = getAuthToken();
+  if (!token) { alert("Sign in to the ERP again, then connect."); return; }
+  try {
+    const r = await fetch(`/api/auth/${platform === "meet" ? "google" : "zoom"}`, { headers: { "x-admin-token": token } });
+    const j = await r.json() as { url?: string; error?: string };
+    if (!r.ok || !j.url) throw new Error(j.error ?? `HTTP ${r.status}`);
+    window.location.href = j.url;
+  } catch (e) { alert(`Could not start the connection: ${(e as Error).message}`); }
+}
+
 // ─── Integration status ───────────────────────────────────────────────────────
 interface IntegrationStatus { teams:boolean; google:boolean; zoom:boolean; }
 async function fetchIntegrationStatus(): Promise<IntegrationStatus> {
@@ -136,6 +148,8 @@ const DEFAULT_COLUMNS:KanbanColumn[]=[
     {id:"k9",title:"Firestore composite index fix",priority:"high",labels:["bug","infra"],assigneeId:"emp-yash",effortScore:2,valueScore:9,blockedBy:null,inProgressAt:new Date(Date.now()-518400000).toISOString(),completedAt:new Date(Date.now()-345600000).toISOString(),actualHours:6,subtasks:[],commentList:[],links:[]},
   ]},
 ];
+// A first-time board: the same columns, no sample cards.
+const EMPTY_COLUMNS:KanbanColumn[]=DEFAULT_COLUMNS.map(c=>({...c,cards:[]}));
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({name,color,size=22}:{name:string;color?:string;size?:number}){
@@ -311,7 +325,7 @@ function MeetingModal({meeting,defaultDate,integrations,admins,onClose,onSave,on
         {!isConnected&&<div style={{background:"rgba(245,166,35,0.06)",border:"1.5px solid rgba(245,166,35,0.2)",borderRadius:10,padding:"14px 16px",marginBottom:13}}>
           <div style={{fontSize:12.5,fontWeight:700,color:"#f5a623",marginBottom:8}}>Connect your {pm.label} account first</div>
           <div style={{fontSize:11.5,color:"#f5a623",lineHeight:1.5,marginBottom:12}}>{platform==="teams"&&"Sign in via the Outlook tab first."}{platform==="meet"&&"Authorize Preciprocal to create Google Calendar events with Meet links."}{platform==="zoom"&&"Authorize Preciprocal to create Zoom meetings on your behalf."}</div>
-          {platform!=="teams"&&<a href={`/api/auth/${platform==="meet"?"google":"zoom"}`} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 18px",borderRadius:8,background:pm.btnBg,color:"#fff",fontSize:12.5,fontWeight:700,textDecoration:"none"}}><PlatformIcon p={platform} size={14}/>Connect {pm.label} →</a>}
+          {platform!=="teams"&&<button type="button" onClick={()=>void startConnect(platform as "meet"|"zoom")} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 18px",borderRadius:8,background:pm.btnBg,color:"#fff",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}><PlatformIcon p={platform} size={14}/>Connect {pm.label} →</button>}
         </div>}
         {isConnected&&<>
           <div style={{display:"flex",gap:10,marginBottom:13}}>
@@ -323,7 +337,7 @@ function MeetingModal({meeting,defaultDate,integrations,admins,onClose,onSave,on
           <div style={{marginBottom:13}}><label style={fl}>Invite Attendees</label>
             <div style={{display:"flex",flexWrap:"wrap",gap:7}}>{admins.map(emp=>{const active=attendees.includes(emp.id);return(<button key={emp.id} onClick={()=>toggleAttendee(emp.id)} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",borderRadius:8,border:active?"1.5px solid #4F6FF0":"1.5px solid #2a2a2a",background:active?"rgba(79,111,240,0.12)":"#111",cursor:"pointer"}}><Avatar name={emp.name} color={emp.color} size={22}/><div><div style={{fontSize:11.5,fontWeight:600,color:active?"#4F6FF0":"#888"}}>{emp.name}</div><div style={{fontSize:10,color:"#444"}}>{emp.role}</div></div>{active&&<span style={{fontSize:12,color:"#4F6FF0"}}>✓</span>}</button>);})}</div>
           </div>
-          <div style={{background:pm.bg,border:`1.5px solid ${pm.color}33`,borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}><PlatformIcon p={platform} size={16}/><div style={{flex:1,fontSize:11.5,color:"#555"}}>{platform==="teams"&&"Meeting created via Microsoft Graph · Calendar invites sent"}{platform==="meet"&&"Event created in Google Calendar · Meet link auto-generated"}{platform==="zoom"&&"Zoom meeting created · Unique join URL generated"}</div><a href={platform!=="teams"?`/api/auth/${platform==="meet"?"google":"zoom"}`:"#"} style={{fontSize:10,color:pm.color,textDecoration:"none",fontWeight:600,flexShrink:0}}>Reconnect</a></div>
+          <div style={{background:pm.bg,border:`1.5px solid ${pm.color}33`,borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}><PlatformIcon p={platform} size={16}/><div style={{flex:1,fontSize:11.5,color:"#555"}}>{platform==="teams"&&"Meeting created via Microsoft Graph · Calendar invites sent"}{platform==="meet"&&"Event created in Google Calendar · Meet link auto-generated"}{platform==="zoom"&&"Zoom meeting created · Unique join URL generated"}</div>{platform!=="teams"&&<button type="button" onClick={()=>void startConnect(platform as "meet"|"zoom")} style={{fontSize:10,color:pm.color,background:"transparent",border:"none",padding:0,cursor:"pointer",fontWeight:600,flexShrink:0}}>Reconnect</button>}</div>
           {error&&<div style={{marginTop:10,fontSize:11.5,color:"#f44",background:"rgba(255,68,68,0.06)",border:"1px solid rgba(255,68,68,0.2)",borderRadius:7,padding:"8px 10px",lineHeight:1.5}}>{error}</div>}
         </>}
       </div>
@@ -561,7 +575,7 @@ function CardModal({card,colId,columns,isNew,me,admins,onClose,onSave,onDelete,o
         </div>}
       </div>
       <div style={{padding:"12px 22px 16px",borderTop:"1px solid #1a1a1a",display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
-        {!isNew&&card&&<button onClick={()=>onDelete(card.id)} style={{padding:"7px 13px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid rgba(255,68,68,0.2)",background:"rgba(255,68,68,0.06)",color:"#f44",marginRight:"auto"}}>Delete Card</button>}
+        {!isNew&&card&&<button onClick={()=>{if(window.confirm(`Delete "${card.title}"? This cannot be undone.`))onDelete(card.id);}} style={{padding:"7px 13px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid rgba(255,68,68,0.2)",background:"rgba(255,68,68,0.06)",color:"#f44",marginRight:"auto"}}>Delete Card</button>}
         <button onClick={onClose} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid #2a2a2a",background:"#111",color:"#555"}}>Cancel</button>
         <button onClick={handleSave} disabled={!title.trim()} style={{padding:"7px 18px",borderRadius:8,fontSize:12,fontWeight:700,cursor:title.trim()?"pointer":"not-allowed",border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",opacity:title.trim()?1:0.45}}>{isNew?"Add Card":"Save Card"}</button>
       </div>
@@ -574,10 +588,12 @@ function CardModal({card,colId,columns,isNew,me,admins,onClose,onSave,onDelete,o
 export default function KanbanTab({token="",currentUser}:{token?:string;currentUser?:{uid:string;name:string;email:string;color?:string};}){
   const me:Employee=currentUser?{id:currentUser.uid,name:currentUser.name||currentUser.email||"Admin",role:"Admin",color:currentUser.color??"#4F6FF0",email:currentUser.email||""}:FALLBACK_ME;
 
-  const [columns,      setColumns]      = useState<KanbanColumn[]>(JSON.parse(JSON.stringify(DEFAULT_COLUMNS)));
+  const [columns,      setColumns]      = useState<KanbanColumn[]>(JSON.parse(JSON.stringify(EMPTY_COLUMNS)));
   const [meetings,     setMeetings]     = useState<Meeting[]>(SEED_MEETINGS);
   const [admins,       setAdmins]       = useState<Employee[]>([me]);
   const [boardLoading, setBoardLoading] = useState(true);
+  const [boardLoaded,setBoardLoaded]=useState(false);
+  const [boardError,setBoardError]=useState<string|null>(null);
   const [dragCardId,   setDragCardId]   = useState<string|null>(null);
   const [dragColId,    setDragColId]    = useState<string|null>(null);
   const [dragOverColId,setDragOverColId]= useState<string|null>(null);
@@ -605,13 +621,15 @@ export default function KanbanTab({token="",currentUser}:{token?:string;currentU
   useEffect(()=>{
     if(!token)return;
     const h={"x-admin-token":token};
-    fetch("/api/kanban?action=board",{headers:h}).then(r=>r.json()).then((d:{columns:KanbanColumn[]|null})=>{if(d.columns)setColumns(d.columns);setBoardLoading(false);}).catch(()=>setBoardLoading(false));
+    // Only a board that actually loaded may be autosaved. Saving after a failed
+    // load wrote the sample cards below over the real board.
+    fetch("/api/kanban?action=board",{headers:h}).then(async r=>{const d=await r.json() as {columns:KanbanColumn[]|null;error?:string};if(!r.ok||d.error)throw new Error(d.error??`HTTP ${r.status}`);setColumns(d.columns??EMPTY_COLUMNS);setBoardLoaded(true);setBoardLoading(false);}).catch((e:Error)=>{setBoardError(e.message);setBoardLoading(false);});
     fetch("/api/kanban?action=admins",{headers:h}).then(r=>r.json()).then((d:{admins:Employee[]})=>{if(d.admins?.length)setAdmins(d.admins);}).catch(()=>{});
   },[token]);
 
   useEffect(()=>{
-    if(!token||boardLoading)return;
-    const t=setTimeout(()=>{fetch("/api/kanban?action=save-board",{method:"POST",headers:{"Content-Type":"application/json","x-admin-token":token},body:JSON.stringify({columns})}).catch(()=>{});},1000);
+    if(!token||boardLoading||!boardLoaded)return;
+    const t=setTimeout(()=>{fetch("/api/kanban?action=save-board",{method:"POST",headers:{"Content-Type":"application/json","x-admin-token":token},body:JSON.stringify({columns})}).then(r=>{if(!r.ok)setBoardError("Your last change was not saved. Refresh before editing again.");}).catch(()=>setBoardError("Your last change was not saved. Refresh before editing again."));},1000);
     return()=>clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[columns]);
@@ -743,6 +761,7 @@ export default function KanbanTab({token="",currentUser}:{token?:string;currentU
   </div>);
 
   return(<div style={{display:"flex",width:"100%",height:"100%",overflow:"hidden",flex:1,background:"#000"}}>
+    {boardError&&<div role="alert" style={{position:"fixed",top:12,left:"50%",transform:"translateX(-50%)",zIndex:900,padding:"8px 14px",borderRadius:8,border:"1px solid rgba(255,68,68,0.3)",background:"#1a0a0a",color:"#f44",fontSize:12,fontWeight:600}}>{boardLoaded?boardError:`The board could not be loaded (${boardError}). Changes will not be saved until you refresh.`}</div>}
     <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#000",minWidth:0,minHeight:0}}>
       {toolbar}{burndownBar}{boardArea}{velocityBar}

@@ -75,7 +75,8 @@ function signals(user: User, d: User360): { tone: "warn" | "good" | "info"; text
   const idleDays = s.lastSeenAt ? Math.floor((Date.now() - Date.parse(s.lastSeenAt)) / 86_400_000) : null;
   if (s.openTickets) out.push({ tone: "warn", text: `${s.openTickets} open support ticket${s.openTickets > 1 ? "s" : ""} — check the Support tab` });
   if (d.flags.some(f => f.status === "open" || f.status === "reviewing")) out.push({ tone: "warn", text: "Account is flagged for review" });
-  if (d.refunds.some(r => r.status === "pending")) out.push({ tone: "warn", text: "Refund request waiting for a decision" });
+  // "flagged" is the queue that needs a person (Dashboard migration 0024).
+  if (d.refunds.some(r => r.status === "pending" || r.status === "flagged")) out.push({ tone: "warn", text: "Refund request waiting for a decision" });
   if (idleDays != null && idleDays >= 14) out.push({ tone: "warn", text: `Hasn't been seen in ${idleDays} days — churn risk` });
   if (s.applied >= 10 && (s.responseRate ?? 0) === 0) out.push({ tone: "warn", text: `${s.applied} applications, no responses yet — resume or targeting may need work` });
   if (s.avgInterviewScore != null && s.avgInterviewScore < 60) out.push({ tone: "warn", text: `Average mock interview score is ${s.avgInterviewScore} — a good candidate for coaching content` });
