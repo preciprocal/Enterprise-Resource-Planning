@@ -49,6 +49,7 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
     profileRows, subRows, resumes, tailored, interviews, feedback, applications, statusEvents,
     coverLetters, plans, debriefs, sessions, activity, emailSends, notifications, tickets, surveys, ratings,
     refunds, flags, packs, nLinkedin, nOutreach, nContacts, nJobAnalyses, linkedinLast, outreachLast, unsubscribes,
+    accountEvents, disputes,
   ] = await Promise.all([
     q("profiles", "name,email,created_at,provider,phone,phone_verified,phone_verified_at,city,state,bio,target_role,experience_level,preferred_tech,career_goals,linked_in,github,website,resume_file_name,transcript_file_name,welcome_email_sent_at,weekly_digest_opt_out,weekly_digest_sent_at,activation_email_opt_out,activation_email_sent_at,activation_email_count,activation_email_last_step,application_email_opt_out,application_email_sent_at", { limit: 1 }),
     q("subscriptions", "plan,status,subscription_started_at,student_verified,last_payment_at,canceled_at,trial_ends_at", { limit: 1 }),
@@ -76,6 +77,9 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
     q("outreach_history", "created_at", { order: "created_at", limit: 1 }),
     // Written by the Dashboard's unsubscribe routes (migration 0050).
     q("email_unsubscribes", "scope,method,last_email_type,created_at", { order: "created_at", limit: 20 }),
+    // Dashboard migration 0052.
+    q("account_events", "type,detail,ip,created_at", { order: "created_at", limit: 30 }),
+    q("payment_disputes", "id,amount_cents,currency,reason,status,evidence_due_by,what,created_at", { order: "created_at", limit: 10 }),
   ]);
 
   // The Dashboard writes interview_call_costs with user_id null (only
@@ -246,6 +250,8 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
     tickets: tickets.map(t => ({ id: t.id, subject: t.subject, status: t.status, priority: t.priority, category: t.category, replies: t.reply_count ?? 0, lastReplyBy: t.last_reply_by, createdAt: t.created_at, updatedAt: t.updated_at })),
     surveys: surveys.map(s => ({ id: s.id, page: s.page, rating: s.overall_rating, nps: s.nps, improvement: s.top_improvement, text: s.free_text, createdAt: s.created_at })),
     ratings: ratings.map(r => ({ id: r.id, feature: r.feature, rating: r.rating, nps: r.nps, comment: r.comment, createdAt: r.created_at })),
+    accountEvents: accountEvents.map(e => ({ type: e.type as string, detail: (e.detail as Record<string, unknown>) ?? {}, at: e.created_at as string })),
+    disputes: disputes.map(x => ({ id: x.id as string, amountCents: x.amount_cents as number, reason: x.reason as string, status: x.status as string, dueBy: (x.evidence_due_by as string) ?? null, what: (x.what as string) ?? null, at: x.created_at as string })),
     unsubscribes: unsubscribes.map(u => ({ scope: u.scope as string, method: u.method as string, lastEmailType: (u.last_email_type as string) ?? null, at: u.created_at as string })),
     refunds: refunds.map(r => ({
       id: r.id, kind: r.kind ?? null, status: r.status, reason: r.user_reason,

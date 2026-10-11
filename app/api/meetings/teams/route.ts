@@ -18,10 +18,13 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
+import { getAdmin } from "@/lib/admin-auth";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
 export async function POST(req: NextRequest) {
+  // ERP admins only, like the Google and Zoom routes.
+  if (!(await getAdmin(req))) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   try {
     const { subject, startTime, endTime, attendees, msAccessToken } =
       (await req.json()) as {

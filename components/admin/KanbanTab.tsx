@@ -126,11 +126,6 @@ function calDays(month:Date){ const year=month.getFullYear(),m=month.getMonth();
 function buildBurndown(columns:KanbanColumn[]):SprintDay[]{ const done=columns.find(c=>c.id==="done")?.cards??[]; const counts:Record<string,number>={}; for(let i=6;i>=0;i--){const d=mkDate(-i);counts[d]=0;} done.forEach(c=>{if(c.completedAt){const d=fmtDate(new Date(c.completedAt));if(counts[d]!==undefined)counts[d]++;}}); return Object.entries(counts).map(([date,completed])=>({date,completed})); }
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
-const SEED_MEETINGS:Meeting[]=[
-  {id:"m1",title:"Sprint Planning",date:NOW_ISO,startTime:"09:00",endTime:"10:00",platform:"teams",joinUrl:"https://teams.microsoft.com/l/meetup-join/placeholder",attendeeIds:["emp-yash","emp-maya","emp-jordan"],description:"Plan sprint 14.",createdAt:"Jun 1 · 9:00 AM",status:"confirmed"},
-  {id:"m2",title:"Design Review",date:mkDate(1),startTime:"10:00",endTime:"10:30",platform:"meet",joinUrl:"https://meet.google.com/placeholder",attendeeIds:["emp-maya","emp-tom"],description:"Review usage tab UI.",createdAt:"Jun 1 · 9:05 AM",status:"confirmed"},
-  {id:"m3",title:"Stakeholder Demo",date:mkDate(2),startTime:"14:00",endTime:"15:00",platform:"zoom",joinUrl:"https://zoom.us/j/placeholder",attendeeIds:["emp-yash","emp-maya","emp-jordan","emp-alex","emp-sam","emp-priya","emp-tom"],description:"Q2 product demo.",createdAt:"Jun 2 · 2:00 PM",status:"confirmed"},
-];
 
 const DEFAULT_COLUMNS:KanbanColumn[]=[
   {id:"todo",title:"To Do",color:"#6366F1",desc:"Ready to be picked up",cards:[
@@ -590,7 +585,9 @@ export default function KanbanTab({token="",currentUser}:{token?:string;currentU
   const me:Employee=currentUser?{id:currentUser.uid,name:currentUser.name||currentUser.email||"Admin",role:"Admin",color:currentUser.color??"#4F6FF0",email:currentUser.email||""}:FALLBACK_ME;
 
   const [columns,      setColumns]      = useState<KanbanColumn[]>(JSON.parse(JSON.stringify(EMPTY_COLUMNS)));
-  const [meetings,     setMeetings]     = useState<Meeting[]>(SEED_MEETINGS);
+  // Starts empty: the sample meetings looked like real ones. Meetings live
+  // in this session only until they are saved somewhere.
+  const [meetings,     setMeetings]     = useState<Meeting[]>([]);
   const [admins,       setAdmins]       = useState<Employee[]>([me]);
   const [boardLoading, setBoardLoading] = useState(true);
   const [boardLoaded,setBoardLoaded]=useState(false);
@@ -688,8 +685,8 @@ export default function KanbanTab({token="",currentUser}:{token?:string;currentU
 
   const handleCardSave=(card:KanbanCard,targetColId:string)=>{setColumns(prev=>{const next=prev.map(c=>({...c,cards:[...c.cards]}));next.forEach(col=>{col.cards=col.cards.filter(c=>c.id!==card.id);});next.find(c=>c.id===targetColId)?.cards.push(card);return next;});setCardModal(null);};
   const handleCardDelete=(cardId:string)=>{setColumns(prev=>prev.map(col=>({...col,cards:col.cards.filter(c=>c.id!==cardId)})));setCardModal(null);};
-  const handleAddComment=async(cardId:string,colId:string,comment:Comment)=>{setColumns(prev=>prev.map(col=>col.id!==colId?col:{...col,cards:col.cards.map(c=>c.id!==cardId?c:{...c,commentList:[...(c.commentList??[]),comment]})}));if(!token)return;await fetch("/api/kanban?action=add-comment",{method:"POST",headers:{"Content-Type":"application/json","x-admin-token":token},body:JSON.stringify({cardId,colId,comment})}).catch(()=>{});};
-  const handleDeleteComment=async(cardId:string,colId:string,commentId:string)=>{setColumns(prev=>prev.map(col=>col.id!==colId?col:{...col,cards:col.cards.map(c=>c.id!==cardId?c:{...c,commentList:(c.commentList??[]).filter(cm=>cm.id!==commentId)})}));if(!token)return;await fetch("/api/kanban?action=delete-comment",{method:"POST",headers:{"Content-Type":"application/json","x-admin-token":token},body:JSON.stringify({cardId,colId,commentId})}).catch(()=>{});};
+  const handleAddComment=async(cardId:string,colId:string,comment:Comment)=>{setColumns(prev=>prev.map(col=>col.id!==colId?col:{...col,cards:col.cards.map(c=>c.id!==cardId?c:{...c,commentList:[...(c.commentList??[]),comment]})}));if(!token)return;await fetch("/api/kanban?action=add-comment",{method:"POST",headers:{"Content-Type":"application/json","x-admin-token":token},body:JSON.stringify({cardId,colId,comment})}).then(r=>{if(!r.ok)setBoardError("A comment was not saved. Refresh before editing again.");}).catch(()=>setBoardError("A comment was not saved. Refresh before editing again."));};
+  const handleDeleteComment=async(cardId:string,colId:string,commentId:string)=>{setColumns(prev=>prev.map(col=>col.id!==colId?col:{...col,cards:col.cards.map(c=>c.id!==cardId?c:{...c,commentList:(c.commentList??[]).filter(cm=>cm.id!==commentId)})}));if(!token)return;await fetch("/api/kanban?action=delete-comment",{method:"POST",headers:{"Content-Type":"application/json","x-admin-token":token},body:JSON.stringify({cardId,colId,commentId})}).then(r=>{if(!r.ok)setBoardError("A comment was not deleted. Refresh before editing again.");}).catch(()=>setBoardError("A comment was not deleted. Refresh before editing again."));};
   const handleMeetSave=(m:Meeting)=>{setMeetings(prev=>{const idx=prev.findIndex(x=>x.id===m.id);if(idx>=0){const n=[...prev];n[idx]=m;return n;}return[...prev,m];});setMeetModal(null);};
   const handleMeetDelete=(id:string)=>{setMeetings(prev=>prev.filter(m=>m.id!==id));setMeetModal(null);};
 

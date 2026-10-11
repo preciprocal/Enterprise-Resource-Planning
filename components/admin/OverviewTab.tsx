@@ -307,7 +307,99 @@ export default function OverviewTab({ analytics, users, loading, token = "" }: P
       </section>
 
       <PacksPanel token={token} />
+      <OpsHealth token={token} />
       <RecentUnsubscribes token={token} />
+    </div>
+  );
+}
+
+// ─── Operations health ────────────────────────────────────────────────────────
+// Open disputes with their evidence deadline, whether Stripe webhooks are
+// arriving and being handled, and how each email type is landing.
+
+interface OpsData {
+  disputes: { id: string; email: string | null; amountCents: number; currency: string; reason: string; status: string; evidenceDueBy: string | null; what: string | null; createdAt: string }[] | null;
+  webhook: { lastReceivedAt: string | null; lastType: string | null; last24h: number; stuck: { event_id: string; type: string; received_at: string }[] } | null;
+  deliverability: { type: string; sent: number; delivered: number; opened: number; clicked: number; bounced: number; complained: number }[];
+  security: { failedLogins24h: number; passwordChanges7d: number } | null;
+}
+
+const ago = (iso: string | null) => {
+  if (!iso) return "never";
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "-");
+
+function OpsHealth({ token }: { token: string }) {
+  const [d, setD] = useState<OpsData | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let live = true;
+    fetch("/api/admin?action=ops_health", { headers: token ? { "x-admin-token": token } : {} })
+      .then(async r => { const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error ?? `HTTP ${r.status}`); return j as OpsData; })
+      .then(j => { if (live) setD(j); })
+      .catch((e: Error) => { if (live) setErr(e.message); });
+    return () => { live = false; };
+  }, [token]);
+
+  if (err) return <Card><CardTitle>Operations</CardTitle><p className="text-[13px] text-[#f44] mt-3">Could not load: {err}</p></Card>;
+  if (!d) return <Card><CardTitle>Operations</CardTitle><div className="skeleton h-24 rounded-lg mt-3" /></Card>;
+
+  const wh = d.webhook;
+  const quiet = wh?.lastReceivedAt ? Date.now() - Date.parse(wh.lastReceivedAt) > 3 * 86_400_000 : true;
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <Card>
+        <CardTitle>Open disputes</CardTitle>
+        {d.disputes === null ? <p className="text-[13px] text-[#555] mt-3">Starts recording once Dashboard migration 0052 is applied.</p>
+          : d.disputes.length === 0 ? <p className="text-[13px] text-[#555] mt-3">No open disputes.</p>
+          : <ul className="divide-y divide-[#111] mt-2">{d.disputes.map(x => (
+              <li key={x.id} className="py-2.5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[13px] text-[#ddd] truncate">{x.email ?? "Unknown customer"} <span className="text-[#555]">· {x.what ?? "Payment"}</span></div>
+                  <div className="text-[12px] text-[#666] mt-0.5">{String(x.reason).replace(/_/g, " ")} · {String(x.status).replace(/_/g, " ")}</div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[13px] font-semibold text-[#f5a623] tabular-nums">${(x.amountCents / 100).toFixed(2)}</div>
+                  {x.evidenceDueBy && <div className="text-[11px] text-[#f44] mt-0.5">Evidence due {new Date(x.evidenceDueBy).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</div>}
+                </div>
+              </li>))}</ul>}
+      </Card>
+
+      <Card>
+        <CardTitle>Stripe webhooks</CardTitle>
+        {wh === null ? <p className="text-[13px] text-[#555] mt-3">Not set up (Dashboard migration 0035).</p> : (
+          <div className="mt-3 flex flex-col gap-2 text-[13px]">
+            <div className="flex justify-between"><span className="text-[#888]">Last event</span><span className={quiet ? "text-[#f5a623]" : "text-[#ddd]"}>{ago(wh.lastReceivedAt)}{wh.lastType ? ` · ${wh.lastType}` : ""}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Events, last 24 h</span><span className="text-[#ddd] tabular-nums">{wh.last24h}</span></div>
+            <div className="flex justify-between"><span className="text-[#888]">Not finished (7 days)</span><span className={wh.stuck.length ? "text-[#f44] font-semibold" : "text-[#3ecf8e]"}>{wh.stuck.length || "None"}</span></div>
+            {wh.stuck.slice(0, 4).map(s => <div key={s.event_id} className="text-[11px] text-[#666] truncate">{s.type} · {ago(s.received_at)} · {s.event_id}</div>)}
+            {d.security && <>
+              <div className="h-px bg-[#141414] my-1" />
+              <div className="flex justify-between"><span className="text-[#888]">Failed sign-ins, 24 h</span><span className={d.security.failedLogins24h > 20 ? "text-[#f5a623]" : "text-[#ddd]"}>{d.security.failedLogins24h}</span></div>
+              <div className="flex justify-between"><span className="text-[#888]">Password changes, 7 days</span><span className="text-[#ddd]">{d.security.passwordChanges7d}</span></div>
+            </>}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <CardTitle>Email deliverability, 30 days</CardTitle>
+        {d.deliverability.length === 0 ? <p className="text-[13px] text-[#555] mt-3">No emails sent in the last 30 days.</p> : (
+          <table className="w-full text-[12px] mt-2">
+            <thead><tr className="text-[#555] text-left"><th className="font-medium py-1">Type</th><th className="font-medium text-right">Sent</th><th className="font-medium text-right">Opened</th><th className="font-medium text-right">Bounced</th><th className="font-medium text-right">Spam</th></tr></thead>
+            <tbody>{d.deliverability.slice(0, 10).map(r => (
+              <tr key={r.type} className="border-t border-[#111]">
+                <td className="py-1.5 text-[#ccc] truncate max-w-[140px]">{r.type.replace(/_/g, " ")}</td>
+                <td className="text-right tabular-nums text-[#ddd]">{r.sent}</td>
+                <td className="text-right tabular-nums text-[#0070f3]">{pct(r.opened, r.sent)}</td>
+                <td className={`text-right tabular-nums ${r.bounced ? "text-[#f5a623]" : "text-[#555]"}`}>{r.bounced}</td>
+                <td className={`text-right tabular-nums ${r.complained ? "text-[#f44]" : "text-[#555]"}`}>{r.complained}</td>
+              </tr>))}</tbody>
+          </table>
+        )}
+      </Card>
     </div>
   );
 }

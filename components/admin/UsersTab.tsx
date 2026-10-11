@@ -19,6 +19,8 @@ const STUDENT_METHOD_LABELS: Record<string, string> = {
   email_otp:      "Email code",
   legacy_import:  "Imported (Firebase)",
   legacy_coupon:  "Student coupon (legacy)",
+  stripe_coupon:  "Student coupon",
+  "email_otp+stripe_coupon": "Email code + student coupon",
 };
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -515,7 +517,8 @@ function UserDetail({
         const res  = await fetch("/api/admin?action=coupons", { headers: token ? { "x-admin-token": token } : {} });
         const json = await res.json() as { coupons?: StripeCoupon[]; error?: string };
         if (res.ok && json.coupons) setCoupons(json.coupons);
-      } catch {}
+        else setCouponMsg(`Could not load coupons: ${json.error ?? `HTTP ${res.status}`}`);
+      } catch (e) { setCouponMsg(`Could not load coupons: ${(e as Error).message}`); }
       setLoadingCoupons(false);
     })();
   }, [token]);

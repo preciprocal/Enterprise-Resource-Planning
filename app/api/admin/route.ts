@@ -202,18 +202,20 @@ export async function GET(req: NextRequest) {
   if (action === "analytics") {
     try {
       const db = sb();
-      const [interviews, feedbacks, resumes, plans] = await Promise.all([
-        db.from("interviews").select("id,user_id,role,type,techstack,company,status,finalized,created_at,level,duration")
-          .order("created_at", { ascending: false }).limit(1000),
-        db.from("interview_feedback").select("id,user_id,interview_id,total_score,category_scores,created_at")
-          .order("created_at", { ascending: false }).limit(1000),
-        db.from("resumes").select("id,user_id,job_title,company_name,status,score,created_at").eq("deleted", false)
-          .order("created_at", { ascending: false }).limit(1000),
-        db.from("interview_plans").select("id,user_id,archived,created_at")
-          .order("created_at", { ascending: false }).limit(500),
+      // Paged to the end (fetchAll), not capped: every Analytics sub-tab used
+      // to undercount silently once a table passed 1000 rows (500 for plans).
+      type R = Record<string, unknown>;
+      const [iv, fb, rs, pl] = await Promise.all([
+        fetchAll<R>((a, b) => db.from("interviews").select("id,user_id,role,type,techstack,company,status,finalized,created_at,level,duration")
+          .order("created_at", { ascending: false }).range(a, b)),
+        fetchAll<R>((a, b) => db.from("interview_feedback").select("id,user_id,interview_id,total_score,category_scores,created_at")
+          .order("created_at", { ascending: false }).range(a, b)),
+        fetchAll<R>((a, b) => db.from("resumes").select("id,user_id,job_title,company_name,status,score,created_at").eq("deleted", false)
+          .order("created_at", { ascending: false }).range(a, b)),
+        fetchAll<R>((a, b) => db.from("interview_plans").select("id,user_id,archived,created_at")
+          .order("created_at", { ascending: false }).range(a, b)),
       ]);
-      const err = interviews.error ?? feedbacks.error ?? resumes.error ?? plans.error;
-      if (err) throw new Error(err.message);
+      const interviews = { data: iv }, feedbacks = { data: fb }, resumes = { data: rs }, plans = { data: pl };
 
       // Keep the camelCase field names the Analytics tab was written against.
       return NextResponse.json({
@@ -266,6 +268,69 @@ export async function GET(req: NextRequest) {
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
+  }
+
+  // ── ops_health — open disputes, Stripe webhook health, deliverability ─────
+  // Tables from Dashboard migrations 0035 (stripe_events), 0046 (email_*)
+  // and 0052 (payment_disputes, account_events). A missing table shows as
+  // "not set up" instead of failing the panel.
+  if (action === "ops_health") {
+    const db = sb();
+    const now = Date.now();
+    const iso = (ms: number) => new Date(now - ms).toISOString();
+    const DAY = 86_400_000;
+
+    const [disp, lastEvt, evt24, stuck, sends, failedLogins, pwChanges] = await Promise.all([
+      db.from("payment_disputes").select("id,user_id,amount_cents,currency,reason,status,evidence_due_by,what,created_at")
+        .not("status", "in", "(won,lost)").order("created_at", { ascending: false }).limit(20),
+      db.from("stripe_events").select("received_at,type").order("received_at", { ascending: false }).limit(1).maybeSingle(),
+      db.from("stripe_events").select("event_id", { count: "exact", head: true }).gte("received_at", iso(DAY)),
+      db.from("stripe_events").select("event_id,type,received_at").is("handled_at", null).lt("received_at", iso(10 * 60_000)).gte("received_at", iso(7 * DAY)).limit(20),
+      db.from("email_sends").select("resend_id,email_type").gte("sent_at", iso(30 * DAY)).lte("sent_at", new Date(now).toISOString()).limit(5000),
+      db.from("account_events").select("id", { count: "exact", head: true }).eq("type", "login_failed").gte("created_at", iso(DAY)),
+      db.from("account_events").select("id", { count: "exact", head: true }).eq("type", "password_changed").gte("created_at", iso(7 * DAY)),
+    ]);
+
+    // Deliverability: per email type over 30 days.
+    const sendRows = (sends.data ?? []) as { resend_id: string; email_type: string }[];
+    const typeOf = new Map(sendRows.map(r => [r.resend_id, r.email_type]));
+    const stats = new Map<string, { sent: number; delivered: Set<string>; opened: Set<string>; clicked: Set<string>; bounced: Set<string>; complained: Set<string> }>();
+    for (const r of sendRows) {
+      const k = r.email_type.startsWith("erp_") ? "erp (all)" : r.email_type;
+      const st = stats.get(k) ?? { sent: 0, delivered: new Set(), opened: new Set(), clicked: new Set(), bounced: new Set(), complained: new Set() };
+      st.sent += 1; stats.set(k, st);
+    }
+    const ids = [...typeOf.keys()];
+    for (let i = 0; i < ids.length; i += 500) {
+      const { data: ev } = await db.from("email_events").select("resend_id,event").in("resend_id", ids.slice(i, i + 500));
+      for (const e of (ev ?? []) as { resend_id: string; event: string }[]) {
+        const t = typeOf.get(e.resend_id); if (!t) continue;
+        const st = stats.get(t.startsWith("erp_") ? "erp (all)" : t); if (!st) continue;
+        const bucket = (st as Record<string, unknown>)[e.event];
+        if (bucket instanceof Set) bucket.add(e.resend_id);
+      }
+    }
+    const deliverability = [...stats.entries()].map(([type, s]) => ({
+      type, sent: s.sent, delivered: s.delivered.size, opened: s.opened.size, clicked: s.clicked.size,
+      bounced: s.bounced.size, complained: s.complained.size,
+    })).sort((a, b) => b.sent - a.sent);
+
+    const dispRows = (disp.data ?? []) as Record<string, unknown>[];
+    const people = await profileLookup(db, dispRows.map(d => String(d.user_id ?? "")).filter(Boolean));
+    return NextResponse.json({
+      disputes: disp.error ? null : dispRows.map(d => ({
+        id: d.id, email: people.get(String(d.user_id))?.email ?? null, amountCents: d.amount_cents, currency: d.currency,
+        reason: d.reason, status: d.status, evidenceDueBy: d.evidence_due_by, what: d.what, createdAt: d.created_at,
+      })),
+      webhook: lastEvt.error ? null : {
+        lastReceivedAt: (lastEvt.data as { received_at?: string } | null)?.received_at ?? null,
+        lastType: (lastEvt.data as { type?: string } | null)?.type ?? null,
+        last24h: evt24.count ?? 0,
+        stuck: ((stuck.data ?? []) as { event_id: string; type: string; received_at: string }[]),
+      },
+      deliverability,
+      security: failedLogins.error ? null : { failedLogins24h: failedLogins.count ?? 0, passwordChanges7d: pwChanges.count ?? 0 },
+    }, { headers: { "Cache-Control": "private, no-store" } });
   }
 
   // ── unsubscribes — the most recent, newest first (email_unsubscribes, 0050) ─
@@ -1319,14 +1384,21 @@ export async function GET(req: NextRequest) {
       const userId = req.nextUrl.searchParams.get("userId");
       const type   = req.nextUrl.searchParams.get("type");
       const limit  = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "500"), 1000);
+      // Paging: the Logs tab asks for the page older than ?before= (an ISO
+      // time) until hasMore is false. This used to be ignored, so the tab
+      // stopped at the first 500 rows.
+      const beforeRaw = req.nextUrl.searchParams.get("before");
+      const before = beforeRaw && !Number.isNaN(Date.parse(beforeRaw)) ? new Date(beforeRaw).toISOString() : null;
 
       let erpQ = db.from("erp_logs").select("*").order("timestamp", { ascending: false }).limit(limit);
+      if (before) erpQ = erpQ.lt("timestamp", before);
       if (userId) erpQ = erpQ.eq("user_id", userId);
       if (type)   erpQ = erpQ.eq("type", type);
 
       const wantSessions = !type || type === "login";
       let sessQ = db.from("user_sessions").select("session_id,user_id,ip,geo_country,geo_city,user_agent,created_at,revoked_at,revoked_reason")
         .order("created_at", { ascending: false }).limit(limit);
+      if (before) sessQ = sessQ.lt("created_at", before);
       if (userId) sessQ = UUID_RE.test(userId) ? sessQ.eq("user_id", userId) : sessQ.eq("user_id", "00000000-0000-0000-0000-000000000000");
 
       const [erp, sess] = await Promise.all([
@@ -1360,7 +1432,10 @@ export async function GET(req: NextRequest) {
         }),
       ].sort((a, b) => String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? ""))).slice(0, limit);
 
-      return NextResponse.json({ logs }, { headers: { "Cache-Control": "private, no-store" } });
+      // Either source filling its page means there may be older rows.
+      const hasMore = (erp.data?.length ?? 0) >= limit || sessRows.length >= limit;
+      const oldestTimestamp = logs.length ? (logs[logs.length - 1].timestamp as string | undefined) ?? null : null;
+      return NextResponse.json({ logs, hasMore, oldestTimestamp }, { headers: { "Cache-Control": "private, no-store" } });
     } catch (err) {
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -1467,7 +1542,7 @@ export async function GET(req: NextRequest) {
     try {
       const { data, error } = await sb().from("support_tickets")
         .select("id,user_id,subject,message,category,status,priority,user_email,user_name,attachments,last_reply_by,last_reply_at,reply_count,created_at,updated_at")
-        .order("created_at", { ascending: false }).limit(500);
+        .order("created_at", { ascending: false }).limit(5000);
       if (error) throw new Error(error.message);
       const ids = (data ?? []).map(t => t.id as string);
       const { data: notes } = ids.length
@@ -1514,7 +1589,7 @@ export async function GET(req: NextRequest) {
       const userId     = sp.get("userId");
       const serviceKey = sp.get("serviceKey");
       let q = sb().from("feature_ratings").select("id,user_id,feature,rating,comment,nps,tags,created_at")
-        .order("created_at", { ascending: false }).limit(500);
+        .order("created_at", { ascending: false }).limit(5000);
       if (serviceKey) q = q.eq("feature", serviceKey);
       if (userId && UUID_RE.test(userId)) q = q.eq("user_id", userId);
       const { data, error } = await q;
@@ -1536,7 +1611,7 @@ export async function GET(req: NextRequest) {
   if (action === "surveys") {
     try {
       const userId = req.nextUrl.searchParams.get("userId");
-      let q = sb().from("product_surveys").select("*").order("created_at", { ascending: false }).limit(500);
+      let q = sb().from("product_surveys").select("*").order("created_at", { ascending: false }).limit(5000);
       if (userId && UUID_RE.test(userId)) q = q.eq("user_id", userId);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
@@ -1924,6 +1999,8 @@ export async function POST(req: NextRequest) {
         if (sd.periodStart) updatedSub.currentPeriodStart = new Date(sd.periodStart).toISOString();
         if (sd.periodEnd)   updatedSub.currentPeriodEnd   = new Date(sd.periodEnd).toISOString();
         if (sd.trialEnd)    updatedSub.trialEndsAt        = new Date(sd.trialEnd).toISOString();
+        // Undoing a scheduled cancellation clears the marker the ERP reads.
+        if (sd.cancelAtPeriodEnd === false) updatedSub.canceledAt = "";
 
       } else if ((sd.plan === "free" || sd.priceId === "__free__") && subId) {
         const updated = await stripe.subscriptions.update(subId, { cancel_at_period_end: true });

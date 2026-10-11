@@ -112,13 +112,14 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
   const [periodEnd,  setPeriodEnd]   = useState(toDateInput(sub.currentPeriodEnd));
   const [trialEnd,   setTrialEnd]    = useState(toDateInput(sub.trialEndsAt));
   const [cancelEoP,  setCancelEoP]   = useState(false);
+  const [undoCancel, setUndoCancel]  = useState(false);
   const [couponId,   setCouponId]    = useState("");
   const [working,    setWorking]     = useState(false);
   const [err,        setErr]         = useState("");
   const selectedPrice  = PRICE_IDS_MAP[priceId];
   const selectedCoupon = coupons.find(c => c.id === couponId);
   // Nothing to send to Stripe — keep Apply disabled so a stray click is harmless.
-  const noChanges = unchanged && !couponId && !cancelEoP
+  const noChanges = unchanged && !couponId && !cancelEoP && !undoCancel
     && periodStart === toDateInput(sub.currentPeriodStart)
     && periodEnd   === toDateInput(sub.currentPeriodEnd)
     && trialEnd    === toDateInput(sub.trialEndsAt);
@@ -137,6 +138,7 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
       if (periodEnd)   sd.periodEnd   = fromDateInput(periodEnd);
       if (trialEnd)    sd.trialEnd    = fromDateInput(trialEnd);
       if (cancelEoP)   sd.cancelAtPeriodEnd = true;
+      if (undoCancel)  sd.cancelAtPeriodEnd = false;
       const res  = await apiCall("stripe_update", { id: user.id, stripeData: sd }, token);
       const json = await res.json() as { success?: boolean; error?: string; subscription?: Record<string,unknown> };
       if (!res.ok || json.error) throw new Error(json.error ?? "Unknown error");
@@ -217,11 +219,20 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
         ))}
       </div>
 
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" checked={cancelEoP} onChange={e=>setCancelEoP(e.target.checked)} className="w-3.5 h-3.5 accent-[#0070f3]" />
-        <span className="text-sm text-[#ededed] font-medium">Cancel at period end</span>
-        <span className="text-[12px] text-[#555] hidden sm:inline">(keeps access until end date)</span>
-      </label>
+      {sub.canceledAt && sub.plan && sub.plan !== "free" ? (
+        // Already set to cancel: the only useful action is undoing it.
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={undoCancel} onChange={e=>setUndoCancel(e.target.checked)} className="w-3.5 h-3.5 accent-[#0070f3]" />
+          <span className="text-sm text-[#ededed] font-medium">Undo the scheduled cancellation</span>
+          <span className="text-[12px] text-[#555] hidden sm:inline">(the plan renews as normal)</span>
+        </label>
+      ) : (
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={cancelEoP} onChange={e=>setCancelEoP(e.target.checked)} className="w-3.5 h-3.5 accent-[#0070f3]" />
+          <span className="text-sm text-[#ededed] font-medium">Cancel at period end</span>
+          <span className="text-[12px] text-[#555] hidden sm:inline">(keeps access until end date)</span>
+        </label>
+      )}
 
       {err && <div className="px-3 py-2 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg text-xs text-[#f44]">{err}</div>}
       <button onClick={apply} disabled={working || noChanges} title={noChanges ? "Pick a different plan, change a date or add a coupon first" : undefined}
@@ -342,7 +353,9 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
         const res  = await fetch("/api/admin?action=coupons", { headers: token ? { "x-admin-token": token } : {} });
         const json = await res.json() as { coupons?: StripeCoupon[]; error?: string };
         if (res.ok && json.coupons) setCoupons(json.coupons);
-      } catch {}
+        // A failed load used to look exactly like "no coupons exist".
+        else showToast(`Could not load coupons: ${json.error ?? `HTTP ${res.status}`}`, "err");
+      } catch (e) { showToast(`Could not load coupons: ${(e as Error).message}`, "err"); }
       setLoadingCoupons(false);
     })();
   }, [token]);

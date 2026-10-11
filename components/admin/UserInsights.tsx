@@ -33,6 +33,11 @@ const money = (usd: number) => usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFix
 const cents = (c?: number | null) => c == null ? null : `$${(c / 100).toFixed(2)}`;
 // refund_requests.kind, written by the Dashboard's lib/refund/*. Older rows
 // from the review queue have none.
+// account_events.type, from the Dashboard's lib/account-events.ts.
+const ACCOUNT_EVENT_LABEL: Record<string, string> = {
+  password_changed: "Password changed", email_change_requested: "Email change requested", email_changed: "Email changed",
+  login_failed: "Failed sign-in", data_export: "Data export sent", account_closure_requested: "Account closure requested",
+};
 // email_unsubscribes.scope, from the Dashboard's lib/email/unsubscribe.ts.
 const UNSUB_SCOPE: Record<string, string> = {
   weeklyDigest: "Weekly summaries", supportReplies: "Emailed support replies", activation: "Next-step suggestions",
@@ -490,6 +495,24 @@ export function SupportPanel(p: PanelProps) {
                 } },
                 { label: "Date", hide: "sm", cell: r => fmt(r.createdAt as string) },
               ]} />
+            </Block>
+            <Block title="Security and payment history" count={d.accountEvents.length + d.disputes.length || undefined}>
+              {d.accountEvents.length + d.disputes.length === 0 ? <Empty>No security events or disputes</Empty> : (
+                <ul className="divide-y divide-[#0f0f0f]">
+                  {d.disputes.map(x => (
+                    <li key={x.id} className="px-4 py-2.5 flex items-center justify-between gap-3 text-[13px]">
+                      <span className="text-[#f5a623]">Dispute · {x.what ?? "payment"} · {String(x.reason).replace(/_/g, " ")}</span>
+                      <span className="text-[12px] text-[#666] shrink-0">{String(x.status).replace(/_/g, " ")} · {fmt(x.at)}</span>
+                    </li>
+                  ))}
+                  {d.accountEvents.map((e, i) => (
+                    <li key={i} className="px-4 py-2.5 flex items-center justify-between gap-3 text-[13px]">
+                      <span className={e.type === "login_failed" ? "text-[#f5a623]" : "text-[#ccc]"}>{ACCOUNT_EVENT_LABEL[e.type] ?? e.type.replace(/_/g, " ")}{typeof e.detail?.to === "string" ? ` to ${e.detail.to}` : typeof e.detail?.newEmail === "string" ? ` to ${e.detail.newEmail}` : ""}</span>
+                      <span className="text-[12px] text-[#666] shrink-0">{fmt(e.at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Block>
             <Block title="Account flags" count={d.flags.length}>
               <Table rows={d.flags} rowKey={(f, i) => String(f.id ?? i)} empty="No flags — account in good standing" cols={[
