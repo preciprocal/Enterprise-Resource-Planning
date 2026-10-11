@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, useContext } from "react";
 import { Card, SL, useIsMobile, AdminTokenContext } from "./admin-shared";
+import { BalancesPanel } from "./BalancesPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1079,6 +1080,8 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
       )}
 
       {isInitialLoad ? <SummaryBarSkeleton /> : usage && <SummaryBar usage={usage} />}
+
+      <BalancesPanel token={token} />
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2 mb-4">

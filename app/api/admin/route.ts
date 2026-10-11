@@ -10,6 +10,7 @@ import {
   loadUsers, fetchAll, profileLookup, subscriptionPatch, upsertSubscription,
   upsertUserMeta, writeUsage, UUID_RE,
 } from "@/lib/erp-data";
+import { providerBalances, EDITABLE, type EditableProvider } from "@/lib/provider-balances";
 import { PACKS, PACK_KEYS, packEnvVar, STANDALONE_KEY, STANDALONE_BASE, STANDALONE_MAX, type PackKey } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
 import { sendEmails, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
@@ -348,6 +349,11 @@ export async function GET(req: NextRequest) {
         scope: r.scope, method: r.method, lastEmailType: r.last_email_type, at: r.created_at,
       })),
     }, { headers: { "Cache-Control": "private, no-store" } });
+  }
+
+  // ── provider_balances — what is left on each outside service ────────────
+  if (action === "provider_balances") {
+    return NextResponse.json(await providerBalances(sb()), { headers: { "Cache-Control": "private, no-store" } });
   }
 
   // ── user_bonuses — credits granted from the ERP and open offers ─────────
@@ -781,9 +787,11 @@ export async function GET(req: NextRequest) {
                 r.amount !== undefined ? r.amount :
                 r.cost    !== undefined ? r.cost    :
                 r.total_cost !== undefined ? r.total_cost : 0;
-              const val = typeof raw === "object" && raw !== null && "value" in raw
+              // cost_report amounts are in cents (checked against the
+              // usage_report token totals), so divide by 100.
+              const val = (typeof raw === "object" && raw !== null && "value" in raw
                 ? Number((raw as { value: unknown }).value)
-                : parseFloat(String(raw ?? "0"));
+                : parseFloat(String(raw ?? "0"))) / 100;
               if (!isNaN(val)) billedTotal += val;
               console.log("[claude/cost_report] row:", JSON.stringify(r), "→ parsed:", val);
             });
@@ -1734,6 +1742,23 @@ export async function POST(req: NextRequest) {
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const action = (body.action as string) ?? "update";
+
+  // ── Usage → What's left: the balance a provider shows after a top-up ────
+  if (action === "provider_balance_set") {
+    const b = body as { provider?: string; balanceUsd?: unknown; lowUsd?: unknown };
+    if (!EDITABLE.includes(b.provider as EditableProvider)) return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
+    const clear = b.balanceUsd === null;
+    const bal = Number(b.balanceUsd), low = b.lowUsd === "" || b.lowUsd == null ? null : Number(b.lowUsd);
+    if (!clear && (!Number.isFinite(bal) || bal < 0 || bal > 100_000)) return NextResponse.json({ error: "Enter the balance in dollars" }, { status: 400 });
+    if (low != null && (!Number.isFinite(low) || low < 0)) return NextResponse.json({ error: "Invalid warning level" }, { status: 400 });
+    const now = new Date().toISOString();
+    const { error } = await sb().from("provider_balances").upsert({
+      provider: b.provider, balance_usd: clear ? null : bal, set_at: clear ? null : now, low_usd: low, updated_at: now,
+    }, { onConflict: "provider" });
+    if (error) return NextResponse.json({ error: error.message.includes("provider_balances") ? "Run Dashboard migration 0054 first" : error.message }, { status: 500 });
+    await logAdmin(admin, "provider_balance_set", { provider: b.provider, balanceUsd: clear ? null : bal, lowUsd: low });
+    return NextResponse.json({ success: true });
+  }
 
   // ── 0. Write log entry ────────────────────────────────────────────────────
   if (action === "write_log") {
