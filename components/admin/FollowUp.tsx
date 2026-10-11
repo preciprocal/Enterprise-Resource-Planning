@@ -8,7 +8,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { User, inputCls, fmtFull } from "./admin-shared";
+import { User, inputCls, fmtFull, Checkbox, Select } from "./admin-shared";
 import { Block, Empty, human } from "./ui-kit";
 import {
   FOLLOW_UP_TEMPLATES, FollowUpTemplate, Draft, SENDERS, SenderId, composeEmail, draftFromTemplate,
@@ -291,16 +291,18 @@ export function EmailComposer({
 
         {/* Sender and kind */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block">
+          <div>
             <span className={LABEL}>From</span>
-            <select value={draft.sender} onChange={e => set("sender", e.target.value as SenderId)} className={`${inputCls} cursor-pointer`}>
+            <Select value={draft.sender} onChange={e => set("sender", e.target.value as SenderId)} aria-label="From">
               {(Object.keys(SENDERS) as SenderId[]).map(k => <option key={k} value={k}>{SENDERS[k].label} ({SENDERS[k].replyTo})</option>)}
-            </select>
-          </label>
-          <label className={`flex items-start gap-2 sm:pt-6 text-[12px] leading-relaxed ${many ? "text-[#666]" : "text-[#aaa] cursor-pointer"}`}>
-            <input type="checkbox" checked={optional} disabled={many} onChange={e => set("optional", e.target.checked)} className="mt-0.5" />
-            <span>Optional email: adds an unsubscribe link and skips anyone who opted out.{many ? " Always on when sending to several people." : " Turn off only for a reply or an account issue."}</span>
-          </label>
+            </Select>
+          </div>
+          <div className={`flex items-start gap-2.5 sm:pt-6 text-[12px] leading-relaxed ${many ? "text-[#666]" : "text-[#aaa]"}`}>
+            <Checkbox checked={optional} disabled={many} onChange={() => set("optional", !draft.optional)} label="Optional email" className="mt-0.5" />
+            <span onClick={() => { if (!many) set("optional", !draft.optional); }} className={many ? "" : "cursor-pointer"}>
+              Optional email: adds an unsubscribe link and skips anyone who opted out.{many ? " Always on when sending to several people." : " Turn off only for a reply or an account issue."}
+            </span>
+          </div>
         </div>
 
         {/* Content */}

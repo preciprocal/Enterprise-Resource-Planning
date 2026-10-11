@@ -445,6 +445,33 @@ export function StatusDot({ color }: { color: string }) {
   return <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />;
 }
 
+// ─── Checkbox ─────────────────────────────────────────────────────────────────
+// A real <input> kept for keyboard and screen readers, visually replaced by a
+// box in the ERP palette; the browser's default renders white on black.
+
+export function Checkbox({
+  checked, onChange, label, indeterminate = false, disabled = false, className = "",
+}: {
+  checked: boolean; onChange: () => void; label: string;
+  indeterminate?: boolean; disabled?: boolean; className?: string;
+}) {
+  const on = checked || indeterminate;
+  return (
+    <label onClick={e => e.stopPropagation()}
+      className={`relative inline-flex items-center justify-center w-4 h-4 shrink-0 ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${className}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} aria-label={label}
+        aria-checked={indeterminate ? "mixed" : checked} className="peer absolute inset-0 opacity-0 m-0 cursor-[inherit]" />
+      <span aria-hidden="true"
+        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#3a3a3a] ${
+          on ? "bg-[#ededed] border-[#ededed]" : "bg-[#0a0a0a] border-[#2a2a2a] hover:border-[#444]"}`}>
+        {indeterminate && !checked
+          ? <span className="w-2 h-[1.5px] bg-black rounded" />
+          : checked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+      </span>
+    </label>
+  );
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 export function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {

@@ -5,7 +5,7 @@ import { useState, useEffect, ReactNode } from "react";
 import {
   User, AnalyticsData, PLANS, USAGE_FIELDS, LIMITS,
   planColor, statusColor, fmtFull, daysAgo,
-  Avatar, Chip, CodeRef, Spinner, HBar, StatusDot, StudentChip,
+  Avatar, Chip, CodeRef, Spinner, HBar, StatusDot, StudentChip, Checkbox,
   inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable,
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel } from "./StripeTab";
@@ -65,6 +65,7 @@ export default function UsersTab({
     return next;
   });
   const allFilteredPicked = filtered.length > 0 && filtered.every(u => picked.has(u.id));
+  const somePicked = !allFilteredPicked && filtered.some(u => picked.has(u.id));
   const togglePickAll = () => setPicked(prev => {
     const next = new Set(prev);
     if (allFilteredPicked) filtered.forEach(u => next.delete(u.id)); else filtered.forEach(u => next.add(u.id));
@@ -96,7 +97,7 @@ export default function UsersTab({
             Back to users
           </button>
         </div>
-        <div className="p-5 max-w-[960px]">
+        <div className="p-5 w-full">
           <EmailComposer initialRecipients={chosen.map(recipientFromUser)} allUsers={users} token={token}
             title={chosen.length > 1 ? `Email ${chosen.length} users` : "New email"} />
         </div>
@@ -165,14 +166,25 @@ export default function UsersTab({
 
         {/* Group email */}
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={() => setComposing(true)}
-            className="px-3 h-8 rounded-lg text-[13px] font-semibold border-none cursor-pointer bg-[#ededed] text-black hover:bg-white transition-colors">
-            {picked.size ? `Email ${picked.size} selected` : "New email"}
-          </button>
           {picked.size > 0 && (
-            <button onClick={() => setPicked(new Set())}
-              className="text-[12px] text-[#666] hover:text-[#ededed] bg-transparent border-none cursor-pointer p-0">Clear</button>
+            <div className="flex items-center gap-2 h-[38px] pl-3 pr-1.5 rounded-lg border border-[#1a1a1a] bg-[#080808]">
+              <span className="text-[13px] text-[#888] tabular-nums"><span className="text-[#ededed] font-semibold">{picked.size}</span> selected</span>
+              <button onClick={() => setPicked(new Set())} aria-label="Clear selection" title="Clear selection"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-[#555] hover:text-[#ededed] hover:bg-[#141414] bg-transparent border-none cursor-pointer p-0 transition-colors">
+                <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
           )}
+          <button onClick={() => setComposing(true)}
+            className={`inline-flex items-center gap-2 h-[38px] px-3.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors border ${
+              picked.size
+                ? "bg-[#ededed] border-[#ededed] text-black hover:bg-white"
+                : "bg-[#080808] border-[#1a1a1a] text-[#bbb] hover:text-[#ededed] hover:border-[#2d2d2d]"}`}>
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>
+            </svg>
+            {picked.size ? "Email selected" : "New email"}
+          </button>
         </div>
 
         {/* Row count */}
@@ -202,8 +214,7 @@ export default function UsersTab({
                   className="px-4 py-4 cursor-pointer bg-black hover:bg-[#070707] active:bg-[#0d0d0d] transition-colors"
                 >
                   <div className="flex items-start gap-3">
-                    <input type="checkbox" checked={picked.has(u.id)} aria-label={`Select ${u.name ?? u.email ?? "user"}`}
-                      onClick={e => e.stopPropagation()} onChange={() => togglePick(u.id)} className="mt-3 shrink-0 cursor-pointer" />
+                    <Checkbox checked={picked.has(u.id)} onChange={() => togglePick(u.id)} label={`Select ${u.name ?? u.email ?? "user"}`} className="mt-3" />
                     <div className="w-0.5 self-stretch rounded-full shrink-0" style={{ background: p.accent }} />
                     <Avatar name={u.name} size={40} />
                     <div className="flex-1 min-w-0">
@@ -248,8 +259,8 @@ export default function UsersTab({
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#050505] border-b border-[#141414]">
-                <th className="pl-4 py-3 text-left">
-                  <input type="checkbox" checked={allFilteredPicked} onChange={togglePickAll} aria-label="Select all shown" className="cursor-pointer" />
+                <th className="pl-5 py-3 text-left">
+                  <Checkbox checked={allFilteredPicked} indeterminate={somePicked} onChange={togglePickAll} label="Select all shown" />
                 </th>
                 {sortableColumns.map(({ key, label }) => {
                   const sortable = ["name", "plan", "createdAt"].includes(key);
@@ -281,11 +292,10 @@ export default function UsersTab({
                   <tr
                     key={u.id}
                     onClick={() => setSelectedUser(u)}
-                    className="border-b border-[#0a0a0a] cursor-pointer transition-colors bg-black hover:bg-[#070707] group"
+                    className={`border-b border-[#0a0a0a] cursor-pointer transition-colors group ${picked.has(u.id) ? "bg-[#0b0b0b] hover:bg-[#0e0e0e]" : "bg-black hover:bg-[#070707]"}`}
                   >
-                    <td className="pl-4 py-3.5" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={picked.has(u.id)} onChange={() => togglePick(u.id)}
-                        aria-label={`Select ${u.name ?? u.email ?? "user"}`} className="cursor-pointer" />
+                    <td className="pl-5 py-3.5" onClick={e => e.stopPropagation()}>
+                      <Checkbox checked={picked.has(u.id)} onChange={() => togglePick(u.id)} label={`Select ${u.name ?? u.email ?? "user"}`} />
                     </td>
                     {/* User */}
                     <td className="px-4 py-3.5">
