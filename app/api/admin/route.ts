@@ -268,6 +268,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── unsubscribes — the most recent, newest first (email_unsubscribes, 0050) ─
+  if (action === "unsubscribes") {
+    const { data, error } = await sb().from("email_unsubscribes")
+      .select("user_id,scope,method,last_email_type,created_at").order("created_at", { ascending: false }).limit(25);
+    // The table appears with migration 0050; until then there is nothing to show.
+    if (error) return NextResponse.json({ unsubscribes: [], pending: true });
+    const ids = [...new Set((data ?? []).map(r => r.user_id).filter(Boolean))] as string[];
+    const { data: people } = ids.length ? await sb().from("profiles").select("user_id,name,email").in("user_id", ids) : { data: [] };
+    const byId = new Map((people ?? []).map(p => [p.user_id as string, p]));
+    return NextResponse.json({
+      unsubscribes: (data ?? []).map(r => ({
+        userId: r.user_id, name: byId.get(r.user_id as string)?.name ?? null, email: byId.get(r.user_id as string)?.email ?? null,
+        scope: r.scope, method: r.method, lastEmailType: r.last_email_type, at: r.created_at,
+      })),
+    }, { headers: { "Cache-Control": "private, no-store" } });
+  }
+
   // ── user_emails — emails sent to one user, with delivery / open / click status ─
   if (action === "user_emails") {
     const id = req.nextUrl.searchParams.get("id") ?? "";

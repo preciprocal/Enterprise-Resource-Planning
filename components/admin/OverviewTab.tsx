@@ -307,7 +307,59 @@ export default function OverviewTab({ analytics, users, loading, token = "" }: P
       </section>
 
       <PacksPanel token={token} />
+      <RecentUnsubscribes token={token} />
     </div>
+  );
+}
+
+// ─── Recent unsubscribes ──────────────────────────────────────────────────────
+// Who turned emails off, from what, and the last email they got before they
+// did. Written by the Dashboard's unsubscribe routes (email_unsubscribes).
+
+const UNSUB_SCOPE: Record<string, string> = {
+  weeklyDigest: "Weekly summaries", supportReplies: "Emailed support replies", activation: "Next-step suggestions",
+  coaching: "Application coaching", all: "All optional emails",
+};
+
+interface Unsub { userId: string | null; name: string | null; email: string | null; scope: string; method: string; lastEmailType: string | null; at: string }
+
+function RecentUnsubscribes({ token }: { token: string }) {
+  const [rows, setRows] = useState<Unsub[] | null>(null);
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/admin?action=unsubscribes", { headers: token ? { "x-admin-token": token } : {} })
+      .then(r => r.json())
+      .then((j: { unsubscribes?: Unsub[]; pending?: boolean }) => { if (live) { setRows(j.unsubscribes ?? []); setPending(!!j.pending); } })
+      .catch(() => { if (live) setRows([]); });
+    return () => { live = false; };
+  }, [token]);
+
+  return (
+    <Card>
+      <CardTitle>Recent unsubscribes</CardTitle>
+      {rows === null ? <div className="skeleton h-16 rounded-lg mt-3" />
+        : rows.length === 0 ? (
+          <p className="text-[13px] text-[#555] mt-3">{pending ? "Starts recording once migration 0050 is applied." : "Nobody has unsubscribed yet."}</p>
+        ) : (
+          <ul className="divide-y divide-[#111] mt-2">
+            {rows.map((u, i) => (
+              <li key={i} className="py-2.5 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-[13px] text-[#ddd] truncate">{u.name ?? "Unknown"} <span className="text-[#555]">· {u.email ?? "no email"}</span></div>
+                  <div className="text-[12px] text-[#666] mt-0.5">
+                    {u.method === "one_click" ? "Email app button" : "Email link"}{u.lastEmailType ? ` · after ${u.lastEmailType.replace(/_/g, " ")}` : ""}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[12px] font-medium text-[#f5a623]">{UNSUB_SCOPE[u.scope] ?? u.scope}</div>
+                  <div className="text-[11px] text-[#555] mt-0.5">{new Date(u.at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+    </Card>
   );
 }
 

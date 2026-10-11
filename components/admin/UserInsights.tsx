@@ -32,6 +32,11 @@ const money = (usd: number) => usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFix
 const cents = (c?: number | null) => c == null ? null : `$${(c / 100).toFixed(2)}`;
 // refund_requests.kind, written by the Dashboard's lib/refund/*. Older rows
 // from the review queue have none.
+// email_unsubscribes.scope, from the Dashboard's lib/email/unsubscribe.ts.
+const UNSUB_SCOPE: Record<string, string> = {
+  weeklyDigest: "Weekly summaries", supportReplies: "Emailed support replies", activation: "Next-step suggestions",
+  coaching: "Application coaching", all: "All optional emails",
+};
 const REFUND_KIND_LABEL: Record<string, string> = {
   first_payment:  "First-payment refund",
   unused_credits: "Unused-credits refund",
@@ -387,6 +392,19 @@ export function ActivityPanel(p: PanelProps) {
                       </li>
                     ))}
                   </ul>
+                  {d.unsubscribes.length > 0 && (
+                    <div className="border-t border-[#141414] px-4 py-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-[#555] mb-2">Unsubscribe history</div>
+                      <ul className="flex flex-col gap-1.5">
+                        {d.unsubscribes.map((u, i) => (
+                          <li key={i} className="text-[12px] text-[#aaa]">
+                            <span className="text-[#f5a623]">{UNSUB_SCOPE[u.scope] ?? u.scope}</span> off · {fmt(u.at)}
+                            <span className="text-[#555]"> · {u.method === "one_click" ? "email app button" : "email link"}{u.lastEmailType ? ` · after ${u.lastEmailType.replace(/_/g, " ")}` : ""}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </Block>
               </div>
             </div>
