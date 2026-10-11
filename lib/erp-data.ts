@@ -70,7 +70,10 @@ export async function fetchAll<T = Record<string, unknown>>(
 // ─── Row types ────────────────────────────────────────────────────────────────
 
 type Row = Record<string, unknown>;
-interface ProfileRow { user_id: string; name: string | null; email: string; provider: string | null; is_admin: boolean; created_at: string; updated_at: string; last_login: string | null }
+interface ProfileRow {
+  user_id: string; name: string | null; email: string; provider: string | null; is_admin: boolean; created_at: string; updated_at: string; last_login: string | null;
+  weekly_digest_opt_out: boolean | null; activation_email_opt_out: boolean | null; application_email_opt_out: boolean | null;
+}
 interface SubRow {
   user_id: string; plan: string; status: string;
   stripe_customer_id: string | null; stripe_subscription_id: string | null;
@@ -150,7 +153,7 @@ function summarisePacks(rows: PackRow[]): PackSummary {
 export async function loadUsers(sb: SupabaseClient) {
   const today = new Date().toISOString().slice(0, 10);
   const [profiles, subs, counters, packs, metas, sessions, students] = await Promise.all([
-    fetchAll<ProfileRow>((a, b) => sb.from("profiles").select("user_id,name,email,provider,is_admin,created_at,updated_at,last_login").range(a, b)),
+    fetchAll<ProfileRow>((a, b) => sb.from("profiles").select("user_id,name,email,provider,is_admin,created_at,updated_at,last_login,weekly_digest_opt_out,activation_email_opt_out,application_email_opt_out").range(a, b)),
     fetchAll<SubRow>((a, b) => sb.from("subscriptions").select("*").range(a, b)),
     fetchAll<Row>((a, b) => sb.from("usage_counters").select("*").gte("period_end", today).range(a, b)),
     fetchAll<PackRow>((a, b) => sb.from("credit_packs").select("user_id,pack_key,granted,consumed,price_cents,purchased_at,refunded_at").range(a, b)),
@@ -191,6 +194,13 @@ export async function loadUsers(sb: SupabaseClient) {
       // profiles.last_login is no longer kept up to date by the Dashboard, so
       // take whichever is newer: it or the latest session activity.
       lastLogin: [p.last_login, lastSeen.get(p.user_id)].filter((v): v is string => !!v).sort().pop(),
+      // Which optional emails this person has turned off (the Dashboard's
+      // unsubscribe links write these flags).
+      emailOptOuts: [
+        p.weekly_digest_opt_out && "weekly digest",
+        p.activation_email_opt_out && "next steps",
+        p.application_email_opt_out && "coaching",
+      ].filter((v): v is string => !!v),
       lastContactedAt: meta?.last_contacted_at ?? undefined,
       lastContactSubject: meta?.last_contact_subject ?? undefined,
       subscription: {

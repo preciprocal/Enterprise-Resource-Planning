@@ -86,6 +86,16 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
     : [];
 
   const profile = profileRows[0] ?? {};
+
+  // The two opt-outs that live outside profiles: emailed support replies
+  // (user_settings) and product updates (newsletter_subscribers, by email).
+  const [settingsRow, newsletterRow] = await Promise.all([
+    sb.from("user_settings").select("settings").eq("user_id", userId).maybeSingle().then(r => r.data, () => null),
+    profile.email
+      ? sb.from("newsletter_subscribers").select("subscribed").eq("email", String(profile.email).toLowerCase().trim()).maybeSingle().then(r => r.data, () => null)
+      : Promise.resolve(null),
+  ]);
+  const notif = ((settingsRow?.settings as Record<string, unknown> | undefined)?.notifications ?? {}) as Record<string, unknown>;
   const sub = subRows[0] ?? {};
 
   // Email engagement: Resend webhook events joined by resend_id.
@@ -198,6 +208,9 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
         weeklyDigest: !profile.weekly_digest_opt_out, weeklyDigestSentAt: profile.weekly_digest_sent_at ?? null,
         activation: !profile.activation_email_opt_out, activationCount: profile.activation_email_count ?? 0, activationLastStep: profile.activation_email_last_step ?? null,
         applications: !profile.application_email_opt_out, welcomeSentAt: profile.welcome_email_sent_at ?? null,
+        supportReplies: notif.supportReplies !== false,
+        // null: never on the list, which is "not subscribed" rather than an opt-out.
+        productUpdates: newsletterRow ? newsletterRow.subscribed !== false : null,
       },
     },
     stats: {

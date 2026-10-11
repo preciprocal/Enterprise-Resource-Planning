@@ -44,6 +44,8 @@ export interface User {
   id: string; name?: string; email?: string; provider?: string; isAdmin?: boolean;
   createdAt?: string; updatedAt?: string; lastLogin?: string;
   lastContactedAt?: string; lastContactSubject?: string;
+  /** Optional emails turned off, e.g. ["weekly digest", "coaching"]. */
+  emailOptOuts?: string[];
   subscription?: Subscription; usage?: Usage; packs?: PackSummary; student?: StudentInfo; [key: string]: unknown;
 }
 

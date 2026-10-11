@@ -310,6 +310,12 @@ export default function UsersTab({
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                             <span className="text-[14px] font-semibold text-[#e0e0e0] truncate leading-tight shrink-0 max-w-full">{u.name ?? "Unknown"}</span>
                             <StudentChip student={u.student} compact className="shrink-0" />
+                            {(u.emailOptOuts?.length ?? 0) > 0 && (
+                              <span title={`Turned off: ${u.emailOptOuts!.join(", ")}`}
+                                className="shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-md border border-[rgba(245,166,35,0.25)] bg-[rgba(245,166,35,0.06)] text-[#f5a623]">
+                                {u.emailOptOuts!.length >= 3 ? "Unsubscribed" : "Some emails off"}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[13px] text-[#555] truncate mt-0.5">{u.email}</div>
                         </div>

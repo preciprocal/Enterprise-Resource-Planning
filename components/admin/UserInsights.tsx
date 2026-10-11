@@ -384,6 +384,8 @@ export function ActivityPanel(p: PanelProps) {
                       ["Weekly digest", prefs.weeklyDigest, prefs.weeklyDigestSentAt ? `last ${daysAgo(prefs.weeklyDigestSentAt as string)}` : null],
                       ["Activation nudges", prefs.activation, prefs.activationCount ? `${prefs.activationCount} sent${prefs.activationLastStep ? ` · ${prefs.activationLastStep}` : ""}` : null],
                       ["Application updates", prefs.applications, null],
+                      ["Emailed support replies", prefs.supportReplies, prefs.supportReplies ? null : "still shown in the app"],
+                      ...(prefs.productUpdates === null ? [] : [["Product updates", prefs.productUpdates, null] as [string, boolean, string | null]]),
                       ["Welcome email", !!prefs.welcomeSentAt, prefs.welcomeSentAt ? fmt(prefs.welcomeSentAt as string) : "not sent"],
                     ] as [string, boolean, string | null][]).map(([l, on, sub]) => (
                       <li key={l} className="flex items-center justify-between gap-3 px-4 py-2.5">
