@@ -4,10 +4,14 @@
 export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyOAuthState } from "@/lib/oauth-state";
-import { connectOutlook } from "@/lib/outlook";
+import { connectOutlook, PKCE_COOKIE } from "@/lib/outlook";
 
 export async function GET(req: NextRequest) {
-  const back = (q: string) => NextResponse.redirect(new URL(`/?tab=email&${q}`, req.url));
+  const back = (q: string) => {
+    const res = NextResponse.redirect(new URL(`/?tab=email&${q}`, req.url));
+    res.cookies.set(PKCE_COOKIE, "", { path: "/api/auth/callback/outlook", maxAge: 0 });
+    return res;
+  };
   const code = req.nextUrl.searchParams.get("code");
   if (!code) {
     // Microsoft sends error + error_description instead of a code; pass the
@@ -21,10 +25,13 @@ export async function GET(req: NextRequest) {
   const adminEmail = verifyOAuthState(req.nextUrl.searchParams.get("state"));
   if (!adminEmail || !adminEmail.includes("@")) return back("error=outlook_state");
   try {
-    await connectOutlook(adminEmail, code, req.nextUrl.origin);
+    const verifier = req.cookies.get(PKCE_COOKIE)?.value;
+    if (!verifier) return back("error=outlook_state");
+    await connectOutlook(adminEmail, code, req.nextUrl.origin, verifier);
   } catch (e) {
-    console.error("[outlook] token exchange failed:", (e as Error).message);
-    return back("error=outlook_token_failed");
+    const msg = (e as Error).message;
+    console.error("[outlook] token exchange failed:", msg);
+    return back(`error=outlook_token_failed&ms_desc=${encodeURIComponent(msg.slice(0, 300))}`);
   }
   return back("connected=outlook");
 }

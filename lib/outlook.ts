@@ -15,6 +15,7 @@
 // app) and a Web redirect URI <ERP origin>/api/auth/callback/outlook. Without
 // the secret the tab falls back to the browser sign-in.
 import "server-only";
+import { createHash, randomBytes } from "crypto";
 import { deleteIntegration, getIntegration, saveIntegration, type IntegrationId } from "@/lib/integrations";
 
 export const OUTLOOK_SCOPES = "offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send";
@@ -24,7 +25,14 @@ export const outlookServerEnabled = () => !!(process.env.NEXT_PUBLIC_MS_CLIENT_I
 export const outlookRedirectUri = (origin: string) => process.env.MS_MAIL_REDIRECT_URI || `${origin}/api/auth/callback/outlook`;
 const idFor = (adminEmail: string): IntegrationId => `outlook:${adminEmail.trim().toLowerCase()}`;
 
-export function outlookAuthorizeUrl(origin: string, state: string, firstTime: boolean): string {
+/** PKCE pair. The verifier rides in an httpOnly cookie to the callback. */
+export function pkcePair() {
+  const verifier = randomBytes(32).toString("base64url");
+  return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
+}
+export const PKCE_COOKIE = "ol_pkce";
+
+export function outlookAuthorizeUrl(origin: string, state: string, firstTime: boolean, challenge: string): string {
   const u = new URL(`https://login.microsoftonline.com/${tenant()}/oauth2/v2.0/authorize`);
   u.searchParams.set("client_id", process.env.NEXT_PUBLIC_MS_CLIENT_ID!);
   u.searchParams.set("response_type", "code");
@@ -32,6 +40,8 @@ export function outlookAuthorizeUrl(origin: string, state: string, firstTime: bo
   u.searchParams.set("response_mode", "query");
   u.searchParams.set("scope", OUTLOOK_SCOPES);
   u.searchParams.set("state", state);
+  u.searchParams.set("code_challenge", challenge);
+  u.searchParams.set("code_challenge_method", "S256");
   // Only the first connection shows the account picker; a reconnect goes
   // straight through with the Microsoft session the browser already has.
   if (firstTime) u.searchParams.set("prompt", "select_account");
@@ -57,8 +67,8 @@ async function tokenRequest(params: Record<string, string>): Promise<TokenRespon
   return j;
 }
 
-export async function connectOutlook(adminEmail: string, code: string, origin: string): Promise<void> {
-  const t = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: outlookRedirectUri(origin) });
+export async function connectOutlook(adminEmail: string, code: string, origin: string, verifier: string): Promise<void> {
+  const t = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: outlookRedirectUri(origin), code_verifier: verifier });
   await saveIntegration(idFor(adminEmail), {
     access_token: t.access_token!,
     refresh_token: t.refresh_token,
