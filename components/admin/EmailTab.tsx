@@ -1,7 +1,17 @@
 // components/admin/EmailTab.tsx
+// Outlook inbox for the signed-in admin.
+//
+// Styled with the ERP's dark palette (#0a0a0a, #ededed, ...), which globals.css
+// remaps when the ERP is switched to light mode, so the tab follows the theme
+// instead of always rendering light.
+//
+// Sign-in: when MS_MAIL_CLIENT_SECRET is set, the connection is kept on the
+// server for each admin (lib/outlook.ts) and lasts until it is disconnected or
+// goes unused for 90 days. Without it the tab falls back to the older
+// browser-only sign-in, which Microsoft limits to about a day at a time.
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import { Spinner, useIsMobile } from "./admin-shared";
+import { useState, useEffect, useCallback, useContext, useRef } from "react";
+import { Spinner, useIsMobile, AdminTokenContext } from "./admin-shared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +36,7 @@ const SCOPES      = "Mail.Read Mail.Send Mail.ReadWrite offline_access User.Read
 const TOKEN_KEY   = "ms_email_token";
 const REFRESH_KEY = "ms_email_refresh";
 const EXPIRY_KEY  = "ms_email_expiry";
+const VERIFIER_KEY = "ms_pkce_verifier";
 
 const FOLDERS = [
   { id: "inbox",        label: "Inbox",  icon: "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z" },
@@ -34,6 +45,12 @@ const FOLDERS = [
   { id: "junkemail",    label: "Junk",   icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" },
   { id: "deleteditems", label: "Trash",  icon: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" },
 ] as const;
+
+const CALLBACK_ERRORS: Record<string, string> = {
+  outlook_denied: "Microsoft sign-in was cancelled.",
+  outlook_state: "That sign-in link expired. Try connecting again.",
+  outlook_token_failed: "Microsoft did not accept the sign-in. Check the app's client secret and redirect URI.",
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,7 +64,7 @@ function fmtDate(iso: string) {
 
 function initials(name: string) {
   const p = name.trim().split(" ");
-  return (p[0][0] + (p[1]?.[0] ?? "")).toUpperCase();
+  return ((p[0]?.[0] ?? "?") + (p[1]?.[0] ?? "")).toUpperCase();
 }
 
 function avatarColor(name: string) {
@@ -57,7 +74,16 @@ function avatarColor(name: string) {
   return cols[Math.abs(h) % cols.length];
 }
 
-const VERIFIER_KEY = "ms_pkce_verifier";
+const isLightTheme = () => typeof document !== "undefined" && document.documentElement.dataset.theme === "light";
+
+/** HTML emails are written for white pages; restyle them to match the theme. */
+function emailDoc(html: string) {
+  const light = isLightTheme();
+  const bg = light ? "#ffffff" : "#0a0a0a", fg = light ? "#1f2937" : "#d4d4d4", link = light ? "#4F6FF0" : "#8b9cf7";
+  return `<base target="_blank"><style>html,body{background:${bg}!important;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;margin:0;padding:4px 2px}*{color:${fg}!important;max-width:100%;box-sizing:border-box;border-color:${light ? "#e5e7eb" : "#262626"}!important}a,a *{color:${link}!important}td,th,div,p,span,h1,h2,h3,h4,h5,h6,li,table,center,section,article,header,footer{background-color:${bg}!important;background-image:none!important}img{height:auto}</style>${html}`;
+}
+
+// ── Browser-only sign-in (fallback when the server connection isn't set up) ──
 
 async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
   const array    = crypto.getRandomValues(new Uint8Array(32));
@@ -69,44 +95,44 @@ async function generatePKCE(): Promise<{ verifier: string; challenge: string }> 
   return { verifier, challenge };
 }
 
-async function startOAuth(): Promise<void> {
+async function startBrowserOAuth(): Promise<void> {
   const { verifier, challenge } = await generatePKCE();
   localStorage.setItem(VERIFIER_KEY, verifier);
   const clientId    = process.env.NEXT_PUBLIC_MS_CLIENT_ID ?? "";
   const tenantId    = process.env.NEXT_PUBLIC_MS_TENANT_ID ?? "common";
   const redirectUri = encodeURIComponent(window.location.href.split("?")[0].split("#")[0]);
-  const scope       = encodeURIComponent(SCOPES);
+  // The account picker only on the first sign-in on this browser.
+  const firstTime   = !localStorage.getItem(REFRESH_KEY) && !localStorage.getItem("ms_email_connected_once");
   window.location.href =
     "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/authorize" +
     "?client_id=" + clientId +
     "&response_type=code" +
     "&redirect_uri=" + redirectUri +
-    "&scope=" + scope +
+    "&scope=" + encodeURIComponent(SCOPES) +
     "&response_mode=query" +
     "&code_challenge=" + challenge +
     "&code_challenge_method=S256" +
-    "&prompt=select_account";
+    (firstTime ? "&prompt=select_account" : "");
 }
 
-interface TokenResponse {
-  access_token:  string;
-  refresh_token?: string;
-  expires_in?:   number;
-}
+interface TokenResponse { access_token: string; refresh_token?: string; expires_in?: number }
 
 function persistTokens(data: TokenResponse) {
   localStorage.setItem(TOKEN_KEY, data.access_token);
   if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
-  const expiresAt = Date.now() + ((data.expires_in ?? 3600) - 60) * 1000;
-  localStorage.setItem(EXPIRY_KEY, String(expiresAt));
+  localStorage.setItem(EXPIRY_KEY, String(Date.now() + ((data.expires_in ?? 3600) - 60) * 1000));
+  localStorage.setItem("ms_email_connected_once", "1");
+}
+function clearBrowserTokens() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(EXPIRY_KEY);
 }
 
 async function fetchToken(body: URLSearchParams): Promise<TokenResponse> {
   const tenantId = process.env.NEXT_PUBLIC_MS_TENANT_ID ?? "common";
-  const res = await fetch(
-    "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token",
-    { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }
-  );
+  const res = await fetch("https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token",
+    { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
   if (!res.ok) {
     const e = await res.json().catch(() => ({})) as { error_description?: string };
     throw new Error(e.error_description ?? "Token request failed");
@@ -115,15 +141,12 @@ async function fetchToken(body: URLSearchParams): Promise<TokenResponse> {
 }
 
 async function exchangeCode(code: string): Promise<string> {
-  const clientId    = process.env.NEXT_PUBLIC_MS_CLIENT_ID ?? "";
-  const redirectUri = window.location.href.split("?")[0].split("#")[0];
-  const verifier    = localStorage.getItem(VERIFIER_KEY) ?? "";
   const data = await fetchToken(new URLSearchParams({
     grant_type:    "authorization_code",
     code,
-    client_id:     clientId,
-    redirect_uri:  redirectUri,
-    code_verifier: verifier,
+    client_id:     process.env.NEXT_PUBLIC_MS_CLIENT_ID ?? "",
+    redirect_uri:  window.location.href.split("?")[0].split("#")[0],
+    code_verifier: localStorage.getItem(VERIFIER_KEY) ?? "",
     scope:         SCOPES,
   }));
   localStorage.removeItem(VERIFIER_KEY);
@@ -131,39 +154,33 @@ async function exchangeCode(code: string): Promise<string> {
   return data.access_token;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+async function browserToken(force = false): Promise<string | null> {
+  const tok    = localStorage.getItem(TOKEN_KEY);
+  const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) ?? "0", 10);
+  if (!force && tok && Date.now() < expiry) return tok;
   const refreshToken = localStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return null;
   try {
-    const clientId = process.env.NEXT_PUBLIC_MS_CLIENT_ID ?? "";
     const data = await fetchToken(new URLSearchParams({
-      grant_type:    "refresh_token",
-      refresh_token: refreshToken,
-      client_id:     clientId,
-      scope:         SCOPES,
+      grant_type: "refresh_token", refresh_token: refreshToken,
+      client_id: process.env.NEXT_PUBLIC_MS_CLIENT_ID ?? "", scope: SCOPES,
     }));
     persistTokens(data);
     return data.access_token;
   } catch {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    localStorage.removeItem(EXPIRY_KEY);
+    clearBrowserTokens();
     return null;
   }
 }
 
-async function getValidToken(): Promise<string | null> {
-  const tok    = localStorage.getItem(TOKEN_KEY);
-  const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) ?? "0", 10);
-  if (tok && Date.now() < expiry) return tok;
-  return refreshAccessToken();
-}
+class AuthError extends Error {}
 
 async function graphFetch<T>(path: string, token: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(GRAPH + path, {
     ...opts,
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json", ...(opts?.headers ?? {}) },
   });
+  if (res.status === 401) throw new AuthError("Signed out of Microsoft");
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: { message: res.statusText } })) as { error?: { message?: string } };
     throw new Error(err?.error?.message ?? res.statusText);
@@ -172,74 +189,51 @@ async function graphFetch<T>(path: string, token: string, opts?: RequestInit): P
   return res.json() as Promise<T>;
 }
 
+// ─── Small UI pieces ──────────────────────────────────────────────────────────
+
+const MsLogo = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="2" y="2" width="9" height="9" fill="#F25022"/>
+    <rect x="13" y="2" width="9" height="9" fill="#7FBA00"/>
+    <rect x="2" y="13" width="9" height="9" fill="#00A4EF"/>
+    <rect x="13" y="13" width="9" height="9" fill="#FFB900"/>
+  </svg>
+);
+
+const btnGhost = "flex items-center gap-1.5 px-3 h-8 rounded-lg border border-[#2a2a2a] bg-transparent text-[12px] font-medium text-[#aaa] cursor-pointer hover:text-[#ededed] hover:border-[#444] transition-colors";
+const btnPrimary = "flex items-center justify-center gap-1.5 px-4 h-9 rounded-lg bg-[#ededed] text-black text-[13px] font-semibold border-none cursor-pointer hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors";
+
 // ─── Not-configured screen ────────────────────────────────────────────────────
 
 function NotConfigured() {
+  const steps = [
+    { title: "Create an App Registration", body: "In portal.azure.com open App registrations, choose New registration, allow accounts in any directory and personal Microsoft accounts, then Register." },
+    { title: "Copy the IDs", body: "From the Overview page copy the Application (client) ID and Directory (tenant) ID." },
+    { title: "Add Mail permissions", body: "API permissions, Add a permission, Microsoft Graph, Delegated: Mail.Read, Mail.Send, Mail.ReadWrite. Then grant admin consent." },
+    { title: "Add a client secret and redirect URI", body: "Certificates & secrets, New client secret. Authentication, Add a platform, Web, and enter <ERP URL>/api/auth/callback/outlook." },
+    { title: "Set the env vars", body: "NEXT_PUBLIC_MS_CLIENT_ID, NEXT_PUBLIC_MS_TENANT_ID and MS_MAIL_CLIENT_SECRET, then redeploy." },
+  ];
   return (
-    <div className="flex-1 flex items-center justify-center bg-gray-50 p-6">
+    <div className="flex-1 flex items-center justify-center bg-[#000] p-6 overflow-y-auto">
       <div className="max-w-lg w-full">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0 shadow-sm">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <rect x="2" y="2" width="9" height="9" fill="#F25022"/>
-              <rect x="13" y="2" width="9" height="9" fill="#7FBA00"/>
-              <rect x="2" y="13" width="9" height="9" fill="#00A4EF"/>
-              <rect x="13" y="13" width="9" height="9" fill="#FFB900"/>
-            </svg>
-          </div>
+          <div className="w-11 h-11 rounded-xl bg-[#111] border border-[#1a1a1a] flex items-center justify-center shrink-0"><MsLogo size={24} /></div>
           <div>
-            <h2 className="text-[16px] font-bold text-gray-900">Outlook not connected</h2>
-            <p className="text-[13px] text-gray-500">Add 2 env vars to enable this tab</p>
+            <h2 className="text-[16px] font-semibold text-[#ededed]">Outlook is not set up</h2>
+            <p className="text-[13px] text-[#888]">Connect a Microsoft app to read and send email here.</p>
           </div>
         </div>
-        <div className="bg-slate-900 rounded-xl p-4 mb-5">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add to your .env.local</div>
-          {[
-            { key: "NEXT_PUBLIC_MS_CLIENT_ID", desc: "Application (client) ID from your Azure App Registration" },
-            { key: "NEXT_PUBLIC_MS_TENANT_ID", desc: "Tenant ID - use common for personal accounts, or your tenant GUID" },
-          ].map(v => (
-            <div key={v.key} className="mb-3 last:mb-0">
-              <div className="font-mono text-[13px] text-indigo-300 mb-0.5">{v.key}=<span className="text-slate-400">your_value_here</span></div>
-              <div className="text-[11px] text-slate-500">{v.desc}</div>
-            </div>
-          ))}
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <span className="text-[13px] font-bold text-gray-700">How to set up Azure (5 min)</span>
-          </div>
-          {[
-            { n: 1, color: "indigo", title: "Create App Registration", body: "Go to portal.azure.com, search \u201cApp registrations\u201d, click \u201cNew registration\u201d, set Supported account types to \u201cAccounts in any org directory and personal Microsoft accounts\u201d, then Register." },
-            { n: 2, color: "indigo", title: "Copy your IDs", body: "On the app Overview page copy Application (client) ID and Directory (tenant) ID." },
-            { n: 4, color: "indigo", title: "Set redirect URI", body: "Left sidebar \u203a \u201cAuthentication\u201d \u203a \u201c+ Add a platform\u201d \u203a \u201cSingle-page application\u201d \u203a paste your admin dashboard URL \u203a Save." },
-            { n: 5, color: "green",  title: "Add env vars & restart", body: "Add both env vars to .env.local and restart the dev server." },
-          ].map((s, i) => (
-            <div key={s.n} className={"px-4 py-3 border-b border-gray-100" + (i === 3 ? " last:border-0" : "")}>
-              <div className="flex items-start gap-3">
-                <div className={"w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 bg-" + s.color + "-100 text-" + s.color + "-700"}>{s.n}</div>
-                <div>
-                  <p className="text-[13px] font-semibold text-gray-800 mb-1">{s.title}</p>
-                  <p className="text-[12px] text-gray-500 leading-relaxed">{s.body}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-          <div className="px-4 py-3 bg-amber-50/40 border-t border-gray-100">
-            <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">3</div>
+        <ol className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl list-none m-0 p-0">
+          {steps.map((s, i) => (
+            <li key={s.title} className="flex items-start gap-3 px-4 py-3 border-0 border-b border-solid border-[#141414] last:border-b-0">
+              <span className="w-5 h-5 rounded-full bg-[#1a1a1a] text-[#ccc] text-[11px] font-semibold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
               <div>
-                <p className="text-[13px] font-semibold text-gray-800 mb-1">Add Mail permissions <span className="text-amber-600 font-normal">(where people get stuck)</span></p>
-                <p className="text-[12px] text-gray-600 leading-relaxed">Left sidebar &gt; &ldquo;API permissions&rdquo; &gt; &ldquo;+ Add a permission&rdquo; &gt; &ldquo;Microsoft Graph&rdquo; &gt; &ldquo;Delegated permissions&rdquo; &gt; search Mail and tick:</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {["Mail.Read","Mail.Send","Mail.ReadWrite"].map(p => (
-                    <code key={p} className="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5 text-[12px] font-mono font-semibold">{p}</code>
-                  ))}
-                </div>
-                <p className="text-[12px] text-gray-500 mt-2">Then click &ldquo;Add permissions&rdquo; and &ldquo;Grant admin consent&rdquo;.</p>
+                <p className="text-[13px] font-semibold text-[#ddd] mb-0.5">{s.title}</p>
+                <p className="text-[12px] text-[#888] leading-relaxed">{s.body}</p>
               </div>
-            </div>
-          </div>
-        </div>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );
@@ -248,9 +242,9 @@ function NotConfigured() {
 // ─── Compose Modal ────────────────────────────────────────────────────────────
 
 function ComposeModal({
-  token, onClose, prefill,
+  getToken, onClose, prefill,
 }: {
-  token: string;
+  getToken: () => Promise<string | null>;
   onClose: () => void;
   prefill?: { to?: string; subject?: string; body?: string };
 }) {
@@ -261,33 +255,42 @@ function ComposeModal({
   const [err,     setErr]     = useState("");
   const [sent,    setSent]    = useState(false);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const send = async () => {
     if (!to.trim() || !subject.trim()) return;
     setSending(true); setErr("");
     try {
+      const token = await getToken();
+      if (!token) throw new Error("Reconnect Outlook to send.");
       await graphFetch("/me/sendMail", token, {
         method: "POST",
         body: JSON.stringify({
           message: {
             subject,
             body: { contentType: "Text", content: body },
-            toRecipients: to.split(",").map(a => ({ emailAddress: { address: a.trim() } })),
+            toRecipients: to.split(",").map(a => ({ emailAddress: { address: a.trim() } })).filter(r => r.emailAddress.address),
           },
           saveToSentItems: true,
         }),
       });
       setSent(true);
-      setTimeout(onClose, 1200);
+      setTimeout(onClose, 1000);
     } catch (e) { setErr((e as Error).message); }
     finally { setSending(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <span className="text-[14px] font-bold text-gray-900">New Message</span>
-          <button onClick={onClose} className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer border-none bg-transparent text-gray-400">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label="New message">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#1a1a1a]">
+          <span className="text-[14px] font-semibold text-[#ededed]">{prefill?.subject?.startsWith("Re:") ? "Reply" : prefill?.subject?.startsWith("Fwd:") ? "Forward" : "New message"}</span>
+          <button onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-md hover:bg-[#1a1a1a] flex items-center justify-center cursor-pointer border-none bg-transparent text-[#888] hover:text-[#ededed]">
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -296,23 +299,22 @@ function ComposeModal({
             { label: "To",      value: to,      onChange: setTo,      placeholder: "recipient@example.com, ..." },
             { label: "Subject", value: subject, onChange: setSubject, placeholder: "Subject" },
           ].map(f => (
-            <div key={f.label} className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100">
-              <span className="text-[12px] font-semibold text-gray-400 w-12 shrink-0">{f.label}</span>
+            <div key={f.label} className="flex items-center gap-3 px-5 py-2.5 border-b border-[#141414]">
+              <span className="text-[12px] font-medium text-[#666] w-14 shrink-0">{f.label}</span>
               <input value={f.value} onChange={e => f.onChange(e.target.value)} placeholder={f.placeholder}
-                className="flex-1 text-[14px] border-none outline-none bg-transparent text-gray-900" />
+                className="flex-1 text-[14px] border-none outline-none bg-transparent text-[#ededed] placeholder:text-[#444] font-[inherit]" />
             </div>
           ))}
           <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message..."
-            className="w-full resize-none text-[14px] text-gray-800 px-5 py-4 border-none outline-none bg-transparent"
-            rows={10} />
+            className="w-full resize-none text-[14px] text-[#ddd] px-5 py-4 border-none outline-none bg-transparent placeholder:text-[#444] font-[inherit] leading-relaxed"
+            rows={12} />
         </div>
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 gap-3">
-          {err  && <span className="text-[13px] text-red-500 flex-1 truncate">{err}</span>}
-          {sent && <span className="text-[13px] text-green-600 font-semibold flex-1">Sent!</span>}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-[#1a1a1a] gap-3">
+          {err  && <span className="text-[13px] text-[#f44] flex-1 truncate">{err}</span>}
+          {sent && <span className="text-[13px] text-[#3ecf8e] font-semibold flex-1">Sent</span>}
           {!err && !sent && <span className="flex-1" />}
-          <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-500 hover:text-gray-700 border-none bg-transparent cursor-pointer">Cancel</button>
-          <button onClick={send} disabled={sending || !to.trim() || !subject.trim() || sent}
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[13px] font-semibold rounded-xl transition-colors cursor-pointer border-none flex items-center gap-2">
+          <button onClick={onClose} className="px-3 h-9 text-[13px] font-medium text-[#888] hover:text-[#ededed] border-none bg-transparent cursor-pointer">Cancel</button>
+          <button onClick={send} disabled={sending || !to.trim() || !subject.trim() || sent} className={btnPrimary}>
             {sending ? <Spinner size={12} /> : <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
             {sending ? "Sending..." : "Send"}
           </button>
@@ -324,29 +326,27 @@ function ComposeModal({
 
 // ─── Sign-in screen ───────────────────────────────────────────────────────────
 
-function SignInScreen({ error }: { error?: string }) {
+function SignInScreen({ error, onConnect, busy, server }: { error?: string; onConnect: () => void; busy: boolean; server: boolean }) {
   return (
-    <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
-      <div className="text-center max-w-xs">
-        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-5 shadow-sm">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="2" width="9" height="9" fill="#F25022"/>
-            <rect x="13" y="2" width="9" height="9" fill="#7FBA00"/>
-            <rect x="2" y="13" width="9" height="9" fill="#00A4EF"/>
-            <rect x="13" y="13" width="9" height="9" fill="#FFB900"/>
-          </svg>
-        </div>
-        <h2 className="text-[17px] font-bold text-gray-900 mb-1.5">Outlook Inbox</h2>
-        <p className="text-[14px] text-gray-400 mb-6">Sign in with Microsoft to read and send emails.</p>
-        <button
-          onClick={() => { void startOAuth(); }}
-          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[14px] font-semibold rounded-xl transition-colors cursor-pointer border-none flex items-center justify-center gap-2 shadow-sm">
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
-          </svg>
-          Sign in with Microsoft
+    <div className="flex-1 flex items-center justify-center bg-[#000] p-8">
+      <div className="text-center max-w-sm w-full">
+        <div className="w-14 h-14 rounded-2xl bg-[#111] border border-[#1a1a1a] flex items-center justify-center mx-auto mb-5"><MsLogo size={28} /></div>
+        <h2 className="text-[17px] font-semibold text-[#ededed] mb-1.5">Connect Outlook</h2>
+        <p className="text-[14px] text-[#888] mb-6 leading-relaxed">
+          {server
+            ? "Sign in with Microsoft once. The ERP keeps you connected on every device you use it on."
+            : "Sign in with Microsoft to read and send email."}
+        </p>
+        <button onClick={onConnect} disabled={busy} className={btnPrimary + " w-full h-10"}>
+          {busy ? <Spinner size={13} /> : <MsLogo size={15} />}
+          Continue with Microsoft
         </button>
-        {error && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-600">{error}</div>}
+        {!server && (
+          <p className="text-[12px] text-[#555] mt-4 leading-relaxed">
+            Microsoft ends this kind of sign-in after about a day. Add MS_MAIL_CLIENT_SECRET to the ERP to stay signed in.
+          </p>
+        )}
+        {error && <div className="mt-4 p-3 rounded-lg text-[13px] text-[#f44] bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)]">{error}</div>}
       </div>
     </div>
   );
@@ -356,9 +356,15 @@ function SignInScreen({ error }: { error?: string }) {
 
 export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: number) => void } = {}) {
   const isMobile     = useIsMobile();
+  const adminToken   = useContext(AdminTokenContext);
   const isConfigured = !!(process.env.NEXT_PUBLIC_MS_CLIENT_ID);
 
+  // null while checking; true = connection held by the ERP server
+  const [server,     setServer]     = useState<boolean | null>(null);
+  const [checking,   setChecking]   = useState(true);
+  const [connecting, setConnecting] = useState(false);
   const [token,      setToken]      = useState<string | null>(null);
+  const expiresAt = useRef(0);
   const [folder,     setFolder]     = useState("inbox");
   const [emails,     setEmails]     = useState<MSEmail[]>([]);
   const [loading,    setLoading]    = useState(false);
@@ -368,215 +374,239 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
   const [replyTo,    setReplyTo]    = useState<MSEmail | null>(null);
   const [forwardOf,  setForwardOf]  = useState<MSEmail | null>(null);
   const [search,     setSearch]     = useState("");
-  // API counts for non-active folders (Sent, Drafts, Junk, Trash)
   const [otherFolderUnread, setOtherFolderUnread] = useState<Record<string, number>>({});
-  const [me,         setMe]         = useState<{ displayName: string; mail: string } | null>(null);
+  const [me,         setMe]         = useState<{ displayName: string; mail: string; userPrincipalName?: string } | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   const selected = emails.find(e => e.id === selectedId) ?? null;
 
-  // Derive unread for the active folder directly from emails[] - always in sync
-  // with optimistic read/unread updates. Other folders use last-fetched API counts.
   const unread: Record<string, number> = {
     ...otherFolderUnread,
     [folder]: emails.filter(e => !e.isRead).length,
   };
-
-  // Bubble inbox unread count up to parent sidebar badge
-  const inboxUnread = folder === "inbox"
-    ? emails.filter(e => !e.isRead).length
-    : (otherFolderUnread["inbox"] ?? 0);
+  const inboxUnread = folder === "inbox" ? emails.filter(e => !e.isRead).length : (otherFolderUnread["inbox"] ?? 0);
   useEffect(() => { onUnreadChange?.(inboxUnread); }, [inboxUnread, onUnreadChange]);
 
-  // ── Restore token / handle OAuth callback ──────────────────────────────
+  // ── Tokens ────────────────────────────────────────────────────────────
+  /** Ask the ERP server for this admin's access token. */
+  const serverToken = useCallback(async (): Promise<{ server: boolean; token: string | null; error?: string }> => {
+    const r = await fetch("/api/email/token", { headers: adminToken ? { "x-admin-token": adminToken } : {}, cache: "no-store" });
+    const j = await r.json().catch(() => ({})) as { server?: boolean; connected?: boolean; token?: string; expiresAt?: number; error?: string };
+    if (j.token) expiresAt.current = j.expiresAt ?? Date.now() + 50 * 60_000;
+    return { server: !!j.server, token: j.token ?? null, error: j.error };
+  }, [adminToken]);
+
+  /** A token that is good for at least another minute, renewing it if needed. */
+  const getToken = useCallback(async (force = false): Promise<string | null> => {
+    if (!force && token && expiresAt.current > Date.now() + 60_000) return token;
+    const t = server ? (await serverToken()).token : await browserToken(force);
+    if (!server && t) expiresAt.current = parseInt(localStorage.getItem(EXPIRY_KEY) ?? "0", 10);
+    setToken(t);
+    return t;
+  }, [token, server, serverToken]);
+
+  // ── Restore the connection / handle the browser OAuth callback ─────────
   useEffect(() => {
-    if (!isConfigured) return;
+    if (!isConfigured || !adminToken) return;
     void Promise.resolve().then(async () => {
       const params = new URLSearchParams(window.location.search);
-      const code   = params.get("code");
+      const cbError = params.get("error");
+      if (cbError && CALLBACK_ERRORS[cbError]) setError(CALLBACK_ERRORS[cbError]);
+      if (params.get("connected") === "outlook" || cbError?.startsWith("outlook_")) {
+        params.delete("connected"); params.delete("error");
+        window.history.replaceState(null, "", window.location.pathname + (params.toString() ? `?${params}` : ""));
+      }
+      try {
+        const s = await serverToken();
+        setServer(s.server);
+        if (s.server) {
+          if (s.token) setToken(s.token);
+          else if (s.error) setError(s.error);
+          return;
+        }
+      } catch { setServer(false); }
+      // Browser-only fallback.
+      const code = params.get("code");
       if (code) {
         try {
-          const tok = await exchangeCode(code);
-          setToken(tok);
-          window.history.replaceState(null, "", window.location.pathname);
-        } catch (e) {
-          setError((e as Error).message);
-        }
+          setToken(await exchangeCode(code));
+          expiresAt.current = parseInt(localStorage.getItem(EXPIRY_KEY) ?? "0", 10);
+        } catch (e) { setError((e as Error).message); }
+        window.history.replaceState(null, "", window.location.pathname);
         return;
       }
-      const tok = await getValidToken();
-      if (tok) setToken(tok);
-    });
-  }, [isConfigured]);
+      const tok = await browserToken();
+      if (tok) { expiresAt.current = parseInt(localStorage.getItem(EXPIRY_KEY) ?? "0", 10); setToken(tok); }
+    }).finally(() => setChecking(false));
+  }, [isConfigured, adminToken, serverToken]);
+
+  // Renew quietly a little before the access token expires.
+  useEffect(() => {
+    if (!token) return;
+    const ms = Math.max(30_000, expiresAt.current - Date.now() - 2 * 60_000);
+    const t = setTimeout(() => { void getToken(true); }, ms);
+    return () => clearTimeout(t);
+  }, [token, getToken]);
+
+  const connect = async () => {
+    setError("");
+    if (!server) { void startBrowserOAuth(); return; }
+    setConnecting(true);
+    try {
+      const r = await fetch("/api/auth/outlook", { headers: adminToken ? { "x-admin-token": adminToken } : {} });
+      const j = await r.json() as { url?: string; error?: string };
+      if (!j.url) throw new Error(j.error ?? "Could not start the Microsoft sign-in");
+      window.location.href = j.url;
+    } catch (e) { setError((e as Error).message); setConnecting(false); }
+  };
+
+  const disconnect = async () => {
+    if (server) {
+      await fetch("/api/email/token", { method: "DELETE", headers: adminToken ? { "x-admin-token": adminToken } : {} }).catch(() => {});
+    } else {
+      clearBrowserTokens();
+    }
+    setToken(null); setEmails([]); setMe(null);
+  };
+
+  /** Graph call that renews the token once on a 401 before giving up. */
+  const graph = useCallback(async <T,>(path: string, opts?: RequestInit): Promise<T> => {
+    const t = await getToken();
+    if (!t) throw new AuthError("Signed out of Microsoft");
+    try { return await graphFetch<T>(path, t, opts); }
+    catch (e) {
+      if (!(e instanceof AuthError)) throw e;
+      const t2 = await getToken(true);
+      if (!t2) { setToken(null); throw e; }
+      return graphFetch<T>(path, t2, opts);
+    }
+  }, [getToken]);
+  // Keep a stable handle for effects so a renewed token doesn't refetch the list.
+  const graphRef = useRef(graph);
+  useEffect(() => { graphRef.current = graph; }, [graph]);
+  const connected = !!token;
 
   // ── User profile ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!token) return;
-    graphFetch<{ displayName: string; mail: string }>("/me?$select=displayName,mail", token)
-      .then(setMe)
-      .catch(() => {});
-  }, [token]);
+    if (!connected) return;
+    graphRef.current<{ displayName: string; mail: string; userPrincipalName?: string }>("/me?$select=displayName,mail,userPrincipalName")
+      .then(setMe).catch(() => {});
+  }, [connected]);
 
   // ── Load emails ───────────────────────────────────────────────────────
-  const loadEmails = useCallback((folderId: string, tok: string) => {
+  const loadEmails = useCallback((folderId: string) => {
     void Promise.resolve()
       .then(() => {
-        setLoading(true);
-        setError("");
-        setSelectedId(null);
-        return graphFetch<{ value: MSEmail[] }>(
+        setLoading(true); setError(""); setSelectedId(null);
+        return graphRef.current<{ value: MSEmail[] }>(
           "/me/mailFolders/" + folderId + "/messages?$top=40&$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,isRead,hasAttachments,importance,webLink&$orderby=receivedDateTime desc",
-          tok
         );
       })
-      .then(data => {
-        setEmails(data.value ?? []);
-        setLoading(false);
-      })
+      .then(data => { setEmails(data.value ?? []); setLoading(false); })
       .catch(e => {
-        const msg = (e as Error).message;
-        if (msg.includes("401") || msg.includes("InvalidAuthentication") || msg.includes("token")) {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(REFRESH_KEY);
-          localStorage.removeItem(EXPIRY_KEY);
-          setToken(null);
-        } else {
-          setError(msg);
-        }
+        if (!(e instanceof AuthError)) setError((e as Error).message);
         setLoading(false);
       });
   }, []);
 
-  useEffect(() => { if (token) loadEmails(folder, token); }, [folder, token, loadEmails]);
+  useEffect(() => { if (connected) loadEmails(folder); }, [folder, connected, loadEmails]);
 
-  // ── Unread counts for non-active folders ─────────────────────────────
-  // Only fetch API counts for folders NOT currently loaded in emails[].
-  // The active folder count is derived from emails[] directly (instant + accurate).
+  // ── Unread counts for the other folders ───────────────────────────────
   useEffect(() => {
-    if (!token) return;
+    if (!connected) return;
     Promise.all(
       FOLDERS.filter(f => f.id !== folder).map(f =>
-        graphFetch<{ unreadItemCount: number }>("/me/mailFolders/" + f.id + "?$select=unreadItemCount", token)
+        graphRef.current<{ unreadItemCount: number }>("/me/mailFolders/" + f.id + "?$select=unreadItemCount")
           .then(r => [f.id, r.unreadItemCount] as const)
           .catch(() => [f.id, 0] as const)
       )
-    ).then(results => {
-      const map: Record<string, number> = {};
-      results.forEach(([id, count]) => { map[id] = count; });
-      setOtherFolderUnread(map);
-    });
-  }, [token, folder]);
+    ).then(results => setOtherFolderUnread(Object.fromEntries(results)));
+  }, [connected, folder]);
 
   // ── Open email ────────────────────────────────────────────────────────
-  // FIX 1: Always mark read on open - update emails[] immediately (not inside the
-  // "!email.body" branch). Previously cached emails skipped the mark-read entirely.
   const openEmail = useCallback(async (email: MSEmail) => {
     setSelectedId(email.id);
     if (isMobile) setMobileView("detail");
-
-    // Optimistically mark as read in emails[] right away
     if (!email.isRead) {
       setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: true } : e));
-      if (token) {
-        graphFetch("/me/messages/" + email.id, token, {
-          method: "PATCH", body: JSON.stringify({ isRead: true }),
-        }).catch(() => {});
-      }
+      graph("/me/messages/" + email.id, { method: "PATCH", body: JSON.stringify({ isRead: true }) }).catch(() => {});
     }
-
-    // Fetch full body + webLink if not already loaded
-    if (!email.body && token) {
+    if (!email.body) {
       try {
-        const full = await graphFetch<MSEmail>(
-          "/me/messages/" + email.id + "?$select=id,subject,body,from,toRecipients,receivedDateTime,isRead,hasAttachments,webLink",
-          token
-        );
-        setEmails(prev => prev.map(e =>
-          e.id === full.id ? { ...e, body: full.body, webLink: full.webLink, isRead: true } : e
-        ));
+        const full = await graph<MSEmail>("/me/messages/" + email.id + "?$select=id,subject,body,from,toRecipients,receivedDateTime,isRead,hasAttachments,webLink");
+        setEmails(prev => prev.map(e => e.id === full.id ? { ...e, body: full.body, webLink: full.webLink, isRead: true } : e));
       } catch {}
     }
-  }, [token, isMobile]);
+  }, [graph, isMobile]);
 
-  // ── Delete ────────────────────────────────────────────────────────────
   const deleteEmail = useCallback(async (id: string) => {
-    if (!token) return;
     setEmails(prev => prev.filter(e => e.id !== id));
     setSelectedId(null);
     if (isMobile) setMobileView("list");
-    graphFetch("/me/messages/" + id, token, { method: "DELETE" }).catch(() => {});
-  }, [token, isMobile]);
+    graph("/me/messages/" + id, { method: "DELETE" }).catch(() => {});
+  }, [graph, isMobile]);
 
-  // ── Toggle read/unread ────────────────────────────────────────────────
-  // FIX 2: Only update emails[] - selected is derived from it automatically.
-  // Previously there was a separate setSelected() that could get out of sync.
   const toggleRead = useCallback(async (email: MSEmail) => {
-    if (!token) return;
     const newVal = !email.isRead;
     setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: newVal } : e));
-    graphFetch("/me/messages/" + email.id, token, {
-      method: "PATCH", body: JSON.stringify({ isRead: newVal }),
-    }).catch(() => {
-      // Revert on failure
-      setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: email.isRead } : e));
-    });
-  }, [token]);
+    graph("/me/messages/" + email.id, { method: "PATCH", body: JSON.stringify({ isRead: newVal }) })
+      .catch(() => setEmails(prev => prev.map(e => e.id === email.id ? { ...e, isRead: email.isRead } : e)));
+  }, [graph]);
 
-  // ── Search filter ─────────────────────────────────────────────────────
-  const filtered = search.trim()
+  const q = search.trim().toLowerCase();
+  const filtered = q
     ? emails.filter(e =>
-        e.subject?.toLowerCase().includes(search.toLowerCase()) ||
-        e.from?.emailAddress?.name?.toLowerCase().includes(search.toLowerCase()) ||
-        e.bodyPreview?.toLowerCase().includes(search.toLowerCase())
-      )
+        e.subject?.toLowerCase().includes(q) ||
+        e.from?.emailAddress?.name?.toLowerCase().includes(q) ||
+        e.from?.emailAddress?.address?.toLowerCase().includes(q) ||
+        e.bodyPreview?.toLowerCase().includes(q))
     : emails;
 
   if (!isConfigured) return <NotConfigured />;
-  if (!token) return <SignInScreen error={error || undefined} />;
+  if (checking) return <div className="flex-1 flex items-center justify-center bg-[#000]"><Spinner size={20} /></div>;
+  if (!token) return <SignInScreen error={error || undefined} onConnect={() => void connect()} busy={connecting} server={!!server} />;
 
   // ── List panel ────────────────────────────────────────────────────────
   const ListPanel = (
-    <div className={"flex flex-col border-r border-gray-100 bg-white " + (isMobile ? "flex-1" : "w-80 shrink-0") + " " + (isMobile && mobileView === "detail" ? "hidden" : "flex")}>
-      <div className="px-3 pt-3 pb-2 border-b border-gray-100 space-y-2">
+    <div className={"flex flex-col border-r border-[#1a1a1a] bg-[#050505] min-h-0 " + (isMobile ? "flex-1" : "w-80 shrink-0") + " " + (isMobile && mobileView === "detail" ? "hidden" : "flex")}>
+      <div className="px-3 pt-3 pb-2 border-b border-[#1a1a1a] space-y-2">
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
-            <svg width="12" height="12" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
-              className="flex-1 text-[13px] bg-transparent border-none outline-none text-gray-700 placeholder-gray-400" />
+          <div className="flex-1 flex items-center gap-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 h-8 focus-within:border-[#555] transition-colors">
+            <svg width="12" height="12" fill="none" stroke="#555" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mail"
+              className="flex-1 min-w-0 text-[13px] bg-transparent border-none outline-none text-[#ededed] placeholder:text-[#444] font-[inherit]" />
           </div>
-          <button onClick={() => { if (token) loadEmails(folder, token); }}
-            className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center cursor-pointer hover:bg-gray-50 shrink-0">
+          <button onClick={() => loadEmails(folder)} title="Refresh" aria-label="Refresh"
+            className="w-8 h-8 rounded-lg border border-[#2a2a2a] bg-transparent flex items-center justify-center cursor-pointer text-[#888] hover:text-[#ededed] hover:border-[#444] shrink-0">
             {loading ? <Spinner size={11} /> : (
-              <svg width="11" height="11" fill="none" stroke="#6B7280" strokeWidth="2" viewBox="0 0 24 24">
+              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
               </svg>
             )}
           </button>
         </div>
-        <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
-          {FOLDERS.map(f => (
-            <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); }}
-              className={"flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold whitespace-nowrap border-none cursor-pointer transition-colors shrink-0 " + (folder === f.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
-              {f.label}
-              {(unread[f.id] ?? 0) > 0 && (
-                <span className={"text-[11px] rounded-full px-1 py-0.5 font-bold " + (folder === f.id ? "bg-white text-indigo-600" : "bg-indigo-500 text-white")}>
-                  {unread[f.id]}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        {isMobile && (
+          <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
+            {FOLDERS.map(f => (
+              <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); }}
+                className={"flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[12px] font-medium whitespace-nowrap border cursor-pointer transition-colors shrink-0 " + (folder === f.id ? "bg-[#ededed] border-[#ededed] text-black" : "bg-transparent border-[#2a2a2a] text-[#888] hover:text-[#ededed]")}>
+                {f.label}
+                {(unread[f.id] ?? 0) > 0 && <span className="text-[11px] rounded-full px-1.5 bg-[#6366F1] text-white font-semibold">{unread[f.id]}</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {error && !loading && <div className="p-4 text-[13px] text-red-500 text-center">{error}</div>}
+        {error && !loading && <div className="m-3 p-3 rounded-lg text-[13px] text-[#f44] bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)]">{error}</div>}
         {loading && <div className="flex items-center justify-center py-12"><Spinner size={20} /></div>}
         {!loading && filtered.length === 0 && !error && (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-            <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-2 opacity-40">
+          <div className="flex flex-col items-center justify-center py-14 text-[#555]">
+            <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-2 opacity-50">
               <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
             </svg>
-            <p className="text-[13px]">{search ? "No results" : "No emails"}</p>
+            <p className="text-[13px]">{search ? "No results" : "Nothing here"}</p>
           </div>
         )}
         {!loading && filtered.map(email => {
@@ -584,27 +614,25 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
           const isAct = selectedId === email.id;
           return (
             <button key={email.id} onClick={() => openEmail(email)}
-              className={"w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer border-none" + (!email.isRead ? " bg-blue-50/30" : "")}
-              style={{ borderLeft: isAct ? "2px solid #6366F1" : "2px solid transparent", background: isAct ? "#EEF2FF" : undefined }}>
+              className={"w-full text-left px-3 py-3 border-0 border-b border-solid border-[#111] cursor-pointer transition-colors " + (isAct ? "bg-[#141414]" : "bg-transparent hover:bg-[#0d0d0d]")}
+              style={{ boxShadow: isAct ? "inset 2px 0 0 #6366F1" : undefined }}>
               <div className="flex items-center gap-2.5 mb-1">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: avatarColor(name) }}>
                   {initials(name)}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <span className={"text-[13px] truncate block " + (!email.isRead ? "font-bold text-gray-900" : "font-medium text-gray-700")}>{name}</span>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <span className={"flex-1 min-w-0 text-[13px] truncate " + (!email.isRead ? "font-semibold text-[#ededed]" : "font-medium text-[#aaa]")}>{name}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
                   {email.hasAttachments && (
-                    <svg width="10" height="10" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24">
+                    <svg width="10" height="10" fill="none" stroke="#666" strokeWidth="2" viewBox="0 0 24 24">
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                     </svg>
                   )}
-                  <span className="text-[11px] text-gray-400">{fmtDate(email.receivedDateTime)}</span>
-                  {!email.isRead && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
+                  <span className="text-[11px] text-[#555] tabular-nums">{fmtDate(email.receivedDateTime)}</span>
+                  {!email.isRead && <span className="w-1.5 h-1.5 rounded-full bg-[#6366F1] shrink-0" />}
                 </div>
               </div>
-              <p className={"text-[12px] truncate pl-9 " + (!email.isRead ? "text-gray-700 font-semibold" : "text-gray-500")}>{email.subject || "(no subject)"}</p>
-              <p className="text-[12px] text-gray-400 truncate pl-9 mt-0.5">{email.bodyPreview}</p>
+              <p className={"text-[12px] truncate pl-9 m-0 " + (!email.isRead ? "text-[#ddd] font-medium" : "text-[#888]")}>{email.subject || "(no subject)"}</p>
+              <p className="text-[12px] text-[#555] truncate pl-9 mt-0.5 mb-0">{email.bodyPreview}</p>
             </button>
           );
         })}
@@ -614,207 +642,144 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
 
   // ── Detail panel ──────────────────────────────────────────────────────
   const DetailPanel = (
-    <div className={"flex-1 flex flex-col bg-white min-w-0 " + (isMobile && mobileView === "list" ? "hidden" : "flex")}>
+    <div className={"flex-1 flex flex-col bg-[#0a0a0a] min-w-0 min-h-0 " + (isMobile && mobileView === "list" ? "hidden" : "flex")}>
       {!selected ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
-          <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-30">
+        <div className="flex-1 flex flex-col items-center justify-center text-[#555] gap-3">
+          <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-40">
             <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
           </svg>
           <p className="text-[14px]">Select an email to read</p>
         </div>
       ) : (
-        <div className="flex flex-col h-full">
-
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-gray-100 bg-white shrink-0">
+        <div className="flex flex-col h-full min-h-0">
+          <div className="px-5 py-4 border-b border-[#1a1a1a] shrink-0">
             {isMobile && (
-              <button onClick={() => setMobileView("list")} className="flex items-center gap-1 text-indigo-600 text-[13px] font-medium mb-3 border-none bg-transparent cursor-pointer">
+              <button onClick={() => setMobileView("list")} className="flex items-center gap-1 text-[#aaa] hover:text-[#ededed] text-[13px] font-medium mb-3 border-none bg-transparent cursor-pointer p-0">
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                 Back
               </button>
             )}
-            <h2 className="text-[15px] font-bold text-gray-900 mb-3 leading-snug">{selected.subject || "(no subject)"}</h2>
+            <h2 className="text-[16px] font-semibold text-[#ededed] mb-3 leading-snug">{selected.subject || "(no subject)"}</h2>
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0"
                   style={{ background: avatarColor(selected.from?.emailAddress?.name || "?") }}>
                   {initials(selected.from?.emailAddress?.name || "?")}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[13px] font-semibold text-gray-800 truncate">{selected.from?.emailAddress?.name}</div>
-                  <div className="text-[12px] text-gray-400 truncate">{selected.from?.emailAddress?.address}</div>
+                  <div className="text-[13px] font-semibold text-[#ddd] truncate">{selected.from?.emailAddress?.name}</div>
+                  <div className="text-[12px] text-[#666] truncate">{selected.from?.emailAddress?.address}</div>
                 </div>
               </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[12px] text-gray-400">{new Date(selected.receivedDateTime).toLocaleString()}</span>
-
-                {/* Mark read/unread - label and icon always reflect live state from emails[] */}
-                <button
-                  onClick={() => toggleRead(selected)}
-                  title={selected.isRead ? "Mark as unread" : "Mark as read"}
-                  className="flex items-center gap-1 px-2 h-7 rounded-lg border bg-white text-[11px] font-medium cursor-pointer hover:bg-gray-50 transition-colors"
-                  style={{
-                    color: selected.isRead ? "#6B7280" : "#6366F1",
-                    borderColor: selected.isRead ? "#E5E7EB" : "#A5B4FC",
-                  }}>
-                  {selected.isRead ? (
-                    <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                      <polyline points="9 22 9 12 15 12 15 22"/>
-                    </svg>
-                  ) : (
-                    <svg width="9" height="9" fill="#6366F1" viewBox="0 0 10 10">
-                      <circle cx="5" cy="5" r="5"/>
-                    </svg>
-                  )}
-                  {selected.isRead ? "Mark unread" : "Mark read"}
-                </button>
-
-                <button onClick={() => deleteEmail(selected.id)} title="Delete"
-                  className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors">
-                  <svg width="11" height="11" fill="none" stroke="#EF4444" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
-                  </svg>
-                </button>
-              </div>
+              <span className="text-[12px] text-[#666] tabular-nums">{new Date(selected.receivedDateTime).toLocaleString()}</span>
             </div>
 
-            {/* Action buttons */}
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={() => { setReplyTo(selected); setForwardOf(null); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
-                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+            <div className="flex flex-wrap gap-2 mt-3.5">
+              <button onClick={() => { setReplyTo(selected); setForwardOf(null); }} className={btnGhost}>
+                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
                 Reply
               </button>
-              <button
-                onClick={() => { setForwardOf(selected); setReplyTo(null); setCompose(true); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-600 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
-                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 10 20 15 15 20"/><path d="M4 4h7a4 4 0 0 1 4 4v7"/></svg>
+              <button onClick={() => { setForwardOf(selected); setReplyTo(null); setCompose(true); }} className={btnGhost}>
+                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 10 20 15 15 20"/><path d="M4 4h7a4 4 0 0 1 4 4v7"/></svg>
                 Forward
               </button>
-              <button
-                onClick={() => deleteEmail(selected.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-red-400 cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors">
-                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+              <button onClick={() => toggleRead(selected)} className={btnGhost}>
+                {selected.isRead
+                  ? <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>
+                  : <svg width="12" height="12" viewBox="0 0 10 10" fill="#6366F1"><circle cx="5" cy="5" r="4"/></svg>}
+                {selected.isRead ? "Mark unread" : "Mark read"}
+              </button>
+              <button onClick={() => deleteEmail(selected.id)} className={btnGhost + " hover:!text-[#f44] hover:!border-[rgba(255,68,68,0.4)]"}>
+                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
                 Delete
               </button>
             </div>
           </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
             {selected.body ? (
               selected.body.contentType === "html" ? (
                 <iframe
-                  srcDoc={"<style>html,body{background:#ffffff!important;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;margin:0;padding:12px}*{color:#1f2937!important;max-width:100%;box-sizing:border-box}a,a *{color:#4F6FF0!important}td,th,div,p,span,h1,h2,h3,h4,h5,h6,li,table{background-color:#ffffff!important}</style>" + selected.body.content}
-                  className="w-full border-0"
+                  srcDoc={emailDoc(selected.body.content)}
+                  className="w-full border-0 bg-[#0a0a0a]"
                   style={{ minHeight: 400, height: "100%" }}
-                  sandbox="allow-same-origin"
-                  title="email-body"
+                  sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                  title="Email body"
                 />
               ) : (
-                <pre className="text-[14px] text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{selected.body.content}</pre>
+                <pre className="text-[14px] text-[#ccc] whitespace-pre-wrap font-sans leading-relaxed m-0">{selected.body.content}</pre>
               )
             ) : (
-              <p className="text-[14px] text-gray-500 italic">{selected.bodyPreview}</p>
+              <div className="flex items-center gap-2 text-[13px] text-[#666]"><Spinner size={12} /> Loading message</div>
             )}
           </div>
 
-          {/* Footer: Open in Outlook */}
-          <div className="shrink-0 px-5 py-3 border-t border-gray-100 bg-gray-50/80 flex items-center justify-between">
-            <span className="text-[12px] text-gray-400 flex items-center gap-1.5">
+          <div className="shrink-0 px-5 py-3 border-t border-[#1a1a1a] bg-[#050505] flex items-center justify-between gap-3">
+            <span className="text-[12px] text-[#666] flex items-center gap-1.5">
               {selected.hasAttachments && (
                 <>
-                  <svg width="10" height="10" fill="none" stroke="#9CA3AF" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                   </svg>
-                  Has attachments
+                  Has attachments, open in Outlook to view them
                 </>
               )}
             </span>
-            <a
-              href={selected.webLink ?? "https://outlook.live.com/mail/0/inbox"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
-              style={{ textDecoration: "none" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <rect x="2" y="2" width="9" height="9" fill="#F25022"/>
-                <rect x="13" y="2" width="9" height="9" fill="#7FBA00"/>
-                <rect x="2" y="13" width="9" height="9" fill="#00A4EF"/>
-                <rect x="13" y="13" width="9" height="9" fill="#FFB900"/>
-              </svg>
-              Open in Outlook
-              <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
+            <a href={selected.webLink ?? "https://outlook.live.com/mail/0/inbox"} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-[12px] font-semibold text-[#aaa] hover:text-[#ededed] no-underline transition-colors">
+              <MsLogo size={14} />
+              Open in Outlook ↗
             </a>
           </div>
-
         </div>
       )}
     </div>
   );
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden bg-[#000] min-h-0">
       {/* Sidebar */}
-      <aside className={"flex flex-col shrink-0 border-r border-gray-100 bg-gray-50 " + (isMobile ? "hidden" : "w-44")}>
+      <aside className={"flex flex-col shrink-0 border-r border-[#1a1a1a] bg-[#000] " + (isMobile ? "hidden" : "w-48")}>
         <div className="px-3 py-4">
-          <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }}
-            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold rounded-xl cursor-pointer border-none flex items-center justify-center gap-1.5 transition-colors shadow-sm">
-            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }} className={btnPrimary + " w-full"}>
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Compose
           </button>
         </div>
         <nav className="flex-1 px-2">
           {FOLDERS.map(f => (
             <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); setMobileView("list"); }}
-              className={"w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium mb-0.5 cursor-pointer border-none transition-colors text-left " + (folder === f.id ? "bg-indigo-50 text-indigo-700" : "bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-800")}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill={folder === f.id ? "#6366F1" : "#9CA3AF"}>
-                <path d={f.icon}/>
-              </svg>
+              className={"w-full flex items-center gap-2.5 px-2.5 h-8 rounded-md text-[13px] font-medium mb-0.5 cursor-pointer border-none transition-colors text-left " + (folder === f.id ? "bg-[#141414] text-[#ededed]" : "bg-transparent text-[#888] hover:bg-[#0d0d0d] hover:text-[#ededed]")}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className={folder === f.id ? "text-[#ededed]" : "text-[#555]"}><path d={f.icon}/></svg>
               <span className="flex-1 truncate">{f.label}</span>
-              {(unread[f.id] ?? 0) > 0 && (
-                <span className="text-[11px] bg-indigo-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">{unread[f.id]}</span>
-              )}
+              {(unread[f.id] ?? 0) > 0 && <span className="text-[11px] bg-[#6366F1] text-white rounded-full px-1.5 font-semibold shrink-0 tabular-nums">{unread[f.id]}</span>}
             </button>
           ))}
         </nav>
         {me && (
-          <div className="px-3 py-3 border-t border-gray-200 mt-auto">
+          <div className="px-3 py-3 border-t border-[#1a1a1a] mt-auto">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-                style={{ background: avatarColor(me.displayName) }}>
-                {initials(me.displayName)}
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: avatarColor(me.displayName || "?") }}>
+                {initials(me.displayName || "?")}
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-700 truncate">{me.displayName}</div>
-                <div className="text-[11px] text-gray-400 truncate">{me.mail}</div>
+                <div className="text-[12px] font-medium text-[#ddd] truncate">{me.displayName}</div>
+                <div className="text-[11px] text-[#666] truncate">{me.mail || me.userPrincipalName}</div>
               </div>
             </div>
-            <button onClick={() => {
-              localStorage.removeItem(TOKEN_KEY);
-              localStorage.removeItem(REFRESH_KEY);
-              localStorage.removeItem(EXPIRY_KEY);
-              setToken(null); setEmails([]); setMe(null);
-            }} className="mt-2 w-full text-[11px] text-gray-400 hover:text-red-500 cursor-pointer border-none bg-transparent text-left transition-colors">
-              Sign out
+            <button onClick={() => void disconnect()}
+              className="mt-2 w-full text-[11px] text-[#555] hover:text-[#f44] cursor-pointer border-none bg-transparent text-left p-0 transition-colors">
+              Disconnect Outlook
             </button>
           </div>
         )}
       </aside>
 
-      {/* Mobile compose FAB */}
       {isMobile && (
         <div className="fixed bottom-16 right-4 z-40">
-          <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }}
-            className="w-12 h-12 rounded-full bg-indigo-600 text-white shadow-lg flex items-center justify-center cursor-pointer border-none hover:bg-indigo-700">
+          <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }} aria-label="Compose"
+            className="w-12 h-12 rounded-full bg-[#ededed] text-black shadow-lg flex items-center justify-center cursor-pointer border-none hover:bg-white">
             <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -823,10 +788,9 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
       {ListPanel}
       {DetailPanel}
 
-      {/* Compose (new or forward) */}
       {compose && !replyTo && (
         <ComposeModal
-          token={token}
+          getToken={getToken}
           onClose={() => { setCompose(false); setForwardOf(null); }}
           prefill={forwardOf ? {
             subject: "Fwd: " + forwardOf.subject,
@@ -835,10 +799,9 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
         />
       )}
 
-      {/* Reply */}
       {replyTo && (
         <ComposeModal
-          token={token}
+          getToken={getToken}
           onClose={() => setReplyTo(null)}
           prefill={{
             to:      replyTo.from?.emailAddress?.address,
