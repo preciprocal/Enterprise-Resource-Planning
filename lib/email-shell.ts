@@ -124,31 +124,33 @@ const signatureHtml = (sig: ShellOptions["signature"]): string => {
     </table>`;
 };
 
-// Stacked, one per row, rather than side by side: two pills in one row wrap
-// unpredictably on phones and Outlook cannot be told to wrap them at all.
+// Side by side and centred, wrapping onto a second line only when the
+// screen is too narrow for both (phones): each button is an inline-block in
+// a font-size:0 cell, which every modern client lays out like words in a
+// line. Outlook on Windows ignores inline-block, so a conditional table puts
+// the buttons in adjacent cells for it instead.
 const ctaHtml = (ctas: ShellOptions["ctas"]): string => {
   if (!ctas?.length) return "";
-  const rows = ctas.map((cta, i) => {
-    const cell = i === 0
-      ? `<td align="center" bgcolor="${C.ctaBg}" class="cta-td" style="border-radius:999px;background-color:${C.ctaBg};background-image:linear-gradient(135deg,${C.ctaBg},#a855f7);">
-                <a href="${escapeHtml(cta.url)}" class="cta-a" style="display:inline-block;padding:15px 34px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:${C.ctaText};text-decoration:none;border-radius:999px;">${escapeHtml(cta.label)}</a>
-              </td>`
-      : `<td align="center" style="border-radius:999px;border:1px solid ${C.accent};">
-                <a href="${escapeHtml(cta.url)}" class="t-accent" style="display:inline-block;padding:13px 32px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:${C.accent};text-decoration:none;border-radius:999px;">${escapeHtml(cta.label)}</a>
-              </td>`;
-    return `
-      <tr>
-        <td align="center" style="padding:${i ? 12 : 0}px 0 0 0;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
-            <tr>
-              ${cell}
-            </tr>
-          </table>
-        </td>
-      </tr>`;
-  }).join("");
+  const pill = (cta: { label: string; url: string }, primary: boolean) => primary
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>
+        <td align="center" bgcolor="${C.ctaBg}" class="cta-td" style="border-radius:999px;background-color:${C.ctaBg};background-image:linear-gradient(135deg,${C.ctaBg},#a855f7);">
+          <a href="${escapeHtml(cta.url)}" class="cta-a" style="display:inline-block;padding:15px 30px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:${C.ctaText};text-decoration:none;border-radius:999px;white-space:nowrap;">${escapeHtml(cta.label)}</a>
+        </td></tr></table>`
+    : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>
+        <td align="center" style="border-radius:999px;border:1px solid ${C.accent};">
+          <a href="${escapeHtml(cta.url)}" class="t-accent" style="display:inline-block;padding:14px 29px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:${C.accent};text-decoration:none;border-radius:999px;white-space:nowrap;">${escapeHtml(cta.label)}</a>
+        </td></tr></table>`;
+  const items = ctas.map((cta, i) =>
+    `<div style="display:inline-block;vertical-align:top;margin:6px;">${pill(cta, i === 0)}</div>`);
+  const mso = ctas.map((cta, i) => `<td style="padding:6px;">${pill(cta, i === 0)}</td>`).join("");
   return `
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:26px 0 6px 0;">${rows}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0 0 0;">
+      <tr>
+        <td align="center" style="font-size:0;line-height:0;">
+          <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>${mso}</tr></table><![endif]-->
+          <!--[if !mso]><!-->${items.join("")}<!--<![endif]-->
+        </td>
+      </tr>
     </table>`;
 };
 

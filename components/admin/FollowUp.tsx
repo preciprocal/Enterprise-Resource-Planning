@@ -7,7 +7,7 @@
 // rendering in lib/followup-email.ts (shared, so the preview is what's sent).
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
 import { User, inputCls, fmtFull, Checkbox, Select } from "./admin-shared";
 import { Block, Empty, human } from "./ui-kit";
 import {
@@ -152,7 +152,7 @@ export function EmailComposer({
   const [mode, setMode] = useState<"now" | "schedule">("now");
   const [bounds, setBounds] = useState(scheduleBounds);
   const [when, setWhen] = useState(() => bounds.presets[1].value);
-  const [preview, setPreview] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile">("desktop");
   const [working, setWorking] = useState(false);
   const [err, setErr] = useState("");
   const [results, setResults] = useState<SendResult[] | null>(null);
@@ -223,184 +223,204 @@ export function EmailComposer({
       const msg = r.draft ? "Drafts logged on the server (RESEND_API_KEY isn't set)"
         : mode === "schedule" ? `Scheduled ${ok} of ${list.length} for ${whenLabel(whenIso)}` : `Sent ${ok} of ${list.length}`;
       onSent?.(msg);
-      if (ok === list.length) { setDraft(draftFromTemplate(tpl)); setMode("now"); setPreview(false); }
+      if (ok === list.length) { setDraft(draftFromTemplate(tpl)); setMode("now"); }
     } catch (e) { setErr((e as Error).message); }
     setWorking(false);
   }
 
+  // Always-on preview, rendered from a deferred copy of the draft so typing
+  // stays smooth on long messages.
+  const deferred = useDeferredValue({ draft, optional, first: recipients[0] });
   const previewHtml = useMemo(
-    () => preview ? composeEmail({ ...draft, optional }, recipients[0] ?? {}, UNSUB_PREVIEW).html : "",
-    [preview, draft, optional, recipients],
+    () => composeEmail({ ...deferred.draft, optional: deferred.optional }, deferred.first ?? {}, UNSUB_PREVIEW).html,
+    [deferred],
   );
+  const canSend = !working && recipients.length > 0 && placeholders.length === 0 && !whenErr && !ctaErr
+    && !!draft.subject.trim() && !!draft.body.trim();
 
   return (
-    <Block title={title} action={<span className="text-[12px] text-[#555]">{recipients.length} recipient{recipients.length === 1 ? "" : "s"}</span>}>
-      <div className="p-4 flex flex-col gap-4">
-        {/* Recipients */}
-        <div>
-          <span className={LABEL}>To</span>
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {recipients.map(r => (
-              <span key={keyOf(r)} title={r.email || "No email address on file"}
-                className={`inline-flex items-center gap-1.5 pl-2.5 pr-1.5 h-7 rounded-md border text-[12px] ${r.email ? "border-[#2a2a2a] bg-[#111] text-[#ddd]" : "border-[rgba(255,68,68,0.3)] text-[#f44]"}`}>
-                <span className="max-w-[240px] truncate">{r.name ? `${r.name} · ${r.email || "no email"}` : r.email}</span>
-                {!r.userId && <span className="text-[10px] text-[#666]">not a user</span>}
-                <button onClick={() => { setRecipients(l => l.filter(x => keyOf(x) !== keyOf(r))); setResults(null); }} aria-label={`Remove ${r.email}`}
-                  className="w-4 h-4 flex items-center justify-center rounded text-[#666] hover:text-[#f44] bg-transparent border-none cursor-pointer p-0">×</button>
-              </span>
-            ))}
-            {!recipients.length && <span className="text-[12px] text-[#555]">No recipients yet</span>}
-          </div>
-          <div className="relative">
-            <input value={query} onChange={e => setQuery(e.target.value)} className={inputCls} aria-label="Add recipient"
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (matches[0]) add(recipientFromUser(matches[0])); else if (query.trim()) addTyped(); } }}
-              placeholder={allUsers.length ? "Add a user by name or email, or type any address and press Enter" : "Type an email address and press Enter"} />
-            {matches.length > 0 && (
-              <div className="absolute z-20 left-0 right-0 mt-1 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] shadow-xl overflow-hidden">
-                {matches.map(u => (
-                  <button key={u.id} onClick={() => add(recipientFromUser(u))}
-                    className="w-full text-left px-3 py-2 text-[13px] bg-transparent border-none cursor-pointer hover:bg-[#151515] text-[#ddd]">
-                    {u.name ?? "Unknown"} <span className="text-[#666]">· {u.email}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {noAddress > 0 && <p className="text-[12px] text-[#f5a623] mt-1.5">{noAddress} recipient{noAddress === 1 ? " has" : "s have"} no email address and will be skipped.</p>}
+    <section className="rounded-xl border border-[#1a1a1a] bg-[#050505] overflow-hidden min-w-0">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-[#141414] bg-[#080808]">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold text-[#ededed]">{title}</h2>
+          <p className="text-[12px] text-[#666] mt-0.5">Sent in the Preciprocal email template. Each person gets their own copy.</p>
         </div>
-
-        {/* Templates */}
-        <div>
-          <div className="flex items-baseline justify-between gap-3 mb-2">
-            <span className="text-[12px] font-medium text-[#888]">Template</span>
-            {suggestedTemplate && <span className="text-[12px] text-[#555] truncate">Suggested: <span className="text-[#bbb]">{FOLLOW_UP_TEMPLATES.find(t => t.id === suggestedTemplate.id)?.label}</span> · {suggestedTemplate.why}</span>}
-          </div>
-          <div role="radiogroup" aria-label="Template" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-1.5">
-            {FOLLOW_UP_TEMPLATES.map(t => {
-              const on = t.id === draft.templateId;
-              return (
-                <button key={t.id} role="radio" aria-checked={on} onClick={() => pick(t)} title={t.hint}
-                  className={`relative text-left px-3 py-2 rounded-lg border cursor-pointer transition-colors ${on ? "bg-[#141414] border-[#3a3a3a]" : "bg-transparent border-[#1a1a1a] hover:border-[#2a2a2a]"}`}>
-                  <span className={`block text-[13px] ${on ? "text-[#ededed] font-medium" : "text-[#aaa]"}`}>{t.label}</span>
-                  <span className="block text-[11px] text-[#555] truncate">{t.hint}</span>
-                  {t.id === suggestedTemplate?.id && <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#3ecf8e]" title="Suggested for this user" />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Sender and kind */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <span className={LABEL}>From</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] text-[#666]">From</span>
+          <div className="w-[260px]">
             <Select value={draft.sender} onChange={e => set("sender", e.target.value as SenderId)} aria-label="From">
-              {(Object.keys(SENDERS) as SenderId[]).map(k => <option key={k} value={k}>{SENDERS[k].label} ({SENDERS[k].replyTo})</option>)}
+              {(Object.keys(SENDERS) as SenderId[]).map(k => <option key={k} value={k}>{SENDERS[k].label}</option>)}
             </Select>
           </div>
-          <div className={`flex items-start gap-2.5 sm:pt-6 text-[12px] leading-relaxed ${many ? "text-[#666]" : "text-[#aaa]"}`}>
-            <Checkbox checked={optional} disabled={many} onChange={() => set("optional", !draft.optional)} label="Optional email" className="mt-0.5" />
-            <span onClick={() => { if (!many) set("optional", !draft.optional); }} className={many ? "" : "cursor-pointer"}>
-              Optional email: adds an unsubscribe link and skips anyone who opted out.{many ? " Always on when sending to several people." : " Turn off only for a reply or an account issue."}
-            </span>
-          </div>
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-3">
-          <label className="block">
-            <span className={LABEL}>Label above the heading</span>
-            <input value={draft.eyebrow} onChange={e => set("eyebrow", e.target.value)} className={inputCls} maxLength={40} placeholder="From Preciprocal" />
-          </label>
-          <label className="block">
-            <span className={LABEL}>Subject</span>
-            <input value={draft.subject} onChange={e => set("subject", e.target.value)} className={inputCls} placeholder="Subject" maxLength={200} />
-          </label>
-        </div>
-        <label className="block">
-          <span className={LABEL}>Heading</span>
-          <input value={draft.heading} onChange={e => set("heading", e.target.value)} className={inputCls} placeholder="Defaults to the subject" maxLength={120} />
-        </label>
-        <div>
-          <div className="flex items-baseline justify-between gap-3 mb-1.5">
-            <label htmlFor="email-message" className="text-[12px] font-medium text-[#888]">Message <span className="text-[#555] font-normal">· {"{{first_name}}"} is filled in for each person</span></label>
-            <button type="button" onClick={() => setPreview(p => !p)} aria-pressed={preview}
-              className="text-[12px] text-[#888] hover:text-[#ededed] bg-transparent border-none p-0 cursor-pointer">
-              {preview ? "Edit message" : "Preview email"}
-            </button>
-          </div>
-          {preview ? (
-            <>
-              <iframe title="Email preview" sandbox="" srcDoc={previewHtml} className="w-full h-[520px] rounded-md border border-[#2a2a2a] bg-[#05070c]" />
-              <p className="text-[12px] text-[#555] mt-1.5">As {recipients[0]?.name || recipients[0]?.email || "the first recipient"} will see it, from {SENDERS[draft.sender].from}.</p>
-            </>
-          ) : (
-            <textarea id="email-message" value={draft.body} onChange={e => set("body", e.target.value)} rows={10} spellCheck
-              className={`${inputCls} resize-y leading-relaxed`} placeholder="Write your message. A blank line starts a new paragraph." />
-          )}
-        </div>
-        <div>
-          <div className="flex items-baseline justify-between gap-3 mb-1.5">
-            <span className="text-[12px] font-medium text-[#888]">Buttons <span className="text-[#555] font-normal">· optional, up to {MAX_BUTTONS}; the first is the main one</span></span>
-            {draft.buttons.length < MAX_BUTTONS && (
-              <button type="button" onClick={() => set("buttons", [...draft.buttons, { label: "", url: "" }])}
-                className="text-[12px] text-[#888] hover:text-[#ededed] bg-transparent border-none p-0 cursor-pointer">+ Add button</button>
-            )}
-          </div>
-          {draft.buttons.length === 0 ? (
-            <p className="text-[12px] text-[#555]">No buttons. Links in the message are still clickable.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {draft.buttons.map((b, i) => (
-                <div key={i} className="grid grid-cols-[1fr_2fr_auto] gap-2 items-center">
-                  <input value={b.label} onChange={e => setButton(i, { label: e.target.value })} className={inputCls}
-                    placeholder={i === 0 ? "Main button text" : "Button text"} maxLength={40} aria-label={`Button ${i + 1} text`} />
-                  <input value={b.url} onChange={e => setButton(i, { url: e.target.value })} className={inputCls}
-                    placeholder="https://..." aria-label={`Button ${i + 1} link`} />
-                  <button type="button" onClick={() => set("buttons", draft.buttons.filter((_, j) => j !== i))} aria-label={`Remove button ${i + 1}`}
-                    className="w-8 h-8 flex items-center justify-center rounded-md text-[#555] hover:text-[#f44] hover:bg-[#141414] bg-transparent border-none cursor-pointer">×</button>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* ── Editor ── */}
+        <div className="min-w-0 divide-y divide-[#111] xl:border-r xl:border-[#141414]">
+          <Step n={1} title="Recipients" aside={`${recipients.length} selected`}>
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {recipients.map(r => (
+                <span key={keyOf(r)} title={r.email || "No email address on file"}
+                  className={`inline-flex items-center gap-1.5 pl-2.5 pr-1.5 h-7 rounded-md border text-[12px] ${r.email ? "border-[#2a2a2a] bg-[#111] text-[#ddd]" : "border-[rgba(255,68,68,0.3)] text-[#f44]"}`}>
+                  <span className="max-w-[240px] truncate">{r.name ? `${r.name} · ${r.email || "no email"}` : r.email}</span>
+                  {!r.userId && <span className="text-[10px] text-[#666]">not a user</span>}
+                  <button onClick={() => { setRecipients(l => l.filter(x => keyOf(x) !== keyOf(r))); setResults(null); }} aria-label={`Remove ${r.email}`}
+                    className="w-4 h-4 flex items-center justify-center rounded text-[#666] hover:text-[#f44] bg-transparent border-none cursor-pointer p-0">×</button>
+                </span>
+              ))}
+              {!recipients.length && <span className="text-[12px] text-[#555]">No recipients yet</span>}
+            </div>
+            <div className="relative">
+              <input value={query} onChange={e => setQuery(e.target.value)} className={inputCls} aria-label="Add recipient"
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (matches[0]) add(recipientFromUser(matches[0])); else if (query.trim()) addTyped(); } }}
+                placeholder={allUsers.length ? "Add a user by name or email, or type any address and press Enter" : "Type an email address and press Enter"} />
+              {matches.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 mt-1 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] shadow-xl overflow-hidden">
+                  {matches.map(u => (
+                    <button key={u.id} onClick={() => add(recipientFromUser(u))}
+                      className="w-full text-left px-3 py-2 text-[13px] bg-transparent border-none cursor-pointer hover:bg-[#151515] text-[#ddd]">
+                      {u.name ?? "Unknown"} <span className="text-[#666]">· {u.email}</span>
+                    </button>
+                  ))}
                 </div>
+              )}
+            </div>
+            {noAddress > 0 && <p className="text-[12px] text-[#f5a623] mt-1.5">{noAddress} recipient{noAddress === 1 ? " has" : "s have"} no email address and will be skipped.</p>}
+          </Step>
+
+          <Step n={2} title="Template"
+            aside={suggestedTemplate ? <>Suggested: <span className="text-[#bbb]">{FOLLOW_UP_TEMPLATES.find(t => t.id === suggestedTemplate.id)?.label}</span></> : undefined}>
+            <div role="radiogroup" aria-label="Template" className="flex flex-wrap gap-1.5">
+              {FOLLOW_UP_TEMPLATES.map(t => {
+                const on = t.id === draft.templateId;
+                return (
+                  <button key={t.id} role="radio" aria-checked={on} onClick={() => pick(t)} title={t.hint}
+                    className={`relative px-3 h-8 rounded-lg border text-[13px] cursor-pointer transition-colors ${on ? "bg-[#ededed] border-[#ededed] text-black font-medium" : "bg-transparent border-[#222] text-[#aaa] hover:border-[#3a3a3a] hover:text-[#ededed]"}`}>
+                    {t.label}
+                    {t.id === suggestedTemplate?.id && !on && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#3ecf8e]" title="Suggested for this user" />}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[12px] text-[#555] mt-2">{tpl.hint}</p>
+          </Step>
+
+          <Step n={3} title="Content">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-3">
+              <label className="block">
+                <span className={LABEL}>Label above the heading</span>
+                <input value={draft.eyebrow} onChange={e => set("eyebrow", e.target.value)} className={inputCls} maxLength={40} placeholder="From Preciprocal" />
+              </label>
+              <label className="block">
+                <span className={LABEL}>Subject</span>
+                <input value={draft.subject} onChange={e => set("subject", e.target.value)} className={inputCls} placeholder="What the inbox shows" maxLength={200} />
+              </label>
+            </div>
+            <label className="block mt-3">
+              <span className={LABEL}>Heading</span>
+              <input value={draft.heading} onChange={e => set("heading", e.target.value)} className={inputCls} placeholder="Defaults to the subject" maxLength={120} />
+            </label>
+            <label className="block mt-3">
+              <span className={LABEL}>Message <span className="text-[#555] font-normal">· {"{{first_name}}"} is filled in for each person · a blank line starts a new paragraph</span></span>
+              <textarea value={draft.body} onChange={e => set("body", e.target.value)} rows={11} spellCheck
+                className={`${inputCls} resize-y leading-relaxed`} placeholder="Write your message." />
+            </label>
+          </Step>
+
+          <Step n={4} title="Buttons" aside={`${draft.buttons.length} of ${MAX_BUTTONS}`}>
+            {draft.buttons.length > 0 && (
+              <div className="flex flex-col gap-2 mb-3">
+                {draft.buttons.map((b, i) => (
+                  <div key={i} className="grid grid-cols-[auto_1fr_2fr_auto] gap-2 items-center">
+                    <span className={`text-[11px] font-medium px-2 h-6 inline-flex items-center rounded-md ${i === 0 ? "bg-[rgba(99,102,241,0.15)] text-[#a5b4fc]" : "bg-[#141414] text-[#888]"}`}>{i === 0 ? "Main" : "Extra"}</span>
+                    <input value={b.label} onChange={e => setButton(i, { label: e.target.value })} className={inputCls}
+                      placeholder="Button text" maxLength={40} aria-label={`Button ${i + 1} text`} />
+                    <input value={b.url} onChange={e => setButton(i, { url: e.target.value })} className={inputCls}
+                      placeholder="https://..." aria-label={`Button ${i + 1} link`} />
+                    <button type="button" onClick={() => set("buttons", draft.buttons.filter((_, j) => j !== i))} aria-label={`Remove button ${i + 1}`}
+                      className="w-8 h-8 flex items-center justify-center rounded-md text-[#555] hover:text-[#f44] hover:bg-[#141414] bg-transparent border border-[#1a1a1a] cursor-pointer">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {draft.buttons.length < MAX_BUTTONS ? (
+              <button type="button" onClick={() => set("buttons", [...draft.buttons, { label: "", url: "" }])}
+                className="inline-flex items-center gap-2 px-3.5 h-9 rounded-lg border border-dashed border-[#333] bg-transparent text-[13px] font-medium text-[#ddd] hover:border-[#555] hover:bg-[#0d0d0d] cursor-pointer transition-colors">
+                <span className="text-[16px] leading-none">+</span> Add a button
+              </button>
+            ) : <p className="text-[12px] text-[#555]">Three buttons is the most an email should carry.</p>}
+            {ctaErr && <p className="text-[12px] text-[#f5a623] mt-2">{ctaErr}</p>}
+          </Step>
+
+          <Step n={5} title="Delivery">
+            <div role="radiogroup" aria-label="Delivery" className="inline-flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5">
+              {(["now", "schedule"] as const).map(m => (
+                <button key={m} role="radio" aria-checked={mode === m} onClick={() => { setMode(m); if (m === "schedule") setBounds(scheduleBounds()); }}
+                  className={`px-3.5 h-8 rounded-md text-[13px] font-medium border-none cursor-pointer transition-colors ${mode === m ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#666] hover:text-[#aaa]"}`}>
+                  {m === "now" ? "Send now" : "Schedule"}
+                </button>
               ))}
             </div>
-          )}
+            {mode === "schedule" && (
+              <div className="flex flex-col gap-2 mt-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {bounds.presets.map(p => (
+                    <button key={p.label} onClick={() => setWhen(p.value)}
+                      className={`px-2.5 h-7 rounded-md border text-[12px] cursor-pointer transition-colors ${when === p.value ? "border-[#3a3a3a] bg-[#141414] text-[#ededed]" : "border-[#1a1a1a] bg-transparent text-[#888] hover:text-[#ededed]"}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                  <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} aria-label="Send at"
+                    min={bounds.min} max={bounds.max} className={`${inputCls} w-auto h-7 py-0 text-[12px]`} />
+                </div>
+                <p className={`text-[12px] ${whenErr ? "text-[#f5a623]" : "text-[#666]"}`}>
+                  {whenErr ?? <>Sends {whenLabel(whenIso)} (your time) · up to {MAX_SCHEDULE_DAYS} days ahead · cancel it from the user&apos;s page until then</>}
+                </p>
+              </div>
+            )}
+            <div className={`flex items-start gap-2.5 mt-4 text-[12px] leading-relaxed ${many ? "text-[#666]" : "text-[#aaa]"}`}>
+              <Checkbox checked={optional} disabled={many} onChange={() => set("optional", !draft.optional)} label="Optional email" className="mt-0.5" />
+              <span onClick={() => { if (!many) set("optional", !draft.optional); }} className={many ? "" : "cursor-pointer"}>
+                Optional email: adds an unsubscribe link and skips anyone who opted out.{many ? " Always on when sending to several people." : " Turn off only for a reply or an account issue."}
+              </span>
+            </div>
+          </Step>
         </div>
-        {(placeholders.length > 0 || ctaErr) && (
-          <p className="text-[12px] text-[#f5a623] -mt-2">{placeholders.length ? `Replace ${placeholders.join(", ")} before sending. ` : ""}{ctaErr ?? ""}</p>
-        )}
 
-        {/* Delivery */}
-        <div className="flex flex-col gap-2.5">
-          <div role="radiogroup" aria-label="Delivery" className="inline-flex self-start gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5">
-            {(["now", "schedule"] as const).map(m => (
-              <button key={m} role="radio" aria-checked={mode === m} onClick={() => { setMode(m); if (m === "schedule") setBounds(scheduleBounds()); }}
-                className={`px-3 h-7 rounded text-[13px] font-medium border-none cursor-pointer transition-colors ${mode === m ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#666] hover:text-[#aaa]"}`}>
-                {m === "now" ? "Send now" : "Schedule"}
-              </button>
-            ))}
-          </div>
-          {mode === "schedule" && (
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {bounds.presets.map(p => (
-                  <button key={p.label} onClick={() => setWhen(p.value)}
-                    className={`px-2.5 h-7 rounded-md border text-[12px] cursor-pointer transition-colors ${when === p.value ? "border-[#3a3a3a] bg-[#141414] text-[#ededed]" : "border-[#1a1a1a] bg-transparent text-[#888] hover:text-[#ededed]"}`}>
-                    {p.label}
+        {/* ── Live preview ── */}
+        <div className="min-w-0 bg-[#030303]">
+          <div className="xl:sticky xl:top-0">
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[#141414]">
+              <div className="min-w-0">
+                <div className="text-[13px] font-medium text-[#ededed]">Live preview</div>
+                <div className="text-[12px] text-[#666] truncate">
+                  As {recipients[0]?.name || recipients[0]?.email || "the first recipient"} sees it · {fillPreviewSubject(draft.subject, recipients[0]?.name) || "No subject yet"}
+                </div>
+              </div>
+              <div className="inline-flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0">
+                {(["desktop", "mobile"] as const).map(w => (
+                  <button key={w} onClick={() => setPreviewWidth(w)} aria-pressed={previewWidth === w}
+                    className={`px-2.5 h-7 rounded-md text-[12px] font-medium border-none cursor-pointer ${previewWidth === w ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#666] hover:text-[#aaa]"}`}>
+                    {w === "desktop" ? "Desktop" : "Phone"}
                   </button>
                 ))}
-                <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} aria-label="Send at"
-                  min={bounds.min} max={bounds.max}
-                  className={`${inputCls} w-auto h-7 py-0 text-[12px]`} />
               </div>
-              <p className={`text-[12px] ${whenErr ? "text-[#f5a623]" : "text-[#666]"}`}>
-                {whenErr ?? <>Sends {whenLabel(whenIso)} (your time) · up to {MAX_SCHEDULE_DAYS} days ahead · each email can be cancelled from that user&apos;s page until then</>}
-              </p>
             </div>
-          )}
+            <div className="p-4 flex justify-center">
+              <iframe title="Email preview" sandbox="" srcDoc={previewHtml}
+                className="h-[640px] rounded-lg border border-[#1a1a1a] bg-[#05070c] transition-[width]"
+                style={{ width: previewWidth === "desktop" ? "100%" : 390 }} />
+            </div>
+          </div>
         </div>
+      </div>
 
-        {err && <div role="alert" className="px-3 py-2 rounded-lg text-[13px] text-[#f44] bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)]">{err}</div>}
+      {/* ── Send bar ── */}
+      <div className="sticky bottom-0 z-10 border-t border-[#141414] bg-[#080808]/95 backdrop-blur px-5 py-3">
         {results && (
-          <div role="status" className="rounded-lg border border-[#1a1a1a] divide-y divide-[#111]">
+          <div role="status" className="mb-3 rounded-lg border border-[#1a1a1a] divide-y divide-[#111] max-h-48 overflow-auto">
             {results.map(r => (
               <div key={r.email} className="px-3 py-2 flex items-start justify-between gap-3 text-[12px]">
                 <span className="text-[#bbb] truncate">{r.name ? `${r.name} · ` : ""}{r.email}</span>
@@ -411,17 +431,40 @@ export function EmailComposer({
             ))}
           </div>
         )}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button onClick={submit} disabled={working || !recipients.length || placeholders.length > 0 || !!whenErr || !!ctaErr}
-            className="px-4 h-9 rounded-lg text-[13px] font-semibold border-none cursor-pointer bg-[#ededed] text-black hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 text-[12px]">
+            {err ? <span role="alert" className="text-[#f44]">{err}</span>
+              : placeholders.length ? <span className="text-[#f5a623]">Replace {placeholders.join(", ")} before sending.</span>
+              : <span className="text-[#666]">Replies go to {SENDERS[draft.sender].replyTo}</span>}
+          </div>
+          <button onClick={submit} disabled={!canSend}
+            className="inline-flex items-center gap-2 px-5 h-10 rounded-lg text-[14px] font-semibold border-none cursor-pointer bg-[#ededed] text-black hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             {working ? (mode === "schedule" ? "Scheduling…" : "Sending…")
               : `${mode === "schedule" ? "Schedule" : "Send"}${many ? ` to ${recipients.length}` : ""}`}
+            {!working && <span aria-hidden="true">→</span>}
           </button>
-          <span className="text-[12px] text-[#555]">Replies go to {SENDERS[draft.sender].replyTo}</span>
         </div>
       </div>
-    </Block>
+    </section>
+  );
+}
+
+const fillPreviewSubject = (subject: string, name?: string | null) =>
+  subject.replace(/\{\{\s*first_name\s*\}\}/g, (name ?? "").trim().split(/\s+/)[0] || "there").trim();
+
+/** One numbered section of the composer. */
+function Step({ n, title, aside, children }: { n: number; title: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="px-5 py-5">
+      <div className="flex items-baseline justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5">
+          <span className="w-5 h-5 rounded-full border border-[#2a2a2a] text-[11px] font-semibold text-[#888] inline-flex items-center justify-center tabular-nums">{n}</span>
+          <h3 className="text-[13px] font-semibold text-[#ededed]">{title}</h3>
+        </div>
+        {aside && <span className="text-[12px] text-[#555] truncate">{aside}</span>}
+      </div>
+      {children}
+    </div>
   );
 }
 
