@@ -10,7 +10,7 @@ import {
   loadUsers, fetchAll, profileLookup, subscriptionPatch, upsertSubscription,
   upsertUserMeta, writeUsage, UUID_RE,
 } from "@/lib/erp-data";
-import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
+import { PACKS, PACK_KEYS, packEnvVar, type PackKey } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
 import { sendEmails, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
 import { composeEmail, type Draft } from "@/lib/followup-email";
@@ -347,6 +347,22 @@ export async function GET(req: NextRequest) {
         userId: r.user_id, name: byId.get(r.user_id as string)?.name ?? null, email: byId.get(r.user_id as string)?.email ?? null,
         scope: r.scope, method: r.method, lastEmailType: r.last_email_type, at: r.created_at,
       })),
+    }, { headers: { "Cache-Control": "private, no-store" } });
+  }
+
+  // ── user_bonuses — credits granted from the ERP and open offers ─────────
+  // Granted credits are credit_packs rows with no payment; offers are
+  // pack_bonus_offers (Dashboard migration 0053) added to a future purchase.
+  if (action === "user_bonuses") {
+    const id = req.nextUrl.searchParams.get("id") ?? "";
+    if (!UUID_RE.test(id)) return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+    const [granted, offers] = await Promise.all([
+      sb().from("credit_packs").select("id,pack_key,granted,consumed,purchased_at,refunded_at").eq("user_id", id).is("stripe_payment_intent_id", null).order("purchased_at", { ascending: false }),
+      sb().from("pack_bonus_offers").select("id,pack_key,bonus,reason,created_at,claimed_at,claimed_pack_id").eq("user_id", id).order("created_at", { ascending: false }),
+    ]);
+    return NextResponse.json({
+      granted: (granted.data ?? []).map(g => ({ id: g.id, packKey: g.pack_key, granted: g.granted, consumed: g.consumed, at: g.purchased_at, revokedAt: g.refunded_at })),
+      offers: offers.error ? null : (offers.data ?? []).map(o => ({ id: o.id, packKey: o.pack_key, bonus: o.bonus, reason: o.reason, at: o.created_at, claimedAt: o.claimed_at })),
     }, { headers: { "Cache-Control": "private, no-store" } });
   }
 
@@ -1698,6 +1714,12 @@ export async function GET(req: NextRequest) {
 // Scheduled emails to many people go out one by one (lib/erp-emails.ts).
 export const maxDuration = 60;
 
+/** An erp_logs row for an admin action, best effort. */
+async function logAdmin(admin: { userId: string | null; email: string; name: string }, action: string, details: Record<string, unknown>) {
+  const { error } = await sb().from("erp_logs").insert({ user_id: admin.userId ?? "admin-secret", user_name: admin.name || null, user_email: admin.email || null, type: "action", action, details: { app: "erp", ...details } });
+  if (error) console.error(`[${action}] audit log failed:`, error.message);
+}
+
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -1925,6 +1947,59 @@ export async function POST(req: NextRequest) {
   const id = body.id as string;
   if (!id) {
     return NextResponse.json({ error: "Missing user id" }, { status: 400 });
+  }
+
+  // ── Bonus credits: give now, or add to their next purchase of a pack ───
+  if (action === "bonus_grant") {
+    const b = body as { mode?: string; packKey?: string; bonus?: Record<string, unknown>; reason?: string };
+    const pack = PACKS[b.packKey as PackKey];
+    if (!pack) return NextResponse.json({ error: "Unknown pack" }, { status: 400 });
+    // Only features the pack itself grants (they are the ones the app meters
+    // with pack credits), whole numbers, at most 10x the pack.
+    const bonus: Record<string, number> = {};
+    for (const [k, v] of Object.entries(b.bonus ?? {})) {
+      const n = Math.round(Number(v));
+      if (!(k in pack.grants)) return NextResponse.json({ error: `${k} is not part of the ${pack.name}` }, { status: 400 });
+      if (!Number.isFinite(n) || n < 0 || n > pack.grants[k] * 10) return NextResponse.json({ error: `Invalid amount for ${k}` }, { status: 400 });
+      if (n > 0) bonus[k] = n;
+    }
+    if (!Object.keys(bonus).length) return NextResponse.json({ error: "Give at least one credit" }, { status: 400 });
+    const reason = String(b.reason ?? "").trim().slice(0, 300) || null;
+    try {
+      if (b.mode === "next_purchase") {
+        const { data, error } = await sb().from("pack_bonus_offers").insert({ user_id: id, pack_key: pack.key, bonus, reason }).select("id").single();
+        if (error) throw new Error(error.message.includes("pack_bonus_offers") ? "Run Dashboard migration 0053 first" : error.message);
+        await logAdmin(admin, "bonus_offer_created", { userId: id, packKey: pack.key, bonus, reason, offerId: data.id });
+        return NextResponse.json({ success: true, offerId: data.id });
+      }
+      const { data, error } = await sb().from("credit_packs").insert({
+        user_id: id, pack_key: pack.key, stripe_payment_intent_id: null,
+        granted: bonus, consumed: {}, price_cents: 0,
+      }).select("id").single();
+      if (error) throw new Error(error.message);
+      await logAdmin(admin, "bonus_granted", { userId: id, packKey: pack.key, bonus, reason, packId: data.id });
+      return NextResponse.json({ success: true, packId: data.id });
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  if (action === "bonus_revoke") {
+    const b = body as { kind?: string; bonusId?: string };
+    if (!b.bonusId || !UUID_RE.test(b.bonusId)) return NextResponse.json({ error: "Invalid bonus id" }, { status: 400 });
+    if (b.kind === "offer") {
+      const { data, error } = await sb().from("pack_bonus_offers").delete().eq("id", b.bonusId).eq("user_id", id).is("claimed_at", null).select("id");
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (!data?.length) return NextResponse.json({ error: "That offer was already used or no longer exists" }, { status: 409 });
+    } else {
+      // Only unpaid rows: a purchased pack is refunded through Stripe, not here.
+      const { data, error } = await sb().from("credit_packs").update({ refunded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", b.bonusId).eq("user_id", id).is("stripe_payment_intent_id", null).is("refunded_at", null).select("id");
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (!data?.length) return NextResponse.json({ error: "That bonus was already removed" }, { status: 409 });
+    }
+    await logAdmin(admin, "bonus_revoked", { userId: id, kind: b.kind ?? "pack", bonusId: b.bonusId });
+    return NextResponse.json({ success: true });
   }
 
   // ── 1. Profile / subscription / usage update from the Users tab ───────────

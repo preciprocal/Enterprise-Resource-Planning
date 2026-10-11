@@ -11,6 +11,7 @@ import {
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel } from "./StripeTab";
 import { FollowUpPanel, EmailComposer, recipientFromUser } from "./FollowUp";
+import { BonusPanel } from "./BonusPanel";
 import { FEATURE_LABELS } from "@/lib/packs";
 import { useUser360, OverviewPanel, JobSearchPanel, ActivityPanel, SupportPanel, AboutCard } from "./UserInsights";
 
@@ -434,6 +435,15 @@ const DETAIL_TABS = [
     icon: (
       <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path d="M18 20V10M12 20V4M6 20v-6"/>
+      </svg>
+    ),
+  },
+  {
+    id: "bonuses",
+    label: "Bonuses",
+    icon: (
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <rect x="3" y="8" width="18" height="13" rx="1"/><path d="M12 8v13M3 12h18M12 8c-1.5-3-5-4-5-1.5S10 8 12 8Zm0 0c1.5-3 5-4 5-1.5S14 8 12 8Z"/>
       </svg>
     ),
   },
@@ -998,6 +1008,8 @@ function UserDetail({
           )}
 
           {/* ── Contact ── */}
+          {tab === "bonuses" && <BonusPanel user={user} token={token} />}
+
           {tab === "contact" && (
             <FollowUpPanel user={user} token={token} allUsers={allUsers} />
           )}
