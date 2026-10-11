@@ -160,14 +160,26 @@ export interface Draft {
   eyebrow: string;
   heading: string;
   body: string;
-  cta?: { label: string; url: string } | null;
+  /** Up to MAX_BUTTONS; the first is the primary. Rows with no text are ignored. */
+  buttons: { label: string; url: string }[];
 }
 
 export const draftFromTemplate = (t: FollowUpTemplate): Draft => ({
   templateId: t.id, sender: t.sender, optional: t.optional,
   subject: t.subject, eyebrow: t.eyebrow, heading: t.heading, body: t.body,
-  cta: t.cta ?? null,
+  buttons: t.cta ? [{ ...t.cta }] : [],
 });
+
+export const MAX_BUTTONS = 3;
+
+/** The buttons that will actually render: text present and a full http(s) link. */
+export const usableButtons = (b: Draft["buttons"]) =>
+  (b ?? []).map(x => ({ label: x.label.trim(), url: x.url.trim() }))
+    .filter(x => x.label && /^https?:\/\/\S+$/.test(x.url)).slice(0, MAX_BUTTONS);
+
+/** Rows that have something typed but cannot render, so the admin is told. */
+export const brokenButtons = (b: Draft["buttons"]) =>
+  (b ?? []).filter(x => (x.label.trim() || x.url.trim()) && !(x.label.trim() && /^https?:\/\/\S+$/.test(x.url.trim())));
 
 const UNSUB_LABEL = "Unsubscribe from all optional emails";
 
@@ -182,8 +194,7 @@ export function composeEmail(d: Draft, recipient: { name?: string | null }, unsu
   const subject = fill(d.subject);
   const heading = fill(d.heading) || subject;
   const body = fill(d.body);
-  const cta = d.cta && d.cta.label.trim() && /^https?:\/\//.test(d.cta.url.trim())
-    ? { label: d.cta.label.trim(), url: d.cta.url.trim() } : undefined;
+  const ctas = usableButtons(d.buttons);
   const footerNote = d.optional
     ? "You're getting this because you have a Preciprocal account."
     : "You're getting this because it's about your Preciprocal account.";
@@ -193,7 +204,7 @@ export function composeEmail(d: Draft, recipient: { name?: string | null }, unsu
     eyebrow: fill(d.eyebrow) || "From Preciprocal",
     heading,
     paragraphs: textToParagraphs(body),
-    cta,
+    ctas,
     signature: sender.signature,
     footerNote,
     footerExtraHtml: d.optional && unsubscribeUrl
@@ -202,7 +213,7 @@ export function composeEmail(d: Draft, recipient: { name?: string | null }, unsu
     campaign,
   });
   const text = renderShellText({
-    heading, body, cta, signature: sender.signature, footerNote,
+    heading, body, ctas, signature: sender.signature, footerNote,
     footerExtra: d.optional && unsubscribeUrl ? `${UNSUB_LABEL}: ${unsubscribeUrl}` : undefined,
     campaign,
   });

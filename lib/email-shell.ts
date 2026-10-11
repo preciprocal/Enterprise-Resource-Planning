@@ -97,7 +97,8 @@ export interface ShellOptions {
   heading: string;
   /** Already-escaped HTML paragraphs (see textToParagraphs). */
   paragraphs: string[];
-  cta?: { label: string; url: string };
+  /** Buttons, in order. The first is the filled primary; the rest are outlined. */
+  ctas?: { label: string; url: string }[];
   signature: { name: string; title?: string; email?: string };
   footerNote: string;
   /** e.g. the unsubscribe link. */
@@ -123,21 +124,31 @@ const signatureHtml = (sig: ShellOptions["signature"]): string => {
     </table>`;
 };
 
-const ctaHtml = (cta: ShellOptions["cta"]): string => {
-  if (!cta) return "";
-  return `
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:26px 0 6px 0;">
+// Stacked, one per row, rather than side by side: two pills in one row wrap
+// unpredictably on phones and Outlook cannot be told to wrap them at all.
+const ctaHtml = (ctas: ShellOptions["ctas"]): string => {
+  if (!ctas?.length) return "";
+  const rows = ctas.map((cta, i) => {
+    const cell = i === 0
+      ? `<td align="center" bgcolor="${C.ctaBg}" class="cta-td" style="border-radius:999px;background-color:${C.ctaBg};background-image:linear-gradient(135deg,${C.ctaBg},#a855f7);">
+                <a href="${escapeHtml(cta.url)}" class="cta-a" style="display:inline-block;padding:15px 34px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:${C.ctaText};text-decoration:none;border-radius:999px;">${escapeHtml(cta.label)}</a>
+              </td>`
+      : `<td align="center" style="border-radius:999px;border:1px solid ${C.accent};">
+                <a href="${escapeHtml(cta.url)}" class="t-accent" style="display:inline-block;padding:13px 32px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:${C.accent};text-decoration:none;border-radius:999px;">${escapeHtml(cta.label)}</a>
+              </td>`;
+    return `
       <tr>
-        <td align="center">
+        <td align="center" style="padding:${i ? 12 : 0}px 0 0 0;">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
             <tr>
-              <td align="center" bgcolor="${C.ctaBg}" class="cta-td" style="border-radius:999px;background-color:${C.ctaBg};background-image:linear-gradient(135deg,${C.ctaBg},#a855f7);">
-                <a href="${escapeHtml(cta.url)}" class="cta-a" style="display:inline-block;padding:15px 34px;font-family:${SANS};font-size:15px;font-weight:600;line-height:1;color:${C.ctaText};text-decoration:none;border-radius:999px;">${escapeHtml(cta.label)}</a>
-              </td>
+              ${cell}
             </tr>
           </table>
         </td>
-      </tr>
+      </tr>`;
+  }).join("");
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:26px 0 6px 0;">${rows}
     </table>`;
 };
 
@@ -228,7 +239,7 @@ export function renderShell(o: ShellOptions): string {
               <div class="t-accent" style="margin:0 0 14px 0;font-family:${SANS};font-size:11px;font-weight:600;line-height:1.4;letter-spacing:3.2px;text-transform:uppercase;color:${C.accent};">${escapeHtml(o.eyebrow)}</div>
               <h1 class="h1 t-fg" style="margin:0 0 22px 0;font-family:${DISPLAY};font-size:31px;font-weight:700;line-height:1.15;letter-spacing:-0.6px;color:${C.fg};">${escapeHtml(o.heading)}</h1>
               ${paragraphs}
-              ${ctaHtml(o.cta)}
+              ${ctaHtml(o.ctas)}
               ${signatureHtml(o.signature)}
               `)}
             </td>
@@ -271,12 +282,13 @@ export function renderShell(o: ShellOptions): string {
 
 /** Plain-text part. Never optional: HTML-only mail scores worse with spam filters. */
 export function renderShellText(o: {
-  heading: string; body: string; cta?: { label: string; url: string };
+  heading: string; body: string; ctas?: { label: string; url: string }[];
   signature: { name: string; title?: string; email?: string };
   footerNote: string; footerExtra?: string; campaign?: string;
 }): string {
   const parts = [o.heading, "", o.body.trim(), ""];
-  if (o.cta) parts.push(`${o.cta.label}: ${o.cta.url}`, "");
+  for (const c of o.ctas ?? []) parts.push(`${c.label}: ${c.url}`);
+  if (o.ctas?.length) parts.push("");
   parts.push(o.signature.name);
   if (o.signature.title) parts.push(o.signature.title);
   if (o.signature.email) parts.push(o.signature.email);

@@ -12,7 +12,7 @@ import { User, inputCls, fmtFull, Checkbox, Select } from "./admin-shared";
 import { Block, Empty, human } from "./ui-kit";
 import {
   FOLLOW_UP_TEMPLATES, FollowUpTemplate, Draft, SENDERS, SenderId, composeEmail, draftFromTemplate,
-  unfilledPlaceholders, scheduleError, MAX_SCHEDULE_DAYS, MAX_RECIPIENTS,
+  unfilledPlaceholders, scheduleError, MAX_SCHEDULE_DAYS, MAX_RECIPIENTS, MAX_BUTTONS, brokenButtons, usableButtons,
 } from "@/lib/followup-email";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -163,11 +163,12 @@ export function EmailComposer({
   const tpl = FOLLOW_UP_TEMPLATES.find(t => t.id === draft.templateId) ?? FOLLOW_UP_TEMPLATES[0];
   const pristine = draftFromTemplate(tpl);
   const dirty = (["subject", "heading", "eyebrow", "body"] as const).some(k => draft[k] !== pristine[k]);
-  const placeholders = unfilledPlaceholders([draft.subject, draft.heading, draft.eyebrow, draft.body, draft.cta?.label ?? "", draft.cta?.url ?? ""].join("\n"));
+  const placeholders = unfilledPlaceholders([draft.subject, draft.heading, draft.eyebrow, draft.body, ...draft.buttons.flatMap(b => [b.label, b.url])].join("\n"));
   const whenIso = when ? new Date(when).toISOString() : "";
   const whenErr = mode === "schedule" ? (when ? scheduleError(whenIso) : "Pick a date and time") : null;
-  const ctaErr = draft.cta && (draft.cta.label.trim() || draft.cta.url.trim()) && !/^https?:\/\/\S+$/.test(draft.cta.url.trim())
-    ? "The button needs a full link starting with https://" : null;
+  const ctaErr = brokenButtons(draft.buttons).length ? "Each button needs text and a full link starting with https://" : null;
+  const setButton = (i: number, patch: Partial<{ label: string; url: string }>) =>
+    setDraft(d => ({ ...d, buttons: d.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) }));
   const noAddress = recipients.filter(r => !r.email).length;
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft(d => ({ ...d, [k]: v }));
 
@@ -213,7 +214,7 @@ export function EmailComposer({
       const r = await post(token, "send_emails", {
         userIds: recipients.filter(x => x.userId).map(x => x.userId),
         emails: recipients.filter(x => !x.userId).map(x => x.email),
-        draft: { ...draft, optional, cta: draft.cta && draft.cta.label.trim() ? draft.cta : null },
+        draft: { ...draft, optional, buttons: usableButtons(draft.buttons) },
         ...(mode === "schedule" ? { scheduledAt: whenIso } : {}),
       }) as { results?: SendResult[]; draft?: boolean };
       const list = r.results ?? [];
@@ -338,15 +339,30 @@ export function EmailComposer({
               className={`${inputCls} resize-y leading-relaxed`} placeholder="Write your message. A blank line starts a new paragraph." />
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-3">
-          <label className="block">
-            <span className={LABEL}>Button text (optional)</span>
-            <input value={draft.cta?.label ?? ""} onChange={e => set("cta", { label: e.target.value, url: draft.cta?.url ?? "" })} className={inputCls} placeholder="e.g. Open Preciprocal" maxLength={40} />
-          </label>
-          <label className="block">
-            <span className={LABEL}>Button link</span>
-            <input value={draft.cta?.url ?? ""} onChange={e => set("cta", { label: draft.cta?.label ?? "", url: e.target.value })} className={inputCls} placeholder="https://app.preciprocal.com/..." />
-          </label>
+        <div>
+          <div className="flex items-baseline justify-between gap-3 mb-1.5">
+            <span className="text-[12px] font-medium text-[#888]">Buttons <span className="text-[#555] font-normal">· optional, up to {MAX_BUTTONS}; the first is the main one</span></span>
+            {draft.buttons.length < MAX_BUTTONS && (
+              <button type="button" onClick={() => set("buttons", [...draft.buttons, { label: "", url: "" }])}
+                className="text-[12px] text-[#888] hover:text-[#ededed] bg-transparent border-none p-0 cursor-pointer">+ Add button</button>
+            )}
+          </div>
+          {draft.buttons.length === 0 ? (
+            <p className="text-[12px] text-[#555]">No buttons. Links in the message are still clickable.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {draft.buttons.map((b, i) => (
+                <div key={i} className="grid grid-cols-[1fr_2fr_auto] gap-2 items-center">
+                  <input value={b.label} onChange={e => setButton(i, { label: e.target.value })} className={inputCls}
+                    placeholder={i === 0 ? "Main button text" : "Button text"} maxLength={40} aria-label={`Button ${i + 1} text`} />
+                  <input value={b.url} onChange={e => setButton(i, { url: e.target.value })} className={inputCls}
+                    placeholder="https://..." aria-label={`Button ${i + 1} link`} />
+                  <button type="button" onClick={() => set("buttons", draft.buttons.filter((_, j) => j !== i))} aria-label={`Remove button ${i + 1}`}
+                    className="w-8 h-8 flex items-center justify-center rounded-md text-[#555] hover:text-[#f44] hover:bg-[#141414] bg-transparent border-none cursor-pointer">×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         {(placeholders.length > 0 || ctaErr) && (
           <p className="text-[12px] text-[#f5a623] -mt-2">{placeholders.length ? `Replace ${placeholders.join(", ")} before sending. ` : ""}{ctaErr ?? ""}</p>

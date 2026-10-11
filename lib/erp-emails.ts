@@ -18,7 +18,7 @@ import { createHmac } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdminIdentity } from "@/lib/admin-auth";
 import {
-  composeEmail, scheduleError, unfilledPlaceholders, SENDERS, MAX_RECIPIENTS, type Draft, type SenderId,
+  composeEmail, scheduleError, unfilledPlaceholders, SENDERS, MAX_RECIPIENTS, MAX_BUTTONS, brokenButtons, type Draft, type SenderId,
 } from "@/lib/followup-email";
 
 const RESEND = "https://api.resend.com";
@@ -94,9 +94,11 @@ export async function sendEmails(sb: SupabaseClient, a: SendArgs): Promise<{ res
   const d: Draft = { ...a.draft, subject: a.draft.subject.trim(), body: a.draft.body.trim() };
   if (!SENDERS[d.sender as SenderId]) throw new EmailError("Unknown sender");
   if (!d.subject || !d.body) throw new EmailError("Subject and message are required");
-  const left = unfilledPlaceholders([d.subject, d.heading, d.eyebrow, d.body, d.cta?.label ?? "", d.cta?.url ?? ""].join("\n"));
+  d.buttons = Array.isArray(d.buttons) ? d.buttons.filter(b => b && typeof b.label === "string" && typeof b.url === "string") : [];
+  const left = unfilledPlaceholders([d.subject, d.heading, d.eyebrow, d.body, ...d.buttons.flatMap(b => [b.label, b.url])].join("\n"));
   if (left.length) throw new EmailError(`Fill in ${left.join(", ")} before sending`);
-  if (d.cta && (d.cta.label.trim() || d.cta.url.trim()) && !/^https?:\/\/\S+$/.test(d.cta.url.trim())) throw new EmailError("The button needs a full link starting with https://");
+  if (d.buttons.length > MAX_BUTTONS) throw new EmailError(`At most ${MAX_BUTTONS} buttons`);
+  if (brokenButtons(d.buttons).length) throw new EmailError("Each button needs text and a full link starting with https://");
   if (a.scheduledAt) {
     const err = scheduleError(a.scheduledAt);
     if (err) throw new EmailError(err);
