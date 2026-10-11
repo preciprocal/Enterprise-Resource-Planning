@@ -14,69 +14,170 @@
 //
 // Scheduling is Resend's native scheduled_at (exact delivery, cancellable, up
 // to 30 days out), not a cron job: Vercel Hobby crons run once a day.
+import { createHmac } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdminIdentity } from "@/lib/admin-auth";
-import { emailTypeFor, renderHtml, renderText, scheduleError, unfilledPlaceholders } from "@/lib/followup-email";
+import {
+  composeEmail, scheduleError, unfilledPlaceholders, SENDERS, MAX_RECIPIENTS, type Draft, type SenderId,
+} from "@/lib/followup-email";
 
 const RESEND = "https://api.resend.com";
 const resendKey = () => process.env.RESEND_API_KEY ?? "";
+const APP = "https://app.preciprocal.com";
 
 export class EmailError extends Error { constructor(message: string, public status = 400) { super(message); } }
+
+// ─── Unsubscribe ──────────────────────────────────────────────────────────────
+// The Dashboard's signed link (lib/email/unsubscribe.ts there), scope "all".
+// Same message and key (CRON_SECRET), so the Dashboard's endpoint verifies a
+// link signed here. Without CRON_SECRET the link falls back to Settings, as
+// it does in the Dashboard, and no List-Unsubscribe header is sent.
+
+function unsubscribeUrl(userId: string): { url: string; signed: boolean } {
+  const key = process.env.CRON_SECRET;
+  if (!key) return { url: `${APP}/settings?section=notifications`, signed: false };
+  const t = createHmac("sha256", key).update(`unsubscribe:all:${userId}`).digest("hex").slice(0, 32);
+  return { url: `${APP}/api/email/unsubscribe?${new URLSearchParams({ u: userId, s: "all", t })}`, signed: true };
+}
 
 // ─── Send / schedule ──────────────────────────────────────────────────────────
 
 export interface SendArgs {
-  userId: string; toEmail: string; subject: string;
-  /** Full plain-text message as the admin wrote it (greeting and signature included). */
-  text: string;
-  templateId?: string;
+  /** Users, by id. Their address and name are read here, never taken from the browser. */
+  userIds: string[];
+  /** Typed addresses. Matched to a user when one has that address. */
+  emails?: string[];
+  draft: Draft;
   /** ISO time; omitted = send now. */
   scheduledAt?: string;
   sentBy: AdminIdentity;
 }
 
-export async function sendFollowUp(sb: SupabaseClient, a: SendArgs) {
-  const subject = a.subject.trim(), text = a.text.trim();
-  if (!a.toEmail || !subject || !text) throw new EmailError("Missing subject, body, or toEmail");
-  const left = unfilledPlaceholders(`${subject}\n${text}`);
+export interface SendResult {
+  email: string; userId: string | null; name: string | null;
+  status: "sent" | "scheduled" | "skipped" | "failed" | "draft";
+  reason?: string; resendId?: string;
+}
+
+interface Recipient { email: string; userId: string | null; name: string | null; optedOut: boolean }
+
+const EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:"]+$/;
+
+async function resolveRecipients(sb: SupabaseClient, userIds: string[], emails: string[]): Promise<{ list: Recipient[]; invalid: string[] }> {
+  const cols = "user_id,name,email,activation_email_opt_out";
+  const typed = [...new Set(emails.map(e => e.trim().toLowerCase()).filter(Boolean))];
+  const invalid = typed.filter(e => !EMAIL_RE.test(e));
+  const valid = typed.filter(e => EMAIL_RE.test(e));
+
+  const [byId, byEmail] = await Promise.all([
+    userIds.length ? sb.from("profiles").select(cols).in("user_id", userIds) : Promise.resolve({ data: [], error: null }),
+    valid.length ? sb.from("profiles").select(cols).in("email", valid) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (byId.error) throw new Error(`profiles: ${byId.error.message}`);
+  if (byEmail.error) throw new Error(`profiles: ${byEmail.error.message}`);
+
+  const seen = new Set<string>();
+  const list: Recipient[] = [];
+  const add = (r: Recipient) => { const k = r.email.toLowerCase(); if (!seen.has(k)) { seen.add(k); list.push(r); } };
+  type P = { user_id: string; name: string | null; email: string | null; activation_email_opt_out: boolean | null };
+  for (const p of [...(byId.data ?? []), ...(byEmail.data ?? [])] as P[]) {
+    if (p.email) add({ email: p.email, userId: p.user_id, name: p.name, optedOut: p.activation_email_opt_out === true });
+  }
+  for (const e of valid) add({ email: e, userId: null, name: null, optedOut: false });
+  return { list, invalid };
+}
+
+/** Pause between single sends: Resend allows about 2 requests a second. */
+const pause = () => new Promise(r => setTimeout(r, 550));
+
+export async function sendEmails(sb: SupabaseClient, a: SendArgs): Promise<{ results: SendResult[]; draft: boolean }> {
+  const d: Draft = { ...a.draft, subject: a.draft.subject.trim(), body: a.draft.body.trim() };
+  if (!SENDERS[d.sender as SenderId]) throw new EmailError("Unknown sender");
+  if (!d.subject || !d.body) throw new EmailError("Subject and message are required");
+  const left = unfilledPlaceholders([d.subject, d.heading, d.eyebrow, d.body, d.cta?.label ?? "", d.cta?.url ?? ""].join("\n"));
   if (left.length) throw new EmailError(`Fill in ${left.join(", ")} before sending`);
+  if (d.cta && (d.cta.label.trim() || d.cta.url.trim()) && !/^https?:\/\/\S+$/.test(d.cta.url.trim())) throw new EmailError("The button needs a full link starting with https://");
   if (a.scheduledAt) {
     const err = scheduleError(a.scheduledAt);
     if (err) throw new EmailError(err);
   }
 
-  const emailType = emailTypeFor(a.templateId ?? "custom");
+  const { list, invalid } = await resolveRecipients(sb, a.userIds, a.emails ?? []);
+  if (invalid.length) throw new EmailError(`Not a valid email address: ${invalid.join(", ")}`);
+  if (!list.length) throw new EmailError("Add at least one recipient with an email address");
+  if (list.length > MAX_RECIPIENTS) throw new EmailError(`At most ${MAX_RECIPIENTS} recipients per send`);
+
+  // Anything to more than one person is optional by definition: it is not
+  // about any one person's account.
+  if (list.length > 1) d.optional = true;
+
+  const results: SendResult[] = [];
+  const toSend: { r: Recipient; payload: Record<string, unknown> }[] = [];
+  for (const r of list) {
+    const base = { email: r.email, userId: r.userId, name: r.name };
+    if (d.optional && r.optedOut) { results.push({ ...base, status: "skipped", reason: "Opted out of optional emails" }); continue; }
+    if (d.optional && !r.userId) { results.push({ ...base, status: "skipped", reason: "Not a Preciprocal user, so there is no way to unsubscribe. Send it as a reply instead." }); continue; }
+    const unsub = d.optional && r.userId ? unsubscribeUrl(r.userId) : null;
+    const m = composeEmail(d, r, unsub?.url);
+    toSend.push({ r, payload: {
+      from: m.from, reply_to: m.replyTo, to: [r.email], subject: m.subject, html: m.html, text: m.text,
+      ...(unsub?.signed ? { headers: { "List-Unsubscribe": `<${unsub.url}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } } : {}),
+      tags: [{ name: "source", value: "erp" }, { name: "email_type", value: m.emailType }],
+    } });
+  }
+
   const key = resendKey();
   if (!key) {
     if (a.scheduledAt) throw new EmailError("Scheduling needs RESEND_API_KEY", 500);
-    console.log("📧 [DRAFT — no RESEND_API_KEY]\nTo:", a.toEmail, "\nSubject:", subject, "\n", text);
-    return { draft: true as const, resendId: null, scheduledAt: null, emailType };
+    for (const { r, payload } of toSend) {
+      console.log("📧 [DRAFT, no RESEND_API_KEY] To:", r.email, "Subject:", payload.subject);
+      results.push({ email: r.email, userId: r.userId, name: r.name, status: "draft" });
+    }
+    return { results, draft: true };
   }
 
-  const res = await fetch(`${RESEND}/emails`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: process.env.ADMIN_FROM_EMAIL ?? "support@preciprocal.com",
-      to: [a.toEmail], subject,
-      html: renderHtml(text, emailType),
-      text: renderText(text, emailType),
-      ...(a.scheduledAt ? { scheduled_at: new Date(a.scheduledAt).toISOString() } : {}),
-      tags: [{ name: "source", value: "erp" }, { name: "email_type", value: emailType }],
-    }),
-  });
-  if (!res.ok) throw new EmailError(`Resend error: ${(await res.text()).slice(0, 300)}`, 502);
-  const { id } = await res.json() as { id?: string };
-  if (!id) throw new EmailError("Resend accepted the email but returned no id", 502);
+  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+  const sent: { r: Recipient; id: string; subject: string }[] = [];
+  if (!a.scheduledAt && toSend.length > 1) {
+    // One request for everyone. The batch endpoint does not take scheduled_at.
+    const res = await fetch(`${RESEND}/emails/batch`, { method: "POST", headers, body: JSON.stringify(toSend.map(x => x.payload)) });
+    if (!res.ok) throw new EmailError(`Resend error: ${(await res.text()).slice(0, 300)}`, 502);
+    const ids = ((await res.json()) as { data?: { id: string }[] }).data ?? [];
+    toSend.forEach((x, i) => {
+      const id = ids[i]?.id;
+      if (id) sent.push({ r: x.r, id, subject: String(x.payload.subject) });
+      else results.push({ email: x.r.email, userId: x.r.userId, name: x.r.name, status: "failed", reason: "Resend returned no id" });
+    });
+  } else {
+    for (const [i, x] of toSend.entries()) {
+      if (i) await pause();
+      const res = await fetch(`${RESEND}/emails`, {
+        method: "POST", headers,
+        body: JSON.stringify({ ...x.payload, ...(a.scheduledAt ? { scheduled_at: new Date(a.scheduledAt).toISOString() } : {}) }),
+      });
+      const id = res.ok ? ((await res.json()) as { id?: string }).id : undefined;
+      if (id) sent.push({ r: x.r, id, subject: String(x.payload.subject) });
+      else results.push({ email: x.r.email, userId: x.r.userId, name: x.r.name, status: "failed", reason: res.ok ? "Resend returned no id" : `Resend error: ${(await res.text()).slice(0, 200)}` });
+    }
+  }
 
-  // Best effort from here: the email is already queued, so a logging failure
-  // must not be reported as a failed send.
+  // Best effort from here: the emails are already queued, so a logging
+  // failure must not be reported as a failed send.
+  const emailType = composeEmail(d, {}).emailType;
   const sentAt = a.scheduledAt ? new Date(a.scheduledAt).toISOString() : new Date().toISOString();
-  const { error } = await sb.from("email_sends").insert({ resend_id: id, user_id: a.userId, email_type: emailType, subject: subject.slice(0, 200), sent_at: sentAt });
-  if (error) console.error("[erp-emails] email_sends insert failed:", error.message);
-  await audit(sb, a.sentBy, a.scheduledAt ? "email_scheduled" : "email_sent", { userId: a.userId, to: a.toEmail, subject, resendId: id, emailType, scheduledAt: a.scheduledAt ?? null });
+  if (sent.length) {
+    const { error } = await sb.from("email_sends").insert(sent.map(s => ({
+      resend_id: s.id, user_id: s.r.userId, email_type: emailType, subject: s.subject.slice(0, 200), sent_at: sentAt,
+    })));
+    if (error) console.error("[erp-emails] email_sends insert failed:", error.message);
+  }
+  for (const s of sent) results.push({ email: s.r.email, userId: s.r.userId, name: s.r.name, status: a.scheduledAt ? "scheduled" : "sent", resendId: s.id });
+  await audit(sb, a.sentBy, a.scheduledAt ? "email_scheduled" : "email_sent", {
+    subject: d.subject, emailType, sender: d.sender, scheduledAt: a.scheduledAt ?? null,
+    recipients: results.map(r => ({ to: r.email, userId: r.userId, status: r.status, resendId: r.resendId ?? null, reason: r.reason ?? null })),
+  });
 
-  return { draft: false as const, resendId: id, scheduledAt: a.scheduledAt ?? null, emailType };
+  return { results, draft: false };
 }
 
 // ─── Cancel ───────────────────────────────────────────────────────────────────

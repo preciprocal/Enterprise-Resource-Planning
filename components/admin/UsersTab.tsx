@@ -9,7 +9,7 @@ import {
   inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable,
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel } from "./StripeTab";
-import { FollowUpPanel } from "./FollowUp";
+import { FollowUpPanel, EmailComposer, recipientFromUser } from "./FollowUp";
 import { FEATURE_LABELS } from "@/lib/packs";
 import { useUser360, OverviewPanel, JobSearchPanel, ActivityPanel, SupportPanel, AboutCard } from "./UserInsights";
 
@@ -54,7 +54,22 @@ export default function UsersTab({
   sortF, setSortF, sortD, setSortD, saveUser, saving, msg, token = "",
 }: Props) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  // Users ticked for a group email, by id.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [composing, setComposing] = useState(false);
   const isMobile = useIsMobile();
+
+  const togglePick = (id: string) => setPicked(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const allFilteredPicked = filtered.length > 0 && filtered.every(u => picked.has(u.id));
+  const togglePickAll = () => setPicked(prev => {
+    const next = new Set(prev);
+    if (allFilteredPicked) filtered.forEach(u => next.delete(u.id)); else filtered.forEach(u => next.add(u.id));
+    return next;
+  });
 
   const sortableColumns = [
     { key: "name",      label: "User"   },
@@ -70,9 +85,29 @@ export default function UsersTab({
     setSortD(d => key === sortF ? (d === "asc" ? "desc" : "asc") : "asc");
   }
 
+  if (composing) {
+    const chosen = users.filter(u => picked.has(u.id));
+    return (
+      <div className="flex-1 overflow-auto bg-black">
+        <div className="px-5 py-3 border-b border-[#141414] flex items-center gap-3 sticky top-0 bg-black z-10">
+          <button onClick={() => setComposing(false)}
+            className="inline-flex items-center gap-1.5 text-[13px] text-[#888] hover:text-[#ededed] bg-transparent border-none cursor-pointer p-0">
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+            Back to users
+          </button>
+        </div>
+        <div className="p-5 max-w-[960px]">
+          <EmailComposer initialRecipients={chosen.map(recipientFromUser)} allUsers={users} token={token}
+            title={chosen.length > 1 ? `Email ${chosen.length} users` : "New email"} />
+        </div>
+      </div>
+    );
+  }
+
   if (selectedUser) {
     return (
       <UserDetail
+        allUsers={users}
         user={selectedUser}
         onClose={() => setSelectedUser(null)}
         onUserUpdate={u => setSelectedUser(u)}
@@ -128,6 +163,18 @@ export default function UsersTab({
           </optgroup>
         </Select>
 
+        {/* Group email */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={() => setComposing(true)}
+            className="px-3 h-8 rounded-lg text-[13px] font-semibold border-none cursor-pointer bg-[#ededed] text-black hover:bg-white transition-colors">
+            {picked.size ? `Email ${picked.size} selected` : "New email"}
+          </button>
+          {picked.size > 0 && (
+            <button onClick={() => setPicked(new Set())}
+              className="text-[12px] text-[#666] hover:text-[#ededed] bg-transparent border-none cursor-pointer p-0">Clear</button>
+          )}
+        </div>
+
         {/* Row count */}
         <div className="ml-auto flex items-baseline gap-1.5 shrink-0">
           <span className="text-[14px] font-bold text-[#e0e0e0] tabular-nums">{filtered.length.toLocaleString()}</span>
@@ -155,6 +202,8 @@ export default function UsersTab({
                   className="px-4 py-4 cursor-pointer bg-black hover:bg-[#070707] active:bg-[#0d0d0d] transition-colors"
                 >
                   <div className="flex items-start gap-3">
+                    <input type="checkbox" checked={picked.has(u.id)} aria-label={`Select ${u.name ?? u.email ?? "user"}`}
+                      onClick={e => e.stopPropagation()} onChange={() => togglePick(u.id)} className="mt-3 shrink-0 cursor-pointer" />
                     <div className="w-0.5 self-stretch rounded-full shrink-0" style={{ background: p.accent }} />
                     <Avatar name={u.name} size={40} />
                     <div className="flex-1 min-w-0">
@@ -190,6 +239,7 @@ export default function UsersTab({
           /* Desktop table */
           <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
             <colgroup>
+              <col style={{ width: "44px" }} />
               <col style={{ width: "37%" }} />
               <col style={{ width: "13%" }} />
               <col style={{ width: "15%" }} />
@@ -198,6 +248,9 @@ export default function UsersTab({
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#050505] border-b border-[#141414]">
+                <th className="pl-4 py-3 text-left">
+                  <input type="checkbox" checked={allFilteredPicked} onChange={togglePickAll} aria-label="Select all shown" className="cursor-pointer" />
+                </th>
                 {sortableColumns.map(({ key, label }) => {
                   const sortable = ["name", "plan", "createdAt"].includes(key);
                   const active = sortF === key;
@@ -230,6 +283,10 @@ export default function UsersTab({
                     onClick={() => setSelectedUser(u)}
                     className="border-b border-[#0a0a0a] cursor-pointer transition-colors bg-black hover:bg-[#070707] group"
                   >
+                    <td className="pl-4 py-3.5" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={picked.has(u.id)} onChange={() => togglePick(u.id)}
+                        aria-label={`Select ${u.name ?? u.email ?? "user"}`} className="cursor-pointer" />
+                    </td>
                     {/* User */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
@@ -287,7 +344,7 @@ export default function UsersTab({
                 );
               })}
               {!filtered.length && (
-                <tr><td colSpan={5}><EmptyState search={search} /></td></tr>
+                <tr><td colSpan={6}><EmptyState search={search} /></td></tr>
               )}
             </tbody>
           </table>
@@ -413,10 +470,11 @@ const DETAIL_TABS = [
 type DetailTab = typeof DETAIL_TABS[number]["id"];
 
 function UserDetail({
-  user: initialUser, onClose, onUserUpdate, saveUser, saving, msg, token = "",
+  user: initialUser, onClose, onUserUpdate, saveUser, saving, msg, token = "", allUsers,
 }: {
   user: User; onClose: () => void; onUserUpdate?: (u: User) => void;
   saveUser: (u: User) => Promise<void>; saving: boolean; msg: string; token?: string;
+  allUsers?: User[];
 }) {
   const isMobile = useIsMobile();
   const [user, setUser] = useState<User>(initialUser);
@@ -916,7 +974,7 @@ function UserDetail({
 
           {/* ── Contact ── */}
           {tab === "contact" && (
-            <FollowUpPanel user={user} token={token} />
+            <FollowUpPanel user={user} token={token} allUsers={allUsers} />
           )}
 
           {/* ── Raw ── */}

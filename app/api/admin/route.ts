@@ -12,7 +12,8 @@ import {
 } from "@/lib/erp-data";
 import { PACKS, PACK_KEYS, packEnvVar } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
-import { sendFollowUp, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
+import { sendEmails, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
+import type { Draft } from "@/lib/followup-email";
 import { extensionOverview, extensionUserActivity } from "@/lib/extension-usage";
 
 // Which product an erp_logs row came from. ERP sign-ins are written by
@@ -1602,6 +1603,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
 }
 
+// Scheduled emails to many people go out one by one (lib/erp-emails.ts).
+export const maxDuration = 60;
+
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -1784,6 +1788,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Email one or many people in the branded template ──────────────────────
+  // userIds: users picked in the ERP (address and name read server-side).
+  // emails: typed addresses. draft: lib/followup-email Draft. scheduledAt: ISO.
+  if (action === "send_emails" || action === "contact_email") {
+    const userIds = Array.isArray(body.userIds) ? (body.userIds as unknown[]).map(String)
+      : body.id ? [String(body.id)] : [];
+    const emails = Array.isArray(body.emails) ? (body.emails as unknown[]).map(String) : [];
+    const draft = body.draft as Draft | undefined;
+    if (!draft || typeof draft !== "object") return NextResponse.json({ error: "Missing draft" }, { status: 400 });
+    try {
+      const r = await sendEmails(sb(), { userIds, emails, draft, scheduledAt: (body.scheduledAt as string) || undefined, sentBy: admin });
+      const now = new Date().toISOString();
+      for (const x of r.results) {
+        if (x.status !== "sent" || !x.userId) continue;
+        await upsertUserMeta(sb(), x.userId, {
+          last_contacted_at: now, last_contact_subject: draft.subject,
+          last_contact_sent_by: admin.email || "francesca@preciprocal.com",
+        }).catch(e => console.error("[send_emails] meta write failed:", e));
+      }
+      return NextResponse.json({ success: true, draft: r.draft, results: r.results });
+    } catch (err) {
+      console.error("❌ send_emails error:", err);
+      return NextResponse.json({ error: (err as Error).message }, { status: err instanceof EmailError ? err.status : 500 });
+    }
+  }
+
   const id = body.id as string;
   if (!id) {
     return NextResponse.json({ error: "Missing user id" }, { status: 400 });
@@ -1961,26 +1991,6 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("❌ apply_coupon error:", err);
       return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-    }
-  }
-
-  // ── 4. Contact user via email ─────────────────────────────────────────────
-  if (action === "contact_email") {
-    // Optional: template (id from lib/followup-email) and scheduledAt (ISO, ≤ 30 days out).
-    const { subject, body: emailBody, toEmail, template, scheduledAt } =
-      body as { subject: string; body: string; toEmail: string; template?: string; scheduledAt?: string };
-    try {
-      const r = await sendFollowUp(sb(), {
-        userId: id, toEmail, subject, text: emailBody, templateId: template, scheduledAt: scheduledAt || undefined, sentBy: admin,
-      });
-      if (!r.scheduledAt) await upsertUserMeta(sb(), id, {
-        last_contacted_at: new Date().toISOString(), last_contact_subject: subject,
-        last_contact_sent_by: admin.email || (process.env.ADMIN_FROM_EMAIL ?? "support@preciprocal.com"),
-      }).catch(e => console.error("[contact_email] meta write failed:", e));
-      return NextResponse.json({ success: true, sent: !r.draft, draft: r.draft, resendId: r.resendId, scheduledAt: r.scheduledAt });
-    } catch (err) {
-      console.error("❌ contact_email error:", err);
-      return NextResponse.json({ error: (err as Error).message }, { status: err instanceof EmailError ? err.status : 500 });
     }
   }
 
