@@ -47,3 +47,19 @@ export const FEATURE_LABELS: Record<string, string> = {
 export function packEnvVar(key: PackKey): string {
   return `STRIPE_PACK_${key.toUpperCase()}_PRICE_ID`;
 }
+
+/**
+ * Standalone bonuses: credits for any metered feature, not tied to a pack.
+ * Stored like other bonuses (credit_packs row, no payment) under this key.
+ * The Dashboard spends pack credits by feature, whatever the pack key.
+ * jobTracker is left out: it has no server-side metering, so a credit there
+ * could never be spent.
+ */
+export const STANDALONE_KEY = "bonus";
+/** Reference amount per feature for the Low/Moderate/High/Full presets. */
+export const STANDALONE_BASE: Record<string, number> = {
+  interviews: 4, resumes: 10, coverLetters: 15, studyPlans: 3, interviewDebriefs: 5,
+  debriefAnalyses: 5, linkedinOptimisations: 5, coldOutreach: 20, findContacts: 20,
+};
+/** Most that can be given per feature in one standalone bonus. */
+export const STANDALONE_MAX = 100;

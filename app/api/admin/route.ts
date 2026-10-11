@@ -10,7 +10,7 @@ import {
   loadUsers, fetchAll, profileLookup, subscriptionPatch, upsertSubscription,
   upsertUserMeta, writeUsage, UUID_RE,
 } from "@/lib/erp-data";
-import { PACKS, PACK_KEYS, packEnvVar, type PackKey } from "@/lib/packs";
+import { PACKS, PACK_KEYS, packEnvVar, STANDALONE_KEY, STANDALONE_BASE, STANDALONE_MAX, type PackKey } from "@/lib/packs";
 import { loadUser360 } from "@/lib/user-360";
 import { sendEmails, cancelFollowUp, userEmails, EmailError } from "@/lib/erp-emails";
 import { composeEmail, type Draft } from "@/lib/followup-email";
@@ -418,8 +418,11 @@ export async function GET(req: NextRequest) {
   // ── packs — catalog, configured price IDs, and sales from credit_packs ──────
   if (action === "packs") {
     try {
+      // Paid purchases only: bonus credits given from the ERP are credit_packs
+      // rows with no payment intent and are not sales.
       const rows = await fetchAll<{ user_id: string; pack_key: string; price_cents: number; purchased_at: string; refunded_at: string | null; granted: Record<string, number>; consumed: Record<string, number> }>(
         (a, b) => sb().from("credit_packs").select("user_id,pack_key,price_cents,purchased_at,refunded_at,granted,consumed")
+          .not("stripe_payment_intent_id", "is", null)
           .order("purchased_at", { ascending: false }).range(a, b),
       );
       const names = await profileLookup(sb(), rows.slice(0, 50).map(r => r.user_id));
@@ -1952,15 +1955,23 @@ export async function POST(req: NextRequest) {
   // ── Bonus credits: give now, or add to their next purchase of a pack ───
   if (action === "bonus_grant") {
     const b = body as { mode?: string; packKey?: string; bonus?: Record<string, unknown>; reason?: string };
-    const pack = PACKS[b.packKey as PackKey];
+    // Standalone: any metered feature, not tied to a pack, given now only
+    // (there is no purchase to attach it to).
+    const standalone = b.packKey === STANDALONE_KEY;
+    const def = PACKS[b.packKey as PackKey];
+    const pack = standalone
+      ? { key: STANDALONE_KEY, name: "standalone bonus", cap: (k: string) => (k in STANDALONE_BASE ? STANDALONE_MAX : -1) }
+      : def && { key: def.key, name: def.name, cap: (k: string) => (k in def.grants ? def.grants[k] * 10 : -1) };
     if (!pack) return NextResponse.json({ error: "Unknown pack" }, { status: 400 });
-    // Only features the pack itself grants (they are the ones the app meters
-    // with pack credits), whole numbers, at most 10x the pack.
+    if (standalone && b.mode === "next_purchase") return NextResponse.json({ error: "A standalone bonus can only be given now" }, { status: 400 });
+    // Only features the app meters with pack credits, whole numbers, capped
+    // (10x the pack, or STANDALONE_MAX).
     const bonus: Record<string, number> = {};
     for (const [k, v] of Object.entries(b.bonus ?? {})) {
       const n = Math.round(Number(v));
-      if (!(k in pack.grants)) return NextResponse.json({ error: `${k} is not part of the ${pack.name}` }, { status: 400 });
-      if (!Number.isFinite(n) || n < 0 || n > pack.grants[k] * 10) return NextResponse.json({ error: `Invalid amount for ${k}` }, { status: 400 });
+      const cap = pack.cap(k);
+      if (cap < 0) return NextResponse.json({ error: `${k} is not part of the ${pack.name}` }, { status: 400 });
+      if (!Number.isFinite(n) || n < 0 || n > cap) return NextResponse.json({ error: `Invalid amount for ${k}` }, { status: 400 });
       if (n > 0) bonus[k] = n;
     }
     if (!Object.keys(bonus).length) return NextResponse.json({ error: "Give at least one credit" }, { status: 400 });
