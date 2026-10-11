@@ -411,9 +411,13 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
     void Promise.resolve().then(async () => {
       const params = new URLSearchParams(window.location.search);
       const cbError = params.get("error");
-      if (cbError && CALLBACK_ERRORS[cbError]) setError(CALLBACK_ERRORS[cbError]);
+      if (cbError && CALLBACK_ERRORS[cbError]) {
+        // Microsoft's own reason, when it gave one (an AADSTS code and message).
+        const msDesc = params.get("ms_desc");
+        setError(msDesc ? `Microsoft said: ${msDesc}` : CALLBACK_ERRORS[cbError]);
+      }
       if (params.get("connected") === "outlook" || cbError?.startsWith("outlook_")) {
-        params.delete("connected"); params.delete("error");
+        params.delete("connected"); params.delete("error"); params.delete("ms_error"); params.delete("ms_desc");
         window.history.replaceState(null, "", window.location.pathname + (params.toString() ? `?${params}` : ""));
       }
       try {
