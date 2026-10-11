@@ -1,4 +1,5 @@
 "use client";
+import { alertDialog } from "@/components/ui/dialog-host";
 import { useState, useEffect, useCallback, useRef, useContext } from "react";
 import { Select, AdminTokenContext } from "./admin-shared";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -414,13 +415,18 @@ function TicketDetail({
       if (ticket.status === "open") onUpdate({ status: "in-progress" });
 
       // Best-effort email to the customer — the reply above is already saved.
+      // The reply is saved either way; say so if the customer's email failed
+      // rather than leaving staff to assume it went.
       fetch("/api/admin", {
         method: "POST",
         headers: { "x-admin-token": token ?? "", "Content-Type": "application/json" },
         body: JSON.stringify({ action: "ticket_notify_reply", ticketId: ticket.id, message }),
-      }).catch(() => {});
+      }).then(async r => {
+        const j = await r.json().catch(() => ({})) as { error?: string };
+        if (!r.ok || j.error) void alertDialog({ title: "Reply saved, email not sent", message: `The reply is on the ticket, but the email to the customer failed: ${j.error ?? `HTTP ${r.status}`}.` });
+      }).catch(() => void alertDialog({ title: "Reply saved, email not sent", message: "The reply is on the ticket, but the email to the customer could not be sent." }));
     } catch (e) {
-      alert((e as Error).message);
+      void alertDialog({ title: "Could not send the reply", message: (e as Error).message, tone: "danger" });
     } finally {
       setSending(false);
     }

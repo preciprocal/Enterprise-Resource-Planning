@@ -7,7 +7,8 @@
 // rendering in lib/followup-email.ts (shared, so the preview is what's sent).
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
+import { confirmDialog } from "@/components/ui/dialog-host";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { User, inputCls, fmtFull, Checkbox, Select } from "./admin-shared";
 import { Block, Empty, human } from "./ui-kit";
 import {
@@ -195,9 +196,9 @@ export function EmailComposer({
     setErr("");
   }
 
-  function pick(t: FollowUpTemplate) {
+  async function pick(t: FollowUpTemplate) {
     if (t.id === draft.templateId) return;
-    if (dirty && !window.confirm("Replace your edits with this template?")) return;
+    if (dirty && !(await confirmDialog({ title: "Replace your edits?", message: `Switching to "${t.label}" replaces the subject, heading and message you have written.`, confirmLabel: "Use template" }))) return;
     setDraft(draftFromTemplate(t)); setErr(""); setResults(null);
   }
 
@@ -208,7 +209,7 @@ export function EmailComposer({
     if (placeholders.length) return setErr(`Fill in ${placeholders.join(", ")} first`);
     if (ctaErr) return setErr(ctaErr);
     if (whenErr) return setErr(whenErr);
-    if (many && !window.confirm(`${mode === "schedule" ? "Schedule" : "Send"} this to ${recipients.length} people? Each gets their own copy.`)) return;
+    if (many && !(await confirmDialog({ title: `${mode === "schedule" ? "Schedule" : "Send"} to ${recipients.length} people?`, message: `Each person gets their own copy, from ${SENDERS[draft.sender].label}${mode === "schedule" ? `, on ${whenLabel(whenIso)}` : ""}. Anyone who has opted out is skipped.`, confirmLabel: mode === "schedule" ? "Schedule emails" : "Send emails" }))) return;
     setWorking(true); setErr(""); setResults(null);
     try {
       const r = await post(token, "send_emails", {
@@ -230,11 +231,29 @@ export function EmailComposer({
 
   // Always-on preview, rendered from a deferred copy of the draft so typing
   // stays smooth on long messages.
-  const deferred = useDeferredValue({ draft, optional, first: recipients[0] });
-  const previewHtml = useMemo(
-    () => composeEmail({ ...deferred.draft, optional: deferred.optional }, deferred.first ?? {}, UNSUB_PREVIEW).html,
-    [deferred],
-  );
+  // Whose copy the preview shows: any recipient, since {{first_name}} differs.
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const previewFor = recipients.find(r => keyOf(r) === previewKey) ?? recipients[0];
+  const deferred = useDeferredValue({ draft, optional, who: previewFor });
+  const previewHtml = useMemo(() => {
+    const html = composeEmail({ ...deferred.draft, optional: deferred.optional }, deferred.who ?? {}, UNSUB_PREVIEW).html;
+    // Every link in the preview opens in a new tab, never inside the frame.
+    return html.replace(/<head>/i, '<head><base target="_blank" />');
+  }, [deferred]);
+
+  // The frame grows to the email's own height, so the whole email shows
+  // without a scrollbar inside a scrollbar.
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [frameH, setFrameH] = useState(640);
+  const measure = useCallback(() => {
+    const doc = frameRef.current?.contentDocument;
+    const h = doc ? Math.max(doc.documentElement.scrollHeight, doc.body?.scrollHeight ?? 0) : 0;
+    if (h > 0) setFrameH(h + 2);
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(measure, 60);
+    return () => clearTimeout(t);
+  }, [measure, previewWidth, previewHtml]);
   const canSend = !working && recipients.length > 0 && placeholders.length === 0 && !whenErr && !ctaErr
     && !!draft.subject.trim() && !!draft.body.trim();
 
@@ -391,13 +410,22 @@ export function EmailComposer({
 
         {/* ── Live preview ── */}
         <div className="min-w-0 bg-[#030303]">
-          <div className="xl:sticky xl:top-0">
+          <div>
             <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[#141414]">
               <div className="min-w-0">
                 <div className="text-[13px] font-medium text-[#ededed]">Live preview</div>
-                <div className="text-[12px] text-[#666] truncate">
-                  As {recipients[0]?.name || recipients[0]?.email || "the first recipient"} sees it · {fillPreviewSubject(draft.subject, recipients[0]?.name) || "No subject yet"}
+                <div className="flex items-center gap-2 mt-1 min-w-0">
+                  <span className="text-[12px] text-[#666] shrink-0">Preview as</span>
+                  {recipients.length > 1 ? (
+                    <select value={previewFor ? keyOf(previewFor) : ""} onChange={e => setPreviewKey(e.target.value)} aria-label="Preview as"
+                      className="min-w-0 max-w-[260px] h-7 px-2 rounded-md border border-[#222] bg-[#0a0a0a] text-[12px] text-[#ddd] outline-none focus:border-[#444] cursor-pointer">
+                      {recipients.map(r => <option key={keyOf(r)} value={keyOf(r)}>{r.name ? `${r.name} (${r.email})` : r.email}</option>)}
+                    </select>
+                  ) : (
+                    <span className="text-[12px] text-[#bbb] truncate">{previewFor?.name || previewFor?.email || "the first recipient"}</span>
+                  )}
                 </div>
+                <div className="text-[12px] text-[#555] truncate mt-1">Subject: {fillPreviewSubject(draft.subject, previewFor?.name) || "No subject yet"}</div>
               </div>
               <div className="inline-flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0">
                 {(["desktop", "mobile"] as const).map(w => (
@@ -409,9 +437,12 @@ export function EmailComposer({
               </div>
             </div>
             <div className="p-4 flex justify-center">
-              <iframe title="Email preview" sandbox="" srcDoc={previewHtml}
-                className="h-[640px] rounded-lg border border-[#1a1a1a] bg-[#05070c] transition-[width]"
-                style={{ width: previewWidth === "desktop" ? "100%" : 390 }} />
+              {/* No scripts run inside; same-origin only so its height can be read,
+                  popups so its links can open in a new tab. */}
+              <iframe ref={frameRef} title="Email preview" srcDoc={previewHtml} onLoad={measure}
+                sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                className="rounded-lg border border-[#1a1a1a] bg-[#05070c] transition-[width]"
+                style={{ width: previewWidth === "desktop" ? "100%" : 390, height: frameH }} />
             </div>
           </div>
         </div>
@@ -494,7 +525,7 @@ function EmailHistory({ q, token }: { q: ReturnType<typeof useUserEmails>; token
   const delivered = list.filter(e => !["scheduled", "canceled", "sent", "bounced"].includes(e.status)).length;
 
   async function cancel(e: UserEmail) {
-    if (!window.confirm(`Cancel "${e.subject ?? "this email"}"? It can't be rescheduled afterwards.`)) return;
+    if (!(await confirmDialog({ title: "Cancel this scheduled email?", message: `"${e.subject ?? "This email"}" will not be sent. It can't be rescheduled afterwards.`, confirmLabel: "Cancel email", cancelLabel: "Keep it", tone: "danger" }))) return;
     setCanceling(e.resendId); setErr("");
     try { await post(token, "cancel_email", { resendId: e.resendId }); await q.reload(); }
     catch (x) { setErr((x as Error).message); }

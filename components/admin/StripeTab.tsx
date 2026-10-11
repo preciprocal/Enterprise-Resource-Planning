@@ -1,5 +1,6 @@
 // components/admin/StripeTab.tsx
 "use client";
+import { confirmDialog } from "@/components/ui/dialog-host";
 import { useState, useMemo, useEffect } from "react";
 import {
   User, AnalyticsData, PRICE_IDS_MAP, WEBHOOK_EVENTS,
@@ -128,7 +129,7 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
     const what = priceId === "__free__" ? `cancel ${user.email ?? "this user"}'s subscription at the end of the period`
       : !unchanged ? `change ${user.email ?? "this user"} to ${selectedPrice?.label ?? "this plan"}. Stripe charges or credits the difference immediately`
       : `update ${user.email ?? "this user"}'s subscription in Stripe`;
-    if (!window.confirm(`This will ${what}. Continue?`)) return;
+    if (!(await confirmDialog({ title: priceId === "__free__" ? "Cancel this subscription?" : "Update this subscription in Stripe?", message: `This will ${what}.`, confirmLabel: priceId === "__free__" ? "Cancel subscription" : "Apply changes", tone: priceId === "__free__" ? "danger" : "default" }))) return;
     setWorking(true); setErr("");
     try {
       const sd: Record<string,unknown> = { priceId, plan: selectedPrice?.plan ?? "free" };
@@ -245,7 +246,7 @@ export function CouponPanel({ user, onDone, token = "", coupons, loadingCoupons 
   async function apply(couponCode?: string) {
     const c = (couponCode ?? (selectedId || code)).trim();
     if (!c) { setErr("Select a coupon or enter a code"); return; }
-    if (!window.confirm(`Apply "${c}" to ${user.email ?? "this user"}'s subscription? It replaces any discount they already have, and a 100%-off coupon also marks them as a verified student.`)) return;
+    if (!(await confirmDialog({ title: `Apply coupon "${c}"?`, message: `It goes on ${user.email ?? "this user"}'s subscription and replaces any discount they already have. A 100%-off coupon also marks them as a verified student.`, confirmLabel: "Apply coupon" }))) return;
     setWorking(true); setErr("");
     try {
       const res  = await apiCall("apply_coupon", { id: user.id, couponCode: c }, token);

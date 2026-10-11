@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 "use client";
 
+import { confirmDialog, alertDialog } from "@/components/ui/dialog-host";
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { getAdminToken } from "@/lib/supabase/client";
 import { Select } from "./admin-shared";
@@ -29,13 +30,13 @@ function getAuthToken() { return getAdminToken()||null; }
 /** Starts a Google or Zoom connection: the server signs the request, then the browser goes to the provider. */
 async function startConnect(platform: "meet" | "zoom") {
   const token = getAuthToken();
-  if (!token) { alert("Sign in to the ERP again, then connect."); return; }
+  if (!token) { void alertDialog({ title: "Sign in again", message: "Your ERP session has ended. Sign in again, then connect." }); return; }
   try {
     const r = await fetch(`/api/auth/${platform === "meet" ? "google" : "zoom"}`, { headers: { "x-admin-token": token } });
     const j = await r.json() as { url?: string; error?: string };
     if (!r.ok || !j.url) throw new Error(j.error ?? `HTTP ${r.status}`);
     window.location.href = j.url;
-  } catch (e) { alert(`Could not start the connection: ${(e as Error).message}`); }
+  } catch (e) { void alertDialog({ title: "Could not start the connection", message: (e as Error).message, tone: "danger" }); }
 }
 
 // ─── Integration status ───────────────────────────────────────────────────────
@@ -575,7 +576,7 @@ function CardModal({card,colId,columns,isNew,me,admins,onClose,onSave,onDelete,o
         </div>}
       </div>
       <div style={{padding:"12px 22px 16px",borderTop:"1px solid #1a1a1a",display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
-        {!isNew&&card&&<button onClick={()=>{if(window.confirm(`Delete "${card.title}"? This cannot be undone.`))onDelete(card.id);}} style={{padding:"7px 13px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid rgba(255,68,68,0.2)",background:"rgba(255,68,68,0.06)",color:"#f44",marginRight:"auto"}}>Delete Card</button>}
+        {!isNew&&card&&<button onClick={async()=>{if(await confirmDialog({title:"Delete this card?",message:`"${card.title}" and its comments will be removed. This cannot be undone.`,confirmLabel:"Delete card",tone:"danger"}))onDelete(card.id);}} style={{padding:"7px 13px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid rgba(255,68,68,0.2)",background:"rgba(255,68,68,0.06)",color:"#f44",marginRight:"auto"}}>Delete Card</button>}
         <button onClick={onClose} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid #2a2a2a",background:"#111",color:"#555"}}>Cancel</button>
         <button onClick={handleSave} disabled={!title.trim()} style={{padding:"7px 18px",borderRadius:8,fontSize:12,fontWeight:700,cursor:title.trim()?"pointer":"not-allowed",border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",opacity:title.trim()?1:0.45}}>{isNew?"Add Card":"Save Card"}</button>
       </div>

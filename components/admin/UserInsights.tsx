@@ -3,6 +3,7 @@
 // Overview, Job search, Activity and Support, plus the About card on Profile.
 // Data comes from /api/admin?action=user_360 (lib/user-360.ts) in one request.
 "use client";
+import { confirmDialog } from "@/components/ui/dialog-host";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import type { User360 } from "@/lib/user-360";
 import { User, fmt, fmtFull, daysAgo, Chip } from "./admin-shared";
@@ -320,7 +321,7 @@ export function ActivityPanel(p: PanelProps) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function signOutEverywhere() {
-    if (!confirm(`Sign ${p.user.name ?? p.user.email} out of every device? They'll need to sign in again.`)) return;
+    if (!(await confirmDialog({ title: "Sign out of every device?", message: <>{p.user.name ?? p.user.email} is signed out everywhere and has to sign in again.</>, confirmLabel: "Sign out everywhere", tone: "danger" }))) return;
     setRevoking(true); setMsg(null);
     try {
       const res  = await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json", "x-admin-token": p.token ?? "" }, body: JSON.stringify({ action: "revoke_sessions", id: p.user.id }) });

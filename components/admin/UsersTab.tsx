@@ -1,6 +1,7 @@
 // components/admin/UsersTab.tsx
 "use client";
 
+import { confirmDialog } from "@/components/ui/dialog-host";
 import { useState, useEffect, ReactNode } from "react";
 import {
   User, AnalyticsData, PLANS, USAGE_FIELDS, LIMITS,
@@ -764,10 +765,10 @@ function UserDetail({
                     <FormField label="Admin access">
                       <Select
                         value={String(edit.isAdmin ?? false)}
-                        onChange={e => {
+                        onChange={async e => {
                           const on = e.target.value === "true";
                           // Admin in the Dashboard means unlimited usage and the refund approval queue.
-                          if (on && !window.confirm(`Make ${edit.email ?? "this user"} an admin? They get unlimited usage and access to the refund review queue in the app. This takes effect when you save.`)) return;
+                          if (on && !(await confirmDialog({ title: "Make this user an admin?", message: `${edit.email ?? "This user"} gets unlimited usage and access to the refund review queue in the app. It takes effect when you save.`, confirmLabel: "Make admin", tone: "danger" }))) return;
                           setEdit(p => ({ ...p, isAdmin: on }));
                         }}
                       >

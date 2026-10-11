@@ -2,6 +2,7 @@
 // Manage who can sign in to the ERP. Entries live in erp_allowed_emails;
 // emails from ERP_ALLOWED_EMAILS (server env) are shown as locked.
 "use client";
+import { confirmDialog } from "@/components/ui/dialog-host";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Avatar, fmt, fmtFull, SkeletonTable } from "./admin-shared";
 
@@ -74,7 +75,7 @@ export default function AccessTab({ token }: { token: string }) {
   }
 
   async function remove(entry: AccessEntry) {
-    if (!confirm(`Remove ERP access for ${entry.email}? They'll be signed out on their next request.`)) return;
+    if (!(await confirmDialog({ title: "Remove ERP access?", message: <>{entry.email} loses access to the ERP and is signed out on their next request.</>, confirmLabel: "Remove access", tone: "danger" }))) return;
     setBusy(entry.email);
     try {
       await post({ action: "access_remove", email: entry.email });
