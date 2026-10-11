@@ -87,6 +87,20 @@ const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 
 // ─── Stripe ───────────────────────────────────────────────────────────────────
 
+// Live and test are separate Stripe accounts, so a price id only exists in
+// one of them. The plan picker sends a plan; the price is chosen here for the
+// mode of the key this server holds, with the Dashboard's env names first.
+const PLAN_PRICE_IDS: Record<"live" | "test", Record<string, string>> = {
+  live: { pro: "price_1UOhFOKQ6vMUI194GVN3RAot", premium: "price_1UOhFJKQ6vMUI194CB4gWj4w" },
+  test: { pro: "price_1TFjwCQSkS83MGF9xH1bdc1o", premium: "price_1TFjzWQSkS83MGF9YCP7CBk3" },
+};
+function planPriceId(plan: string | undefined, fallback: string | undefined): string | undefined {
+  if (plan === "pro" && process.env.STRIPE_PRO_MONTHLY_PRICE_ID) return process.env.STRIPE_PRO_MONTHLY_PRICE_ID;
+  if (plan === "premium" && process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID) return process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID;
+  const mode = (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_live") ? "live" : "test";
+  return (plan && PLAN_PRICE_IDS[mode][plan]) || fallback;
+}
+
 function getStripe() {
   return new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1551,7 +1565,11 @@ export async function GET(req: NextRequest) {
     const ALLOWED: Record<string, string> = {
       stripeWebhook:      "app/api/webhooks/stripe/route.ts",
       stripeCreateSub:    "app/api/subscription/create-subscription/route.ts",
-      stripeCancelSub:    "app/api/subscription/cancel-subscription/route.ts",
+      stripeActivate:     "app/api/subscription/activate/route.ts",
+      stripeCancelSub:    "app/api/billing/route.ts",
+      refundFirst:        "lib/refund/first-payment.ts",
+      refundUnused:       "lib/refund/unused-credits.ts",
+      refundFees:         "lib/refund/fees.ts",
       priceIds:           "lib/config/stripe-prices.ts",
       packs:              "lib/config/packs.ts",
       packGrant:          "lib/packs/grant.ts",
@@ -1820,6 +1838,7 @@ export async function POST(req: NextRequest) {
       };
       const subId    = sub.stripeSubscriptionId;
       let updatedSub: Record<string, unknown> = {};
+      if (sd.priceId && sd.priceId !== "__free__") sd.priceId = planPriceId(sd.plan, sd.priceId);
 
       if (subId && sd.priceId) {
         const existing = await stripe.subscriptions.retrieve(subId);
@@ -1862,6 +1881,10 @@ export async function POST(req: NextRequest) {
         }
         const createParams: Record<string, unknown> = {
           customer: custId, items: [{ price: sd.priceId }],
+          // The Dashboard webhook finds the account by this. Without it the
+          // subscription's later changes (paid, expired, cancelled) never
+          // reach the account.
+          metadata: { userId: id },
           payment_behavior: "default_incomplete", expand: ["latest_invoice.payment_intent"],
         };
         if (sd.trialEnd)          createParams.trial_end            = Math.floor(new Date(sd.trialEnd).getTime() / 1000);

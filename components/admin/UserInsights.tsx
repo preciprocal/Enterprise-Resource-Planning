@@ -30,6 +30,12 @@ export function useUser360(userId: string, token: string) {
 
 const money = (usd: number) => usd >= 100 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
 const cents = (c?: number | null) => c == null ? null : `$${(c / 100).toFixed(2)}`;
+// refund_requests.kind, written by the Dashboard's lib/refund/*. Older rows
+// from the review queue have none.
+const REFUND_KIND_LABEL: Record<string, string> = {
+  first_payment:  "First-payment refund",
+  unused_credits: "Unused-credits refund",
+};
 const scoreTone = (s?: number | null) => s == null ? undefined : s >= 75 ? "#3ecf8e" : s >= 55 ? "#f5a623" : "#f55";
 
 function Loading() {
@@ -452,9 +458,14 @@ export function SupportPanel(p: PanelProps) {
           <div className="grid grid-cols-1 2xl:grid-cols-2 gap-7">
             <Block title="Refund requests" count={d.refunds.length}>
               <Table rows={d.refunds} rowKey={(r, i) => String(r.id ?? i)} empty="No refund requests" cols={[
-                { label: "Request", cell: r => <Primary sub={(r.note as string) ?? undefined}>{String(r.reason ?? "Refund request")}</Primary> },
+                { label: "Request", cell: r => <Primary sub={(r.note as string) ?? undefined}>{String(r.reason ?? REFUND_KIND_LABEL[String(r.kind)] ?? "Refund request")}</Primary> },
                 { label: "Status", cell: r => <Pill status={r.status as string} /> },
-                { label: "Amount", hide: "sm", cell: r => cents(r.quotedCents as number | null) ?? dash },
+                { label: "Amount", hide: "sm", cell: r => {
+                  const amount = cents(r.quotedCents as number | null);
+                  const fee = cents(r.feeCents as number | null);
+                  if (!amount) return dash;
+                  return fee ? `${amount} (fees ${fee})` : amount;
+                } },
                 { label: "Date", hide: "sm", cell: r => fmt(r.createdAt as string) },
               ]} />
             </Block>

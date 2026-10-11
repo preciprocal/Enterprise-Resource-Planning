@@ -84,9 +84,13 @@ export interface AnalyticsData {
 // Keys must match ALLOWED in app/api/admin/route.ts (action=code_ref).
 // Paths are in the Dashboard repo unless noted.
 export const CODE_REFS: Record<string, { file: string; desc: string }> = {
-  stripeWebhook:      { file: "app/api/webhooks/stripe/route.ts",                    desc: "Subscription lifecycle + checkout.session.completed → pack grants" },
-  stripeCreateSub:    { file: "app/api/subscription/create-subscription/route.ts",   desc: "Creates Stripe customer + incomplete subscription + SetupIntent" },
-  stripeCancelSub:    { file: "app/api/subscription/cancel-subscription/route.ts",   desc: "cancel_at_period_end - keeps access until period end" },
+  stripeWebhook:      { file: "app/api/webhooks/stripe/route.ts",                    desc: "Subscription lifecycle, pack grants, refunds, disputes, billing emails" },
+  stripeCreateSub:    { file: "app/api/subscription/create-subscription/route.ts",   desc: "Checkout step 1: Stripe customer + SetupIntent tagged with the plan" },
+  stripeActivate:     { file: "app/api/subscription/activate/route.ts",              desc: "Checkout step 2: creates the subscription from the saved card, grants the plan once paid" },
+  stripeCancelSub:    { file: "app/api/billing/route.ts",                            desc: "In-app billing: cancel / resume at period end" },
+  refundFirst:        { file: "lib/refund/first-payment.ts",                         desc: "Full first-payment refund (7 days, under 10% used), less fees" },
+  refundUnused:       { file: "lib/refund/unused-credits.ts",                        desc: "Unused-credits refund for the current month, once per 6 months, less fees" },
+  refundFees:         { file: "lib/refund/fees.ts",                                  desc: "Stripe processing + Billing fees deducted from every refund" },
   priceIds:           { file: "lib/config/stripe-prices.ts",                         desc: "Subscription plan price IDs (env with live fallbacks)" },
   packs:              { file: "lib/config/packs.ts",                                 desc: "PACKS catalog + STRIPE_PACK_*_PRICE_ID lookup" },
   packGrant:          { file: "lib/packs/grant.ts",                                  desc: "Writes credit_packs rows on successful checkout" },
@@ -100,10 +104,18 @@ export const CODE_REFS: Record<string, { file: string; desc: string }> = {
 };
 
 // Annual plans were removed from the Dashboard (lib/config/stripe-prices.ts).
+// Both Stripe accounts are listed so a subscription from either is labelled.
+// The live ids come first: the plan picker uses the first match per plan, and
+// the server swaps in the price for its own key's mode anyway
+// (planPriceId in app/api/admin/route.ts).
 export const PRICE_IDS_MAP: Record<string, { plan: string; billing: string; price: string; label: string }> = {
-  "price_1TFjvAQSkS83MGF9XlLXgu5H": { plan: "free",    billing: "",       price: "$0",           label: "Free"           },
-  "price_1TFjwCQSkS83MGF9xH1bdc1o": { plan: "pro",     billing: "Monthly", price: "$9.99/mo",     label: "Pro Monthly"    },
-  "price_1TFjzWQSkS83MGF9YCP7CBk3": { plan: "premium", billing: "Monthly", price: "$24.99/mo",    label: "Premium Monthly"},
+  "price_1UOhFJKQ6vMUI1940yx1rqc5": { plan: "free",    billing: "",       price: "$0",           label: "Free"           },
+  "price_1UOhFOKQ6vMUI194GVN3RAot": { plan: "pro",     billing: "Monthly", price: "$9.99/mo",     label: "Pro Monthly"    },
+  "price_1UOhFJKQ6vMUI194CB4gWj4w": { plan: "premium", billing: "Monthly", price: "$24.99/mo",    label: "Premium Monthly"},
+  // Test mode
+  "price_1TFjvAQSkS83MGF9XlLXgu5H": { plan: "free",    billing: "",       price: "$0",           label: "Free (test)"           },
+  "price_1TFjwCQSkS83MGF9xH1bdc1o": { plan: "pro",     billing: "Monthly", price: "$9.99/mo",     label: "Pro Monthly (test)"    },
+  "price_1TFjzWQSkS83MGF9YCP7CBk3": { plan: "premium", billing: "Monthly", price: "$24.99/mo",    label: "Premium Monthly (test)"},
 };
 
 const PLAN_PRICES: Record<string, number> = { free: 0, pro: 9.99, premium: 24.99 };
@@ -139,8 +151,14 @@ export const WEBHOOK_EVENTS = [
   { event: "customer.subscription.deleted",         handler: "handleSubscriptionDeleted"      },
   { event: "invoice.payment_succeeded",             handler: "handlePaymentSucceeded"         },
   { event: "invoice.payment_failed",                handler: "handlePaymentFailed"            },
+  { event: "invoice.finalized",                     handler: "handleInvoiceFinalized"         },
+  { event: "invoice.payment_action_required",       handler: "handleActionRequired"           },
+  { event: "invoice.upcoming",                      handler: "handleInvoiceUpcoming"          },
+  { event: "customer.subscription.trial_will_end",  handler: "handleTrialWillEnd"             },
   { event: "checkout.session.completed",            handler: "handleCheckoutSessionCompleted" },
   { event: "checkout.session.async_payment_succeeded", handler: "handleCheckoutSessionCompleted" },
+  { event: "charge.refunded",                       handler: "handleChargeRefunded"           },
+  { event: "charge.dispute.created",                handler: "handleDisputeCreated"           },
 ];
 
 export const PLANS = ["free", "pro", "premium", "enterprise"] as const;

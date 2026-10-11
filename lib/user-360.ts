@@ -68,7 +68,7 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
     q("support_tickets", "id,subject,status,priority,category,reply_count,last_reply_by,last_reply_at,created_at,updated_at", { order: "created_at" }),
     q("product_surveys", "id,page,overall_rating,nps,top_improvement,free_text,created_at", { order: "created_at" }),
     q("feature_ratings", "id,feature,rating,nps,comment,created_at", { order: "created_at" }),
-    q("refund_requests", "id,status,user_reason,quoted_refund_cents,amount_paid_cents,decision_note,created_at,decided_at", { order: "created_at" }),
+    q("refund_requests", "id,kind,status,user_reason,quoted_refund_cents,quoted_fee_cents,amount_paid_cents,decision_note,stripe_refund_id,refunded_at,refund_error,created_at,decided_at", { order: "created_at" }),
     q("flagged_accounts", "id,reason,status,resolution_note,created_at,resolved_at", { order: "created_at" }),
     q("credit_packs", "pack_key,price_cents,purchased_at,refunded_at", { order: "purchased_at" }),
     count("linkedin_optimizations"), count("outreach_history"), count("contact_searches"), count("job_analyses"),
@@ -231,7 +231,12 @@ export async function loadUser360(sb: SupabaseClient, userId: string) {
     tickets: tickets.map(t => ({ id: t.id, subject: t.subject, status: t.status, priority: t.priority, category: t.category, replies: t.reply_count ?? 0, lastReplyBy: t.last_reply_by, createdAt: t.created_at, updatedAt: t.updated_at })),
     surveys: surveys.map(s => ({ id: s.id, page: s.page, rating: s.overall_rating, nps: s.nps, improvement: s.top_improvement, text: s.free_text, createdAt: s.created_at })),
     ratings: ratings.map(r => ({ id: r.id, feature: r.feature, rating: r.rating, nps: r.nps, comment: r.comment, createdAt: r.created_at })),
-    refunds: refunds.map(r => ({ id: r.id, status: r.status, reason: r.user_reason, quotedCents: r.quoted_refund_cents, paidCents: r.amount_paid_cents, note: r.decision_note, createdAt: r.created_at, decidedAt: r.decided_at })),
+    refunds: refunds.map(r => ({
+      id: r.id, kind: r.kind ?? null, status: r.status, reason: r.user_reason,
+      quotedCents: r.quoted_refund_cents, feeCents: r.quoted_fee_cents ?? null, paidCents: r.amount_paid_cents,
+      note: r.refund_error ?? r.decision_note, stripeRefundId: r.stripe_refund_id ?? null,
+      createdAt: r.created_at, decidedAt: r.decided_at, refundedAt: r.refunded_at ?? null,
+    })),
     flags: flags.map(f => ({ id: f.id, reason: f.reason, status: f.status, note: f.resolution_note, createdAt: f.created_at, resolvedAt: f.resolved_at })),
     timeline: timeline.slice(0, 150),
   };
