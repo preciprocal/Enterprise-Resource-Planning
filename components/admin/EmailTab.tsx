@@ -1,7 +1,7 @@
 // components/admin/EmailTab.tsx
 // Outlook inbox for the signed-in admin.
 //
-// Styled with the ERP's dark palette (#0a0a0a, #ededed, ...), which globals.css
+// Styled with the ERP's dark palette (var(--surface), var(--fg), ...), which globals.css
 // remaps when the ERP is switched to light mode, so the tab follows the theme
 // instead of always rendering light.
 //
@@ -68,7 +68,7 @@ function initials(name: string) {
 }
 
 function avatarColor(name: string) {
-  const cols = ["#6366F1","#8B5CF6","#EC4899","#F59E0B","#10B981","#3B82F6","#EF4444","#14B8A6"];
+  const cols = ["#5b6cff","#a855f7","#f59e0b","#10b981","#3b82f6","#ef4444"];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
   return cols[Math.abs(h) % cols.length];
@@ -200,8 +200,8 @@ const MsLogo = ({ size = 18 }: { size?: number }) => (
   </svg>
 );
 
-const btnGhost = "flex items-center gap-1.5 px-3 h-8 rounded-lg border border-[#2a2a2a] bg-transparent text-[12px] font-medium text-[#aaa] cursor-pointer hover:text-[#ededed] hover:border-[#444] transition-colors";
-const btnPrimary = "flex items-center justify-center gap-1.5 px-4 h-9 rounded-lg bg-[#ededed] text-black text-[13px] font-semibold border-none cursor-pointer hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors";
+const btnGhost = "btn btn-sm btn-secondary";
+const btnPrimary = "btn btn-primary";
 
 // ─── Not-configured screen ────────────────────────────────────────────────────
 
@@ -214,22 +214,22 @@ function NotConfigured() {
     { title: "Set the env vars", body: "NEXT_PUBLIC_MS_CLIENT_ID, NEXT_PUBLIC_MS_TENANT_ID and MS_MAIL_CLIENT_SECRET, then redeploy." },
   ];
   return (
-    <div className="flex-1 flex items-center justify-center bg-[#000] p-6 overflow-y-auto">
+    <div className="flex-1 flex items-center justify-center bg-canvas p-6 overflow-y-auto">
       <div className="max-w-lg w-full">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-11 h-11 rounded-xl bg-[#111] border border-[#1a1a1a] flex items-center justify-center shrink-0"><MsLogo size={24} /></div>
+          <div className="w-11 h-11 rounded-xl bg-raised border border-line flex items-center justify-center shrink-0"><MsLogo size={24} /></div>
           <div>
-            <h2 className="text-[16px] font-semibold text-[#ededed]">Outlook is not set up</h2>
-            <p className="text-[13px] text-[#888]">Connect a Microsoft app to read and send email here.</p>
+            <h2 className="text-[16px] font-semibold text-fg">Outlook is not set up</h2>
+            <p className="text-[13px] text-fg-3">Connect a Microsoft app to read and send email here.</p>
           </div>
         </div>
-        <ol className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl list-none m-0 p-0">
+        <ol className="card list-none m-0 p-0">
           {steps.map((s, i) => (
-            <li key={s.title} className="flex items-start gap-3 px-4 py-3 border-0 border-b border-solid border-[#141414] last:border-b-0">
-              <span className="w-5 h-5 rounded-full bg-[#1a1a1a] text-[#ccc] text-[11px] font-semibold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+            <li key={s.title} className="flex items-start gap-3 px-4 py-3 border-b border-line-soft last:border-b-0">
+              <span className="w-5 h-5 rounded-full bg-raised-2 text-fg-2 text-[11px] font-semibold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
               <div>
-                <p className="text-[13px] font-semibold text-[#ddd] mb-0.5">{s.title}</p>
-                <p className="text-[12px] text-[#888] leading-relaxed">{s.body}</p>
+                <p className="text-[13px] font-semibold text-fg-2 mb-0.5">{s.title}</p>
+                <p className="text-[12px] leading-relaxed text-fg-3">{s.body}</p>
               </div>
             </li>
           ))}
@@ -285,13 +285,13 @@ function ComposeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-scrim backdrop-blur-[2px] p-4" onClick={onClose}>
+      <div className="popover animate-pop-in w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label="New message">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#1a1a1a]">
-          <span className="text-[14px] font-semibold text-[#ededed]">{prefill?.subject?.startsWith("Re:") ? "Reply" : prefill?.subject?.startsWith("Fwd:") ? "Forward" : "New message"}</span>
-          <button onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-md hover:bg-[#1a1a1a] flex items-center justify-center cursor-pointer border-none bg-transparent text-[#888] hover:text-[#ededed]">
-            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line-soft">
+          <span className="section-title">{prefill?.subject?.startsWith("Re:") ? "Reply" : prefill?.subject?.startsWith("Fwd:") ? "Forward" : "New message"}</span>
+          <button onClick={onClose} aria-label="Close" className="btn btn-ghost btn-sm btn-icon -mr-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -299,23 +299,23 @@ function ComposeModal({
             { label: "To",      value: to,      onChange: setTo,      placeholder: "recipient@example.com, ..." },
             { label: "Subject", value: subject, onChange: setSubject, placeholder: "Subject" },
           ].map(f => (
-            <div key={f.label} className="flex items-center gap-3 px-5 py-2.5 border-b border-[#141414]">
-              <span className="text-[12px] font-medium text-[#666] w-14 shrink-0">{f.label}</span>
+            <div key={f.label} className="flex items-center gap-3 px-5 py-2.5 border-b border-line-soft">
+              <span className="text-[12px] font-medium text-fg-4 w-14 shrink-0">{f.label}</span>
               <input value={f.value} onChange={e => f.onChange(e.target.value)} placeholder={f.placeholder}
-                className="flex-1 text-[14px] border-none outline-none bg-transparent text-[#ededed] placeholder:text-[#444] font-[inherit]" />
+                className="flex-1 min-w-0 text-[13px] outline-none bg-transparent text-fg placeholder:text-fg-5" />
             </div>
           ))}
           <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message..."
-            className="w-full resize-none text-[14px] text-[#ddd] px-5 py-4 border-none outline-none bg-transparent placeholder:text-[#444] font-[inherit] leading-relaxed"
+            className="w-full resize-none text-[13px] text-fg-2 px-5 py-4 outline-none bg-transparent placeholder:text-fg-5 leading-relaxed"
             rows={12} />
         </div>
-        <div className="flex items-center justify-between px-5 py-3 border-t border-[#1a1a1a] gap-3">
-          {err  && <span className="text-[13px] text-[#f44] flex-1 truncate">{err}</span>}
-          {sent && <span className="text-[13px] text-[#3ecf8e] font-semibold flex-1">Sent</span>}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-line-soft gap-3">
+          {err  && <span className="text-[13px] text-danger-fg flex-1 truncate">{err}</span>}
+          {sent && <span className="text-[13px] text-success-fg font-semibold flex-1">Sent</span>}
           {!err && !sent && <span className="flex-1" />}
-          <button onClick={onClose} className="px-3 h-9 text-[13px] font-medium text-[#888] hover:text-[#ededed] border-none bg-transparent cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
           <button onClick={send} disabled={sending || !to.trim() || !subject.trim() || sent} className={btnPrimary}>
-            {sending ? <Spinner size={12} /> : <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
+            {sending ? <Spinner size={12} /> : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
             {sending ? "Sending..." : "Send"}
           </button>
         </div>
@@ -328,25 +328,25 @@ function ComposeModal({
 
 function SignInScreen({ error, onConnect, busy, server }: { error?: string; onConnect: () => void; busy: boolean; server: boolean }) {
   return (
-    <div className="flex-1 flex items-center justify-center bg-[#000] p-8">
+    <div className="flex-1 flex items-center justify-center bg-canvas p-8">
       <div className="text-center max-w-sm w-full">
-        <div className="w-14 h-14 rounded-2xl bg-[#111] border border-[#1a1a1a] flex items-center justify-center mx-auto mb-5"><MsLogo size={28} /></div>
-        <h2 className="text-[17px] font-semibold text-[#ededed] mb-1.5">Connect Outlook</h2>
-        <p className="text-[14px] text-[#888] mb-6 leading-relaxed">
+        <div className="w-14 h-14 rounded-xl bg-raised border border-line flex items-center justify-center mx-auto mb-5"><MsLogo size={28} /></div>
+        <h2 className="page-title mb-1.5">Connect Outlook</h2>
+        <p className="text-body mb-6">
           {server
             ? "Sign in with Microsoft once. The ERP keeps you connected on every device you use it on."
             : "Sign in with Microsoft to read and send email."}
         </p>
-        <button onClick={onConnect} disabled={busy} className={btnPrimary + " w-full h-10"}>
+        <button onClick={onConnect} disabled={busy} className={btnPrimary + " btn-lg w-full"}>
           {busy ? <Spinner size={13} /> : <MsLogo size={15} />}
           Continue with Microsoft
         </button>
         {!server && (
-          <p className="text-[12px] text-[#555] mt-4 leading-relaxed">
+          <p className="text-caption mt-4">
             Microsoft ends this kind of sign-in after about a day. Add MS_MAIL_CLIENT_SECRET to the ERP to stay signed in.
           </p>
         )}
-        {error && <div className="mt-4 p-3 rounded-lg text-[13px] text-[#f44] bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)]">{error}</div>}
+        {error && <div className="mt-4 p-3 rounded-lg text-[13px] text-danger-fg bg-danger-soft border border-danger-line">{error}</div>}
       </div>
     </div>
   );
@@ -567,23 +567,23 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
     : emails;
 
   if (!isConfigured) return <NotConfigured />;
-  if (checking) return <div className="flex-1 flex items-center justify-center bg-[#000]"><Spinner size={20} /></div>;
+  if (checking) return <div className="flex-1 flex items-center justify-center bg-canvas"><Spinner size={20} /></div>;
   if (!token) return <SignInScreen error={error || undefined} onConnect={() => void connect()} busy={connecting} server={!!server} />;
 
   // ── List panel ────────────────────────────────────────────────────────
   const ListPanel = (
-    <div className={"flex flex-col border-r border-[#1a1a1a] bg-[#050505] min-h-0 " + (isMobile ? "flex-1" : "w-80 shrink-0") + " " + (isMobile && mobileView === "detail" ? "hidden" : "flex")}>
-      <div className="px-3 pt-3 pb-2 border-b border-[#1a1a1a] space-y-2">
+    <div className={"flex flex-col border-r border-line bg-subtle min-h-0 " + (isMobile ? "flex-1" : "w-80 shrink-0") + " " + (isMobile && mobileView === "detail" ? "hidden" : "flex")}>
+      <div className="px-3 pt-3 pb-2 border-b border-line-soft space-y-2">
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 h-8 focus-within:border-[#555] transition-colors">
-            <svg width="12" height="12" fill="none" stroke="#555" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <div className="relative flex-1 min-w-0">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" fill="none" stroke="var(--fg-4)" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search mail"
-              className="flex-1 min-w-0 text-[13px] bg-transparent border-none outline-none text-[#ededed] placeholder:text-[#444] font-[inherit]" />
+              className="field field-sm pl-9" />
           </div>
           <button onClick={() => loadEmails(folder)} title="Refresh" aria-label="Refresh"
-            className="w-8 h-8 rounded-lg border border-[#2a2a2a] bg-transparent flex items-center justify-center cursor-pointer text-[#888] hover:text-[#ededed] hover:border-[#444] shrink-0">
-            {loading ? <Spinner size={11} /> : (
-              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            className="btn btn-sm btn-secondary btn-icon shrink-0">
+            {loading ? <Spinner size={12} /> : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
               </svg>
             )}
@@ -593,9 +593,9 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
           <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
             {FOLDERS.map(f => (
               <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); }}
-                className={"flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[12px] font-medium whitespace-nowrap border cursor-pointer transition-colors shrink-0 " + (folder === f.id ? "bg-[#ededed] border-[#ededed] text-black" : "bg-transparent border-[#2a2a2a] text-[#888] hover:text-[#ededed]")}>
+                className={"btn btn-sm btn-secondary rounded-full shrink-0 " + (folder === f.id ? "btn-on" : "")}>
                 {f.label}
-                {(unread[f.id] ?? 0) > 0 && <span className="text-[11px] rounded-full px-1.5 bg-[#6366F1] text-white font-semibold">{unread[f.id]}</span>}
+                {(unread[f.id] ?? 0) > 0 && <span className="text-[11px] rounded-full px-1.5 bg-brand text-white font-semibold num">{unread[f.id]}</span>}
               </button>
             ))}
           </div>
@@ -603,14 +603,14 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {error && !loading && <div className="m-3 p-3 rounded-lg text-[13px] text-[#f44] bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)]">{error}</div>}
+        {error && !loading && <div className="m-3 p-3 rounded-lg text-[13px] text-danger-fg bg-danger-soft border border-danger-line">{error}</div>}
         {loading && <div className="flex items-center justify-center py-12"><Spinner size={20} /></div>}
         {!loading && filtered.length === 0 && !error && (
-          <div className="flex flex-col items-center justify-center py-14 text-[#555]">
-            <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-2 opacity-50">
+          <div className="empty py-14">
+            <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-50">
               <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
             </svg>
-            <p className="text-[13px]">{search ? "No results" : "Nothing here"}</p>
+            <p>{search ? "No results" : "Nothing here"}</p>
           </div>
         )}
         {!loading && filtered.map(email => {
@@ -618,25 +618,25 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
           const isAct = selectedId === email.id;
           return (
             <button key={email.id} onClick={() => openEmail(email)}
-              className={"w-full text-left px-3 py-3 border-0 border-b border-solid border-[#111] cursor-pointer transition-colors " + (isAct ? "bg-[#141414]" : "bg-transparent hover:bg-[#0d0d0d]")}
-              style={{ boxShadow: isAct ? "inset 2px 0 0 #6366F1" : undefined }}>
+              className={"w-full text-left px-3 py-3 border-b border-line-soft cursor-pointer transition-colors " + (isAct ? "bg-active" : "bg-transparent hover:bg-hover")}
+              style={{ boxShadow: isAct ? "inset 2px 0 0 var(--brand)" : undefined }}>
               <div className="flex items-center gap-2.5 mb-1">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: avatarColor(name) }}>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{ background: avatarColor(name) }}>
                   {initials(name)}
                 </div>
-                <span className={"flex-1 min-w-0 text-[13px] truncate " + (!email.isRead ? "font-semibold text-[#ededed]" : "font-medium text-[#aaa]")}>{name}</span>
+                <span className={"flex-1 min-w-0 text-[13px] truncate " + (!email.isRead ? "font-semibold text-fg" : "font-medium text-fg-3")}>{name}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {email.hasAttachments && (
-                    <svg width="10" height="10" fill="none" stroke="#666" strokeWidth="2" viewBox="0 0 24 24">
+                    <svg width="12" height="12" fill="none" stroke="var(--fg-4)" strokeWidth="2" viewBox="0 0 24 24">
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                     </svg>
                   )}
-                  <span className="text-[11px] text-[#555] tabular-nums">{fmtDate(email.receivedDateTime)}</span>
-                  {!email.isRead && <span className="w-1.5 h-1.5 rounded-full bg-[#6366F1] shrink-0" />}
+                  <span className="text-caption num">{fmtDate(email.receivedDateTime)}</span>
+                  {!email.isRead && <span className="dot bg-brand" />}
                 </div>
               </div>
-              <p className={"text-[12px] truncate pl-9 m-0 " + (!email.isRead ? "text-[#ddd] font-medium" : "text-[#888]")}>{email.subject || "(no subject)"}</p>
-              <p className="text-[12px] text-[#555] truncate pl-9 mt-0.5 mb-0">{email.bodyPreview}</p>
+              <p className={"text-[12px] truncate pl-9 m-0 " + (!email.isRead ? "text-fg-2 font-medium" : "text-fg-3")}>{email.subject || "(no subject)"}</p>
+              <p className="text-[12px] text-fg-4 truncate pl-9 mt-0.5 mb-0">{email.bodyPreview}</p>
             </button>
           );
         })}
@@ -646,37 +646,37 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
 
   // ── Detail panel ──────────────────────────────────────────────────────
   const DetailPanel = (
-    <div className={"flex-1 flex flex-col bg-[#0a0a0a] min-w-0 min-h-0 " + (isMobile && mobileView === "list" ? "hidden" : "flex")}>
+    <div className={"flex-1 flex flex-col bg-surface min-w-0 min-h-0 " + (isMobile && mobileView === "list" ? "hidden" : "flex")}>
       {!selected ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-[#555] gap-3">
+        <div className="flex-1 empty gap-3">
           <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="opacity-40">
             <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
           </svg>
-          <p className="text-[14px]">Select an email to read</p>
+          <p>Select an email to read</p>
         </div>
       ) : (
         <div className="flex flex-col h-full min-h-0">
-          <div className="px-5 py-4 border-b border-[#1a1a1a] shrink-0">
+          <div className="px-5 py-4 border-b border-line-soft shrink-0">
             {isMobile && (
-              <button onClick={() => setMobileView("list")} className="flex items-center gap-1 text-[#aaa] hover:text-[#ededed] text-[13px] font-medium mb-3 border-none bg-transparent cursor-pointer p-0">
-                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+              <button onClick={() => setMobileView("list")} className="btn btn-ghost btn-sm -ml-2.5 mb-3">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                 Back
               </button>
             )}
-            <h2 className="text-[16px] font-semibold text-[#ededed] mb-3 leading-snug">{selected.subject || "(no subject)"}</h2>
+            <h2 className="text-[16px] font-semibold text-fg mb-3 leading-snug">{selected.subject || "(no subject)"}</h2>
 
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0"
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold text-white shrink-0"
                   style={{ background: avatarColor(selected.from?.emailAddress?.name || "?") }}>
                   {initials(selected.from?.emailAddress?.name || "?")}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[13px] font-semibold text-[#ddd] truncate">{selected.from?.emailAddress?.name}</div>
-                  <div className="text-[12px] text-[#666] truncate">{selected.from?.emailAddress?.address}</div>
+                  <div className="text-[13px] font-semibold text-fg-2 truncate">{selected.from?.emailAddress?.name}</div>
+                  <div className="text-[12px] text-fg-4 truncate">{selected.from?.emailAddress?.address}</div>
                 </div>
               </div>
-              <span className="text-[12px] text-[#666] tabular-nums">{new Date(selected.receivedDateTime).toLocaleString()}</span>
+              <span className="text-caption num">{new Date(selected.receivedDateTime).toLocaleString()}</span>
             </div>
 
             <div className="flex flex-wrap gap-2 mt-3.5">
@@ -691,10 +691,10 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
               <button onClick={() => toggleRead(selected)} className={btnGhost}>
                 {selected.isRead
                   ? <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>
-                  : <svg width="12" height="12" viewBox="0 0 10 10" fill="#6366F1"><circle cx="5" cy="5" r="4"/></svg>}
+                  : <svg className="w-3.5 h-3.5" viewBox="0 0 10 10" fill="var(--brand)"><circle cx="5" cy="5" r="4"/></svg>}
                 {selected.isRead ? "Mark unread" : "Mark read"}
               </button>
-              <button onClick={() => deleteEmail(selected.id)} className={btnGhost + " hover:!text-[#f44] hover:!border-[rgba(255,68,68,0.4)]"}>
+              <button onClick={() => deleteEmail(selected.id)} className={btnGhost + " hover:text-danger-fg hover:border-danger-line"}>
                 <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
                 Delete
               </button>
@@ -706,24 +706,24 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
               selected.body.contentType === "html" ? (
                 <iframe
                   srcDoc={emailDoc(selected.body.content)}
-                  className="w-full border-0 bg-[#0a0a0a]"
+                  className="w-full border-0 bg-surface"
                   style={{ minHeight: 400, height: "100%" }}
                   sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                   title="Email body"
                 />
               ) : (
-                <pre className="text-[14px] text-[#ccc] whitespace-pre-wrap font-sans leading-relaxed m-0">{selected.body.content}</pre>
+                <pre className="text-[14px] text-fg-2 whitespace-pre-wrap font-sans leading-relaxed m-0">{selected.body.content}</pre>
               )
             ) : (
-              <div className="flex items-center gap-2 text-[13px] text-[#666]"><Spinner size={12} /> Loading message</div>
+              <div className="flex items-center gap-2 text-[13px] text-fg-4"><Spinner size={12} /> Loading message</div>
             )}
           </div>
 
-          <div className="shrink-0 px-5 py-3 border-t border-[#1a1a1a] bg-[#050505] flex items-center justify-between gap-3">
-            <span className="text-[12px] text-[#666] flex items-center gap-1.5">
+          <div className="shrink-0 px-5 py-3 border-t border-line-soft bg-subtle flex items-center justify-between gap-3">
+            <span className="text-caption flex items-center gap-1.5">
               {selected.hasAttachments && (
                 <>
-                  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                   </svg>
                   Has attachments, open in Outlook to view them
@@ -731,7 +731,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
               )}
             </span>
             <a href={selected.webLink ?? "https://outlook.live.com/mail/0/inbox"} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-[12px] font-semibold text-[#aaa] hover:text-[#ededed] no-underline transition-colors">
+              className="btn btn-sm btn-ghost shrink-0">
               <MsLogo size={14} />
               Open in Outlook ↗
             </a>
@@ -742,38 +742,38 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
   );
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-[#000] min-h-0">
+    <div className="flex-1 flex overflow-hidden bg-canvas min-h-0">
       {/* Sidebar */}
-      <aside className={"flex flex-col shrink-0 border-r border-[#1a1a1a] bg-[#000] " + (isMobile ? "hidden" : "w-48")}>
+      <aside className={"flex flex-col shrink-0 border-r border-line bg-canvas " + (isMobile ? "hidden" : "w-48")}>
         <div className="px-3 py-4">
           <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }} className={btnPrimary + " w-full"}>
-            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Compose
           </button>
         </div>
         <nav className="flex-1 px-2">
           {FOLDERS.map(f => (
             <button key={f.id} onClick={() => { setFolder(f.id); setSelectedId(null); setMobileView("list"); }}
-              className={"w-full flex items-center gap-2.5 px-2.5 h-8 rounded-md text-[13px] font-medium mb-0.5 cursor-pointer border-none transition-colors text-left " + (folder === f.id ? "bg-[#141414] text-[#ededed]" : "bg-transparent text-[#888] hover:bg-[#0d0d0d] hover:text-[#ededed]")}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className={folder === f.id ? "text-[#ededed]" : "text-[#555]"}><path d={f.icon}/></svg>
+              className={"w-full flex items-center gap-2.5 px-2.5 h-8 rounded-lg text-[13px] font-medium mb-0.5 cursor-pointer transition-colors text-left " + (folder === f.id ? "bg-active text-fg" : "bg-transparent text-fg-3 hover:bg-hover hover:text-fg")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className={folder === f.id ? "text-fg" : "text-fg-4"}><path d={f.icon}/></svg>
               <span className="flex-1 truncate">{f.label}</span>
-              {(unread[f.id] ?? 0) > 0 && <span className="text-[11px] bg-[#6366F1] text-white rounded-full px-1.5 font-semibold shrink-0 tabular-nums">{unread[f.id]}</span>}
+              {(unread[f.id] ?? 0) > 0 && <span className="text-[11px] bg-brand text-white rounded-full px-1.5 font-semibold shrink-0 tabular-nums">{unread[f.id]}</span>}
             </button>
           ))}
         </nav>
         {me && (
-          <div className="px-3 py-3 border-t border-[#1a1a1a] mt-auto">
+          <div className="px-3 py-3 border-t border-line-soft mt-auto">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: avatarColor(me.displayName || "?") }}>
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{ background: avatarColor(me.displayName || "?") }}>
                 {initials(me.displayName || "?")}
               </div>
               <div className="min-w-0">
-                <div className="text-[12px] font-medium text-[#ddd] truncate">{me.displayName}</div>
-                <div className="text-[11px] text-[#666] truncate">{me.mail || me.userPrincipalName}</div>
+                <div className="text-[12px] font-medium text-fg-2 truncate">{me.displayName}</div>
+                <div className="text-caption truncate">{me.mail || me.userPrincipalName}</div>
               </div>
             </div>
             <button onClick={() => void disconnect()}
-              className="mt-2 w-full text-[11px] text-[#555] hover:text-[#f44] cursor-pointer border-none bg-transparent text-left p-0 transition-colors">
+              className="link mt-2 text-[12px] text-fg-4 hover:text-danger-fg">
               Disconnect Outlook
             </button>
           </div>
@@ -783,7 +783,7 @@ export default function EmailTab({ onUnreadChange }: { onUnreadChange?: (count: 
       {isMobile && (
         <div className="fixed bottom-16 right-4 z-40">
           <button onClick={() => { setCompose(true); setForwardOf(null); setReplyTo(null); }} aria-label="Compose"
-            className="w-12 h-12 rounded-full bg-[#ededed] text-black shadow-lg flex items-center justify-center cursor-pointer border-none hover:bg-white">
+            className="btn btn-primary btn-icon w-12 h-12 rounded-full shadow-lg">
             <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>

@@ -775,7 +775,7 @@ export const RFM_SEGMENTS: { id: RFMSegment; label: string; color: string }[] = 
   { id: "promising",   label: "Promising",   color: "#8B5CF6" },
   { id: "new",         label: "New",         color: "#06B6D4" },
   { id: "atRisk",      label: "At-risk",     color: "#F59E0B" },
-  { id: "hibernating", label: "Hibernating", color: "#9CA3AF" },
+  { id: "hibernating", label: "Hibernating", color: "#9aa3b2" },
   { id: "lost",        label: "Lost",        color: "#EF4444" },
 ];
 

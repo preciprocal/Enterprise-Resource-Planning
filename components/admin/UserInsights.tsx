@@ -6,7 +6,7 @@
 import { confirmDialog } from "@/components/ui/dialog-host";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import type { User360 } from "@/lib/user-360";
-import { User, fmt, fmtFull, daysAgo, Chip } from "./admin-shared";
+import { User, fmt, fmtFull, daysAgo } from "./admin-shared";
 import { Block, Empty, Stat, Table, Pill, Muted, dash, human, Primary } from "./ui-kit";
 
 // ─── Data hook ────────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ const REFUND_KIND_LABEL: Record<string, string> = {
   first_payment:  "First-payment refund",
   unused_credits: "Unused-credits refund",
 };
-const scoreTone = (s?: number | null) => s == null ? undefined : s >= 75 ? "#3ecf8e" : s >= 55 ? "#f5a623" : "#f55";
+const scoreTone = (s?: number | null) => s == null ? undefined : s >= 75 ? "var(--success-fg)" : s >= 55 ? "var(--warning-fg)" : "var(--danger-fg)";
 
 function Loading() {
   return (
@@ -60,9 +60,9 @@ function Loading() {
 
 function Failed({ error, retry }: { error: string; retry: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[rgba(255,68,68,0.2)] bg-[rgba(255,68,68,0.05)]">
-      <span className="text-[13px] text-[#f55]">Couldn&apos;t load this user&apos;s data: {error}</span>
-      <button onClick={retry} className="text-[12px] font-medium text-[#f55] border border-[rgba(255,68,68,0.3)] bg-transparent rounded-md px-2.5 py-1 cursor-pointer">Retry</button>
+    <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-danger-line bg-danger-soft">
+      <span className="text-[13px] text-danger-fg">Couldn&apos;t load this user&apos;s data: {error}</span>
+      <button onClick={retry} className="btn btn-sm btn-danger shrink-0">Retry</button>
     </div>
   );
 }
@@ -97,8 +97,8 @@ function signals(user: User, d: User360): { tone: "warn" | "good" | "info"; text
 // ─── Overview ─────────────────────────────────────────────────────────────────
 
 const KIND_COLOR: Record<string, string> = {
-  account: "#ededed", session: "#555", resume: "#0070f3", interview: "#f5a623", application: "#3ecf8e", cover_letter: "#38bdf8",
-  debrief: "#a855f7", support: "#f472b6", feedback: "#c084fc", email: "#888", billing: "#3ecf8e", risk: "#f55",
+  account: "var(--fg)", session: "var(--fg-4)", resume: "#5b6cff", interview: "#f59e0b", application: "#10b981", cover_letter: "#3b82f6",
+  debrief: "#a855f7", support: "#3b82f6", feedback: "#a855f7", email: "var(--fg-3)", billing: "#10b981", risk: "#ef4444",
 };
 
 export function OverviewPanel({ user, d, loading, error, reload }: PanelProps) {
@@ -113,14 +113,14 @@ export function OverviewPanel({ user, d, loading, error, reload }: PanelProps) {
         const sig = signals(user, d);
         const maxFeat = Math.max(1, ...d.features.map(f => f.views + f.clicks));
         return (
-          <div className="flex flex-col gap-7">
+          <div className="flex flex-col gap-5">
             {/* Key numbers */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Stat label="Last seen" value={s.lastSeenAt ? daysAgo(s.lastSeenAt) : "—"} sub={`${s.activeSessions} active device${s.activeSessions === 1 ? "" : "s"}`} />
               <Stat label="Resumes" value={s.resumes} sub={s.bestResumeScore != null ? `best score ${s.bestResumeScore}` : "none analysed"} />
               <Stat label="Mock interviews" value={s.interviews} sub={s.avgInterviewScore != null ? `avg score ${s.avgInterviewScore}` : `${s.completedInterviews} completed`} tone={undefined} />
               <Stat label="Applications" value={s.applications} sub={s.responseRate != null ? `${s.responseRate}% response rate` : "none tracked"} />
-              <Stat label="Support" value={s.tickets} sub={s.openTickets ? `${s.openTickets} open` : "no open tickets"} tone={s.openTickets ? "#f5a623" : undefined} />
+              <Stat label="Support" value={s.tickets} sub={s.openTickets ? `${s.openTickets} open` : "no open tickets"} tone={s.openTickets ? "var(--warning-fg)" : undefined} />
               <Stat label="AI interview cost" value={money(s.aiCostUsd)} sub="Vapi voice calls" />
               <Stat label="Emails" value={s.emailsSent} sub={s.emailsSent ? `${s.emailsOpened} opened` : "none sent"} />
               <Stat label="Active days" value={s.activeDays30} sub="last 30 days" />
@@ -129,11 +129,11 @@ export function OverviewPanel({ user, d, loading, error, reload }: PanelProps) {
             {/* Signals */}
             {sig.length > 0 && (
               <Block title="Signals">
-                <ul className="divide-y divide-[#0f0f0f]">
+                <ul className="divide-y divide-line-soft">
                   {sig.map((x, i) => (
                     <li key={i} className="flex items-start gap-3 px-4 py-2.5">
-                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: x.tone === "warn" ? "#f5a623" : x.tone === "good" ? "#3ecf8e" : "#555" }} />
-                      <span className="text-[13px] text-[#bbb] leading-relaxed">{x.text}</span>
+                      <span className={`dot mt-1.5 ${x.tone === "warn" ? "bg-warning" : x.tone === "good" ? "bg-success" : "bg-fg-4"}`} />
+                      <span className="text-[13px] text-fg-2 leading-relaxed">{x.text}</span>
                     </li>
                   ))}
                 </ul>
@@ -142,35 +142,35 @@ export function OverviewPanel({ user, d, loading, error, reload }: PanelProps) {
 
             {/* Lifecycle */}
             <Block title="Lifecycle" count={`${reached} of ${milestones.length}`}>
-              <ol className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-px bg-[#0f0f0f]">
+              <ol className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-px bg-raised">
                 {milestones.map(m => (
-                  <li key={m.key} className="flex items-center gap-3 px-4 py-3 bg-[#0a0a0a]">
-                    <span className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center border ${m.at ? "bg-[rgba(62,207,142,0.12)] border-[rgba(62,207,142,0.35)] text-[#3ecf8e]" : "border-[#2a2a2a] text-transparent"}`}>
+                  <li key={m.key} className="flex items-center gap-3 px-4 py-3 bg-surface">
+                    <span className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center border ${m.at ? "bg-success-soft border-success-line text-success-fg" : "border-line text-transparent"}`}>
                       <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                     </span>
                     <div className="min-w-0">
-                      <div className={`text-[13px] truncate ${m.at ? "text-[#ddd]" : "text-[#555]"}`}>{m.label}</div>
-                      <div className="text-[12px] text-[#555]">{m.at ? fmt(m.at) : "Not yet"}</div>
+                      <div className={`text-[13px] truncate ${m.at ? "text-fg-2" : "text-fg-4"}`}>{m.label}</div>
+                      <div className="text-[12px] text-fg-4">{m.at ? fmt(m.at) : "Not yet"}</div>
                     </div>
                   </li>
                 ))}
               </ol>
             </Block>
 
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-7">
+            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
               {/* Recent activity */}
               <div className="xl:col-span-3 min-w-0">
                 <Block title="Recent activity" count={d.timeline.length > 12 ? `12 of ${d.timeline.length}` : d.timeline.length}>
                   {d.timeline.length ? (
-                    <ul className="divide-y divide-[#0f0f0f]">
+                    <ul className="divide-y divide-line-soft">
                       {d.timeline.slice(0, 12).map((t, i) => (
                         <li key={i} className="flex items-start gap-3 px-4 py-2.5">
-                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: KIND_COLOR[t.kind] ?? "#555" }} />
+                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: KIND_COLOR[t.kind] ?? "var(--fg-4)" }} />
                           <div className="flex-1 min-w-0">
-                            <div className="text-[13px] text-[#ccc] truncate">{t.title}</div>
-                            {t.detail && <div className="text-[12px] text-[#555] truncate">{t.detail}</div>}
+                            <div className="text-[13px] text-fg-2 truncate">{t.title}</div>
+                            {t.detail && <div className="text-[12px] text-fg-4 truncate">{t.detail}</div>}
                           </div>
-                          <time className="text-[12px] text-[#555] whitespace-nowrap shrink-0" title={fmtFull(t.at)} dateTime={t.at}>{daysAgo(t.at)}</time>
+                          <time className="text-[12px] text-fg-4 whitespace-nowrap shrink-0" title={fmtFull(t.at)} dateTime={t.at}>{daysAgo(t.at)}</time>
                         </li>
                       ))}
                     </ul>
@@ -185,11 +185,11 @@ export function OverviewPanel({ user, d, loading, error, reload }: PanelProps) {
                     <ul className="px-4 py-3 flex flex-col gap-2.5">
                       {d.features.slice(0, 8).map(f => (
                         <li key={f.feature} className="flex items-center gap-3">
-                          <span className="w-24 shrink-0 text-[12px] text-[#888] capitalize truncate">{f.feature.replace(/[-_]/g, " ")}</span>
-                          <span className="flex-1 h-1.5 rounded-full bg-[#141414] overflow-hidden">
-                            <span className="block h-full rounded-full bg-[#ededed]" style={{ width: `${Math.round(((f.views + f.clicks) / maxFeat) * 100)}%`, opacity: 0.75 }} />
+                          <span className="w-24 shrink-0 text-[12px] text-fg-3 capitalize truncate">{f.feature.replace(/[-_]/g, " ")}</span>
+                          <span className="flex-1 h-1.5 rounded-full bg-raised overflow-hidden">
+                            <span className="block h-full rounded-full bg-brand" style={{ width: `${Math.round(((f.views + f.clicks) / maxFeat) * 100)}%`, opacity: 0.75 }} />
                           </span>
-                          <span className="w-16 shrink-0 text-right text-[12px] text-[#666] tabular-nums">{f.views + f.clicks}</span>
+                          <span className="w-16 shrink-0 text-right text-[12px] text-fg-4 tabular-nums">{f.views + f.clicks}</span>
                         </li>
                       ))}
                     </ul>
@@ -197,9 +197,9 @@ export function OverviewPanel({ user, d, loading, error, reload }: PanelProps) {
                     <div className="px-4 py-3 flex flex-col gap-2">
                       {([["Resumes", s.resumes], ["Mock interviews", s.interviews], ["Job tracker", s.applications], ["Cover letters", s.coverLetters], ["LinkedIn", s.linkedin], ["Outreach", s.outreach], ["Contact searches", s.contactSearches]] as [string, number][])
                         .map(([l, v]) => (
-                          <div key={l} className="flex items-center justify-between text-[12px]"><span className="text-[#888]">{l}</span><span className="text-[#ccc] tabular-nums">{v}</span></div>
+                          <div key={l} className="flex items-center justify-between text-[12px]"><span className="text-fg-3">{l}</span><span className="text-fg-2 tabular-nums">{v}</span></div>
                         ))}
-                      <p className="text-[11px] text-[#444] mt-1">No click analytics for this user yet — showing totals from their data.</p>
+                      <p className="text-caption mt-1">No click analytics for this user yet — showing totals from their data.</p>
                     </div>
                   )}
                 </Block>
@@ -220,7 +220,7 @@ export function JobSearchPanel(p: PanelProps) {
       {d => {
         const s = d.stats;
         return (
-          <div className="flex flex-col gap-7">
+          <div className="flex flex-col gap-5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Stat label="Applied" value={s.applied} sub={`${s.applications} tracked`} />
               <Stat label="Response rate" value={s.responseRate != null ? `${s.responseRate}%` : "—"} sub={`${s.interviewsLanded} reached interview`} />
@@ -229,8 +229,8 @@ export function JobSearchPanel(p: PanelProps) {
             </div>
 
             {s.extensionJobs > 0 && (
-              <p className="text-[12px] text-[#888] -mt-3">
-                Uses the Chrome extension · <span className="text-[#ededed]">{s.extensionJobs}</span> job{s.extensionJobs === 1 ? "" : "s"} saved with it
+              <p className="text-[12px] text-fg-3 -mt-3">
+                Uses the Chrome extension · <span className="text-fg">{s.extensionJobs}</span> job{s.extensionJobs === 1 ? "" : "s"} saved with it
                 {s.extensionLastAt ? <> · last used <span title={fmtFull(s.extensionLastAt)}>{daysAgo(s.extensionLastAt)}</span></> : null}
               </p>
             )}
@@ -238,11 +238,11 @@ export function JobSearchPanel(p: PanelProps) {
             <Block title="Applications" count={d.applications.length}>
               <Table rows={d.applications} rowKey={a => a.id} empty="No jobs in the tracker yet" cols={[
                 { label: "Role", cell: a => <Primary sub={[a.company, a.location, a.workType].filter(Boolean).join(" · ") || undefined}>
-                    {a.jobUrl ? <a href={a.jobUrl} target="_blank" rel="noreferrer" className="hover:underline text-[#ddd]">{a.jobTitle || "Untitled role"}</a> : (a.jobTitle || "Untitled role")}
+                    {a.jobUrl ? <a href={a.jobUrl} target="_blank" rel="noreferrer" className="hover:underline text-fg-2">{a.jobTitle || "Untitled role"}</a> : (a.jobTitle || "Untitled role")}
                   </Primary> },
                 { label: "Status", cell: a => <Pill status={a.status} /> },
                 { label: "Applied", hide: "sm", cell: a => a.appliedDate ? fmt(a.appliedDate) : dash },
-                { label: "Response", hide: "md", cell: a => a.reachedInterviewAt ? <span className="text-[#3ecf8e]">Interview · {fmt(a.reachedInterviewAt)}</span> : a.firstResponseAt ? fmt(a.firstResponseAt) : dash },
+                { label: "Response", hide: "md", cell: a => a.reachedInterviewAt ? <span className="text-success-fg">Interview · {fmt(a.reachedInterviewAt)}</span> : a.firstResponseAt ? fmt(a.firstResponseAt) : dash },
                 { label: "Source", hide: "lg", cell: a => a.viaExtension ? <span title="Saved with the Chrome extension">Extension · {a.viaExtension}</span> : human(a.source) ?? dash },
                 { label: "Updated", hide: "lg", cell: a => <span title={fmtFull(a.updatedAt)}>{daysAgo(a.updatedAt)}</span> },
               ]} />
@@ -262,7 +262,7 @@ export function JobSearchPanel(p: PanelProps) {
               <Table rows={d.resumes} rowKey={r => r.id} empty="No resumes uploaded" cols={[
                 { label: "Resume", cell: r => <Primary sub={r.fileName ?? undefined}>{r.title}</Primary> },
                 { label: "Score", cell: r => r.score != null ? <span className="font-semibold tabular-nums" style={{ color: scoreTone(r.score) }}>{r.score}</span> : <Pill status={r.status} /> },
-                { label: "Analyses", hide: "md", cell: r => r.extras.length ? <div className="flex flex-wrap gap-1">{r.extras.map(x => <span key={x} className="text-[11px] text-[#888] border border-[#1f1f1f] rounded px-1.5 py-px">{x}</span>)}</div> : dash },
+                { label: "Analyses", hide: "md", cell: r => r.extras.length ? <div className="flex flex-wrap gap-1">{r.extras.map(x => <span key={x} className="badge badge-neutral">{x}</span>)}</div> : dash },
                 { label: "Uploaded", hide: "sm", cell: r => <span title={fmtFull(r.createdAt)}>{fmt(r.createdAt)}</span> },
               ]} />
             </Block>
@@ -272,13 +272,13 @@ export function JobSearchPanel(p: PanelProps) {
                 <Table rows={d.tailored} rowKey={(t, i) => String(t.id ?? i)} empty="" cols={[
                   { label: "For", cell: t => <Primary>{String(t.title)}</Primary> },
                   { label: "ATS score", cell: t => t.before != null || t.after != null
-                      ? <span className="tabular-nums">{String(t.before ?? "—")} <Muted>→</Muted> <span className="text-[#3ecf8e] font-semibold">{String(t.after ?? "—")}</span></span> : dash },
+                      ? <span className="tabular-nums">{String(t.before ?? "—")} <Muted>→</Muted> <span className="text-success-fg font-semibold">{String(t.after ?? "—")}</span></span> : dash },
                   { label: "Created", hide: "sm", cell: t => fmt(t.createdAt as string) },
                 ]} />
               </Block>
             )}
 
-            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-7">
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
               <Block title="Cover letters" count={d.coverLetters.length}>
                 <Table rows={d.coverLetters} rowKey={(c, i) => String(c.id ?? i)} empty="No cover letters" cols={[
                   { label: "Role", cell: c => <Primary sub={(c.company as string) ?? undefined}>{String(c.role ?? "Cover letter")}</Primary> },
@@ -296,7 +296,7 @@ export function JobSearchPanel(p: PanelProps) {
             </div>
 
             <Block title="Study plans & networking">
-              <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-[#0f0f0f]">
+              <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-line-soft">
                 {([
                   ["Study plans", s.plans, d.plans[0]?.createdAt as string | undefined],
                   ["LinkedIn optimisations", s.linkedin, s.linkedinLastAt],
@@ -305,9 +305,9 @@ export function JobSearchPanel(p: PanelProps) {
                   ["Job analyses", s.jobAnalyses, undefined],
                 ] as [string, number, string | null | undefined][]).map(([l, v, last]) => (
                   <div key={l} className="px-4 py-3 min-w-0">
-                    <div className="text-[11px] text-[#555] uppercase tracking-wider truncate">{l}</div>
-                    <div className="text-[18px] font-semibold text-[#ededed] tabular-nums mt-0.5">{v}</div>
-                    {last && <div className="text-[12px] text-[#555]">last {daysAgo(last)}</div>}
+                    <div className="label truncate">{l}</div>
+                    <div className="text-[20px] font-semibold text-fg num mt-0.5">{v}</div>
+                    {last && <div className="text-[12px] text-fg-4">last {daysAgo(last)}</div>}
                   </div>
                 ))}
               </div>
@@ -344,12 +344,12 @@ export function ActivityPanel(p: PanelProps) {
         const active = d.sessions.filter(s => !s.revokedAt);
         const prefs = d.profile.emailPrefs;
         return (
-          <div className="flex flex-col gap-7">
+          <div className="flex flex-col gap-5">
             <Block title="Devices" count={`${active.length} active`} action={
               <div className="flex items-center gap-3">
-                {msg && <span className={`text-[12px] ${msg.ok ? "text-[#3ecf8e]" : "text-[#f55]"}`}>{msg.text}</span>}
+                {msg && <span className={`text-[12px] ${msg.ok ? "text-success-fg" : "text-danger-fg"}`}>{msg.text}</span>}
                 <button onClick={signOutEverywhere} disabled={revoking || !active.length}
-                  className="h-7 px-2.5 rounded-md border border-[#2a2a2a] bg-transparent text-[12px] font-medium text-[#888] cursor-pointer hover:text-[#f55] hover:border-[rgba(255,68,68,0.3)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  className="btn btn-sm btn-danger">
                   {revoking ? "Signing out…" : "Sign out everywhere"}
                 </button>
               </div>
@@ -365,7 +365,7 @@ export function ActivityPanel(p: PanelProps) {
 
             <Block title="Product usage" count={d.features.length ? `${d.features.length} areas` : undefined}>
               <Table rows={d.features} rowKey={f => f.feature} empty="No click analytics for this user yet" cols={[
-                { label: "Area", cell: f => <span className="text-[#ddd] capitalize">{f.feature.replace(/[-_]/g, " ")}</span> },
+                { label: "Area", cell: f => <span className="text-fg-2 capitalize">{f.feature.replace(/[-_]/g, " ")}</span> },
                 { label: "Page views", cell: f => <span className="tabular-nums">{f.views}</span> },
                 { label: "Clicks", cell: f => <span className="tabular-nums">{f.clicks}</span> },
                 { label: "Time", hide: "sm", cell: f => f.timeMs ? `${Math.max(1, Math.round(f.timeMs / 60000))} min` : dash },
@@ -373,20 +373,20 @@ export function ActivityPanel(p: PanelProps) {
               ]} />
             </Block>
 
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-7">
+            <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
               <div className="xl:col-span-3 min-w-0">
                 <Block title="Emails" count={d.emails.length}>
                   <Table rows={d.emails} rowKey={(e, i) => `${e.sentAt}-${i}`} empty="No emails sent to this user" cols={[
                     { label: "Email", cell: e => <Primary sub={human(e.type) ?? undefined}>{e.subject ?? human(e.type)}</Primary> },
                     { label: "Sent", hide: "sm", cell: e => <span title={fmtFull(e.sentAt)}>{daysAgo(e.sentAt)}</span> },
                     { label: "Engagement", cell: e => e.bounced ? <Pill status="rejected" />
-                        : <span className="text-[12px]">{e.clicked ? <span className="text-[#3ecf8e]">Clicked</span> : e.opened ? <span className="text-[#0070f3]">Opened</span> : e.delivered ? "Delivered" : <Muted>Sent</Muted>}</span> },
+                        : <span className="text-[12px]">{e.clicked ? <span className="text-success-fg">Clicked</span> : e.opened ? <span className="text-brand-fg">Opened</span> : e.delivered ? "Delivered" : <Muted>Sent</Muted>}</span> },
                   ]} />
                 </Block>
               </div>
               <div className="xl:col-span-2 min-w-0">
                 <Block title="Email preferences">
-                  <ul className="divide-y divide-[#0f0f0f]">
+                  <ul className="divide-y divide-line-soft">
                     {([
                       ["Weekly digest", prefs.weeklyDigest, prefs.weeklyDigestSentAt ? `last ${daysAgo(prefs.weeklyDigestSentAt as string)}` : null],
                       ["Activation nudges", prefs.activation, prefs.activationCount ? `${prefs.activationCount} sent${prefs.activationLastStep ? ` · ${prefs.activationLastStep}` : ""}` : null],
@@ -396,19 +396,19 @@ export function ActivityPanel(p: PanelProps) {
                       ["Welcome email", !!prefs.welcomeSentAt, prefs.welcomeSentAt ? fmt(prefs.welcomeSentAt as string) : "not sent"],
                     ] as [string, boolean, string | null][]).map(([l, on, sub]) => (
                       <li key={l} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                        <div className="min-w-0"><div className="text-[13px] text-[#ccc]">{l}</div>{sub && <div className="text-[12px] text-[#555] truncate">{sub}</div>}</div>
-                        <span className={`text-[12px] font-medium ${on ? "text-[#3ecf8e]" : "text-[#555]"}`}>{on ? (l === "Welcome email" ? "Sent" : "On") : (l === "Welcome email" ? "—" : "Opted out")}</span>
+                        <div className="min-w-0"><div className="text-[13px] text-fg-2">{l}</div>{sub && <div className="text-[12px] text-fg-4 truncate">{sub}</div>}</div>
+                        <span className={`text-[12px] font-medium ${on ? "text-success-fg" : "text-fg-4"}`}>{on ? (l === "Welcome email" ? "Sent" : "On") : (l === "Welcome email" ? "—" : "Opted out")}</span>
                       </li>
                     ))}
                   </ul>
                   {d.unsubscribes.length > 0 && (
-                    <div className="border-t border-[#141414] px-4 py-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-[#555] mb-2">Unsubscribe history</div>
+                    <div className="border-t border-line-soft px-4 py-3">
+                      <div className="label mb-2">Unsubscribe history</div>
                       <ul className="flex flex-col gap-1.5">
                         {d.unsubscribes.map((u, i) => (
-                          <li key={i} className="text-[12px] text-[#aaa]">
-                            <span className="text-[#f5a623]">{UNSUB_SCOPE[u.scope] ?? u.scope}</span> off · {fmt(u.at)}
-                            <span className="text-[#555]"> · {u.method === "one_click" ? "email app button" : "email link"}{u.lastEmailType ? ` · after ${u.lastEmailType.replace(/_/g, " ")}` : ""}</span>
+                          <li key={i} className="text-[12px] text-fg-3">
+                            <span className="text-warning-fg">{UNSUB_SCOPE[u.scope] ?? u.scope}</span> off · {fmt(u.at)}
+                            <span className="text-fg-4"> · {u.method === "one_click" ? "email app button" : "email link"}{u.lastEmailType ? ` · after ${u.lastEmailType.replace(/_/g, " ")}` : ""}</span>
                           </li>
                         ))}
                       </ul>
@@ -421,19 +421,19 @@ export function ActivityPanel(p: PanelProps) {
             <Block title="Notifications" count={d.notifications.length}>
               <Table rows={d.notifications} rowKey={(n, i) => String(n.id ?? i)} empty="No notifications" cols={[
                 { label: "Notification", cell: n => <Primary sub={human(n.type as string) ?? undefined}>{String(n.title ?? "Notification")}</Primary> },
-                { label: "Read", cell: n => n.read ? <Muted>Read</Muted> : <span className="text-[#0070f3] text-[12px] font-medium">Unread</span> },
+                { label: "Read", cell: n => n.read ? <Muted>Read</Muted> : <span className="text-brand-fg text-[12px] font-medium">Unread</span> },
                 { label: "Date", hide: "sm", cell: n => daysAgo(n.createdAt as string) },
               ]} />
             </Block>
 
             <Block title="Full timeline" count={d.timeline.length}>
               {d.timeline.length ? (
-                <ul className="divide-y divide-[#0f0f0f] max-h-[480px] overflow-y-auto">
+                <ul className="divide-y divide-line-soft max-h-[480px] overflow-y-auto">
                   {d.timeline.map((t, i) => (
                     <li key={i} className="flex items-start gap-3 px-4 py-2">
-                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: KIND_COLOR[t.kind] ?? "#555" }} />
-                      <div className="flex-1 min-w-0"><span className="text-[13px] text-[#ccc]">{t.title}</span>{t.detail && <span className="text-[12px] text-[#555]"> · {t.detail}</span>}</div>
-                      <time className="text-[12px] text-[#555] whitespace-nowrap shrink-0" dateTime={t.at}>{fmtFull(t.at)}</time>
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: KIND_COLOR[t.kind] ?? "var(--fg-4)" }} />
+                      <div className="flex-1 min-w-0"><span className="text-[13px] text-fg-2">{t.title}</span>{t.detail && <span className="text-[12px] text-fg-4"> · {t.detail}</span>}</div>
+                      <time className="text-[12px] text-fg-4 whitespace-nowrap shrink-0" dateTime={t.at}>{fmtFull(t.at)}</time>
                     </li>
                   ))}
                 </ul>
@@ -452,11 +452,11 @@ export function SupportPanel(p: PanelProps) {
   return (
     <Guard {...p}>
       {d => (
-        <div className="flex flex-col gap-7">
+        <div className="flex flex-col gap-5">
           <Block title="Support tickets" count={d.tickets.length}>
             <Table rows={d.tickets} rowKey={(t, i) => String(t.id ?? i)} empty="No support tickets" cols={[
               { label: "Ticket", cell: t => <Primary sub={(t.category as string) ?? undefined}>
-                  <a href={`/?tab=support&ticket=${t.id}`} className="text-[#ddd] hover:underline">{String(t.subject ?? "Untitled")}</a></Primary> },
+                  <a href={`/?tab=support&ticket=${t.id}`} className="text-fg-2 hover:underline">{String(t.subject ?? "Untitled")}</a></Primary> },
               { label: "Status", cell: t => <Pill status={t.status as string} /> },
               { label: "Priority", hide: "sm", cell: t => <span className="capitalize">{String(t.priority ?? "—")}</span> },
               { label: "Replies", hide: "md", cell: t => <span className="tabular-nums">{String(t.replies)}{t.lastReplyBy ? <Muted> · last by {String(t.lastReplyBy)}</Muted> : null}</span> },
@@ -464,7 +464,7 @@ export function SupportPanel(p: PanelProps) {
             ]} />
           </Block>
 
-          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-7">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
             <Block title="Surveys" count={d.surveys.length}>
               <Table rows={d.surveys} rowKey={(s, i) => String(s.id ?? i)} empty="No survey responses" cols={[
                 { label: "Page", cell: s => <Primary sub={(s.improvement as string) ?? undefined}>{String(s.page)}</Primary> },
@@ -482,7 +482,7 @@ export function SupportPanel(p: PanelProps) {
             </Block>
           </div>
 
-          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-7">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
             <Block title="Refund requests" count={d.refunds.length}>
               <Table rows={d.refunds} rowKey={(r, i) => String(r.id ?? i)} empty="No refund requests" cols={[
                 { label: "Request", cell: r => <Primary sub={(r.note as string) ?? undefined}>{String(r.reason ?? REFUND_KIND_LABEL[String(r.kind)] ?? "Refund request")}</Primary> },
@@ -498,17 +498,17 @@ export function SupportPanel(p: PanelProps) {
             </Block>
             <Block title="Security and payment history" count={d.accountEvents.length + d.disputes.length || undefined}>
               {d.accountEvents.length + d.disputes.length === 0 ? <Empty>No security events or disputes</Empty> : (
-                <ul className="divide-y divide-[#0f0f0f]">
+                <ul className="divide-y divide-line-soft">
                   {d.disputes.map(x => (
                     <li key={x.id} className="px-4 py-2.5 flex items-center justify-between gap-3 text-[13px]">
-                      <span className="text-[#f5a623]">Dispute · {x.what ?? "payment"} · {String(x.reason).replace(/_/g, " ")}</span>
-                      <span className="text-[12px] text-[#666] shrink-0">{String(x.status).replace(/_/g, " ")} · {fmt(x.at)}</span>
+                      <span className="text-warning-fg">Dispute · {x.what ?? "payment"} · {String(x.reason).replace(/_/g, " ")}</span>
+                      <span className="text-[12px] text-fg-4 shrink-0">{String(x.status).replace(/_/g, " ")} · {fmt(x.at)}</span>
                     </li>
                   ))}
                   {d.accountEvents.map((e, i) => (
                     <li key={i} className="px-4 py-2.5 flex items-center justify-between gap-3 text-[13px]">
-                      <span className={e.type === "login_failed" ? "text-[#f5a623]" : "text-[#ccc]"}>{ACCOUNT_EVENT_LABEL[e.type] ?? e.type.replace(/_/g, " ")}{typeof e.detail?.to === "string" ? ` to ${e.detail.to}` : typeof e.detail?.newEmail === "string" ? ` to ${e.detail.newEmail}` : ""}</span>
-                      <span className="text-[12px] text-[#666] shrink-0">{fmt(e.at)}</span>
+                      <span className={e.type === "login_failed" ? "text-warning-fg" : "text-fg-2"}>{ACCOUNT_EVENT_LABEL[e.type] ?? e.type.replace(/_/g, " ")}{typeof e.detail?.to === "string" ? ` to ${e.detail.to}` : typeof e.detail?.newEmail === "string" ? ` to ${e.detail.newEmail}` : ""}</span>
+                      <span className="text-[12px] text-fg-4 shrink-0">{fmt(e.at)}</span>
                     </li>
                   ))}
                 </ul>
@@ -536,16 +536,16 @@ export function AboutCard(p: PanelProps) {
   const link = (href: unknown, label: string) => {
     if (typeof href !== "string" || !href) return null;
     const url = /^https?:\/\//.test(href) ? href : `https://${href}`;
-    return <a href={url} target="_blank" rel="noreferrer" className="text-[13px] text-[#ddd] hover:underline">{label}</a>;
+    return <a href={url} target="_blank" rel="noreferrer" className="text-[13px] text-fg-2 hover:underline">{label}</a>;
   };
   const rows: [string, ReactNode][] = [
     ["Target role", (a.targetRole as string) || null],
     ["Experience", (a.experienceLevel as string) || null],
     ["Location", a.location],
-    ["Phone", a.phone ? <span>{String(a.phone)} {a.phoneVerified ? <span className="text-[#3ecf8e] text-[12px] ml-1">Verified</span> : <span className="text-[#555] text-[12px] ml-1">Unverified</span>}</span> : null],
+    ["Phone", a.phone ? <span>{String(a.phone)} {a.phoneVerified ? <span className="text-success-fg text-[12px] ml-1">Verified</span> : <span className="text-fg-4 text-[12px] ml-1">Unverified</span>}</span> : null],
     ["Links", [link(a.linkedIn, "LinkedIn"), link(a.github, "GitHub"), link(a.website, "Website")].some(Boolean)
       ? <span className="flex gap-3">{link(a.linkedIn, "LinkedIn")}{link(a.github, "GitHub")}{link(a.website, "Website")}</span> : null],
-    ["Tech", a.preferredTech.length ? <span className="flex flex-wrap gap-1">{a.preferredTech.map(t => <Chip key={t} label={t} className="border border-[#1f1f1f] text-[#999] text-[11px]" />)}</span> : null],
+    ["Tech", a.preferredTech.length ? <span className="flex flex-wrap gap-1">{a.preferredTech.map(t => <span key={t} className="badge badge-neutral">{t}</span>)}</span> : null],
     ["Career goals", (a.careerGoals as string) || null],
     ["Bio", (a.bio as string) || null],
     ["Files", [a.resumeFile && `Resume: ${a.resumeFile}`, a.transcriptFile && `Transcript: ${a.transcriptFile}`].filter(Boolean).join(" · ") || null],
@@ -553,11 +553,11 @@ export function AboutCard(p: PanelProps) {
   const filled = rows.filter(([, v]) => v);
   return (
     <Block title="Career profile" count={`${filled.length} of ${rows.length} filled`}>
-      <dl className="divide-y divide-[#0f0f0f]">
+      <dl className="divide-y divide-line-soft">
         {rows.map(([l, v]) => (
           <div key={l} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 px-4 py-2.5">
-            <dt className="sm:w-32 shrink-0 text-[12px] font-medium text-[#555] uppercase tracking-wider pt-0.5">{l}</dt>
-            <dd className="flex-1 min-w-0 text-[13px] text-[#ccc] leading-relaxed break-words">{v ?? <Muted>Not provided</Muted>}</dd>
+            <dt className="sm:w-32 shrink-0 label pt-0.5">{l}</dt>
+            <dd className="flex-1 min-w-0 text-[13px] text-fg-2 leading-relaxed break-words">{v ?? <Muted>Not provided</Muted>}</dd>
           </div>
         ))}
       </dl>

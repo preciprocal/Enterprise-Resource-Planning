@@ -95,23 +95,25 @@ const whenLabel = (iso: string) => new Date(iso).toLocaleString(undefined, { wee
 
 // ─── Status display ───────────────────────────────────────────────────────────
 
-const STATUS: Record<Status, { label: string; color: string; hint: string }> = {
-  scheduled:  { label: "Scheduled",  color: "#f5a623", hint: "Queued in Resend; sends at the scheduled time" },
-  sent:       { label: "Sent",       color: "#888",    hint: "Handed to Resend; no delivery report yet" },
-  delayed:    { label: "Delayed",    color: "#f5a623", hint: "The recipient's server is deferring it; Resend keeps retrying" },
-  delivered:  { label: "Delivered",  color: "#bbb",    hint: "Accepted by the recipient's mail server, not yet opened" },
-  opened:     { label: "Opened",     color: "#0070f3", hint: "The email was opened (tracking pixel loaded)" },
-  clicked:    { label: "Clicked",    color: "#3ecf8e", hint: "A link in the email was clicked" },
-  bounced:    { label: "Bounced",    color: "#f44",    hint: "Rejected by the recipient's server; the address may be invalid" },
-  complained: { label: "Spam report", color: "#f44",   hint: "The recipient marked this email as spam" },
-  canceled:   { label: "Cancelled",  color: "#555",    hint: "Cancelled before it was sent" },
+type Tone = "warning" | "neutral" | "brand" | "success" | "danger";
+const TONE_DOT: Record<Tone, string> = { warning: "bg-warning", neutral: "bg-fg-4", brand: "bg-brand", success: "bg-success", danger: "bg-danger" };
+const STATUS: Record<Status, { label: string; tone: Tone; hint: string }> = {
+  scheduled:  { label: "Scheduled",  tone: "warning", hint: "Queued in Resend; sends at the scheduled time" },
+  sent:       { label: "Sent",       tone: "neutral", hint: "Handed to Resend; no delivery report yet" },
+  delayed:    { label: "Delayed",    tone: "warning", hint: "The recipient's server is deferring it; Resend keeps retrying" },
+  delivered:  { label: "Delivered",  tone: "neutral", hint: "Accepted by the recipient's mail server, not yet opened" },
+  opened:     { label: "Opened",     tone: "brand",   hint: "The email was opened (tracking pixel loaded)" },
+  clicked:    { label: "Clicked",    tone: "success", hint: "A link in the email was clicked" },
+  bounced:    { label: "Bounced",    tone: "danger",  hint: "Rejected by the recipient's server; the address may be invalid" },
+  complained: { label: "Spam report", tone: "danger", hint: "The recipient marked this email as spam" },
+  canceled:   { label: "Cancelled",  tone: "neutral", hint: "Cancelled before it was sent" },
 };
 
 function StatusPill({ s }: { s: Status }) {
   const m = STATUS[s];
   return (
-    <span title={m.hint} className="inline-flex items-center gap-1.5 text-[12px] font-medium whitespace-nowrap" style={{ color: m.color }}>
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.color }} />{m.label}
+    <span title={m.hint} className={`badge badge-${m.tone}`}>
+      <span className={`dot ${TONE_DOT[m.tone]}`} />{m.label}
     </span>
   );
 }
@@ -131,8 +133,8 @@ export const recipientFromUser = (u: User): Recipient => ({ userId: u.id, email:
 
 interface SendResult { email: string; name: string | null; status: "sent" | "scheduled" | "skipped" | "failed" | "draft"; reason?: string }
 
-const RESULT_COLOR: Record<SendResult["status"], string> = { sent: "#3ecf8e", scheduled: "#f5a623", draft: "#888", skipped: "#888", failed: "#f44" };
-const LABEL = "block text-[12px] font-medium text-[#888] mb-1.5";
+const RESULT_COLOR: Record<SendResult["status"], string> = { sent: "var(--success-fg)", scheduled: "var(--warning-fg)", draft: "var(--fg-3)", skipped: "var(--fg-3)", failed: "var(--danger-fg)" };
+const LABEL = "field-label";
 const UNSUB_PREVIEW = "https://app.preciprocal.com/settings?section=notifications";
 
 export function EmailComposer({
@@ -258,15 +260,15 @@ export function EmailComposer({
     && !!draft.subject.trim() && !!draft.body.trim();
 
   return (
-    <section className="rounded-xl border border-[#1a1a1a] bg-[#050505] overflow-hidden min-w-0">
+    <section className="card overflow-hidden min-w-0">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-[#141414] bg-[#080808]">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-line-soft">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-[#ededed]">{title}</h2>
-          <p className="text-[12px] text-[#666] mt-0.5">Sent in the Preciprocal email template. Each person gets their own copy.</p>
+          <h2 className="section-title">{title}</h2>
+          <p className="text-caption mt-0.5">Sent in the Preciprocal email template. Each person gets their own copy.</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[12px] text-[#666]">From</span>
+          <span className="text-[12px] text-fg-4">From</span>
           <div className="w-[260px]">
             <Select value={draft.sender} onChange={e => set("sender", e.target.value as SenderId)} aria-label="From">
               {(Object.keys(SENDERS) as SenderId[]).map(k => <option key={k} value={k}>{SENDERS[k].label}</option>)}
@@ -277,53 +279,53 @@ export function EmailComposer({
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* ── Editor ── */}
-        <div className="min-w-0 divide-y divide-[#111] xl:border-r xl:border-[#141414]">
+        <div className="min-w-0 divide-y divide-line-soft xl:border-r xl:border-line-soft">
           <Step n={1} title="Recipients" aside={`${recipients.length} selected`}>
             <div className="flex flex-wrap gap-1.5 mb-2.5">
               {recipients.map(r => (
                 <span key={keyOf(r)} title={r.email || "No email address on file"}
-                  className={`inline-flex items-center gap-1.5 pl-2.5 pr-1.5 h-7 rounded-md border text-[12px] ${r.email ? "border-[#2a2a2a] bg-[#111] text-[#ddd]" : "border-[rgba(255,68,68,0.3)] text-[#f44]"}`}>
+                  className={`inline-flex items-center gap-1.5 pl-2.5 pr-1 h-7 rounded-full border text-[12px] ${r.email ? "border-line bg-raised text-fg-2" : "border-danger-line bg-danger-soft text-danger-fg"}`}>
                   <span className="max-w-[240px] truncate">{r.name ? `${r.name} · ${r.email || "no email"}` : r.email}</span>
-                  {!r.userId && <span className="text-[10px] text-[#666]">not a user</span>}
+                  {!r.userId && <span className="text-[11px] text-fg-4">not a user</span>}
                   <button onClick={() => { setRecipients(l => l.filter(x => keyOf(x) !== keyOf(r))); setResults(null); }} aria-label={`Remove ${r.email}`}
-                    className="w-4 h-4 flex items-center justify-center rounded text-[#666] hover:text-[#f44] bg-transparent border-none cursor-pointer p-0">×</button>
+                    className="w-5 h-5 flex items-center justify-center rounded-full text-fg-4 hover:text-danger-fg hover:bg-hover bg-transparent border-0 cursor-pointer p-0">×</button>
                 </span>
               ))}
-              {!recipients.length && <span className="text-[12px] text-[#555]">No recipients yet</span>}
+              {!recipients.length && <span className="text-[12px] text-fg-4">No recipients yet</span>}
             </div>
             <div className="relative">
               <input value={query} onChange={e => setQuery(e.target.value)} className={inputCls} aria-label="Add recipient"
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (matches[0]) add(recipientFromUser(matches[0])); else if (query.trim()) addTyped(); } }}
                 placeholder={allUsers.length ? "Add a user by name or email, or type any address and press Enter" : "Type an email address and press Enter"} />
               {matches.length > 0 && (
-                <div className="absolute z-20 left-0 right-0 mt-1 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] shadow-xl overflow-hidden">
+                <div className="popover absolute z-20 left-0 right-0 mt-1 py-1 overflow-hidden">
                   {matches.map(u => (
                     <button key={u.id} onClick={() => add(recipientFromUser(u))}
-                      className="w-full text-left px-3 py-2 text-[13px] bg-transparent border-none cursor-pointer hover:bg-[#151515] text-[#ddd]">
-                      {u.name ?? "Unknown"} <span className="text-[#666]">· {u.email}</span>
+                      className="w-full text-left px-3 py-2 text-[13px] bg-transparent border-0 cursor-pointer hover:bg-hover text-fg-2 font-[inherit]">
+                      {u.name ?? "Unknown"} <span className="text-fg-4">· {u.email}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            {noAddress > 0 && <p className="text-[12px] text-[#f5a623] mt-1.5">{noAddress} recipient{noAddress === 1 ? " has" : "s have"} no email address and will be skipped.</p>}
+            {noAddress > 0 && <p className="text-[12px] text-warning-fg mt-1.5">{noAddress} recipient{noAddress === 1 ? " has" : "s have"} no email address and will be skipped.</p>}
           </Step>
 
           <Step n={2} title="Template"
-            aside={suggestedTemplate ? <>Suggested: <span className="text-[#bbb]">{FOLLOW_UP_TEMPLATES.find(t => t.id === suggestedTemplate.id)?.label}</span></> : undefined}>
+            aside={suggestedTemplate ? <>Suggested: <span className="text-fg-2">{FOLLOW_UP_TEMPLATES.find(t => t.id === suggestedTemplate.id)?.label}</span></> : undefined}>
             <div role="radiogroup" aria-label="Template" className="flex flex-wrap gap-1.5">
               {FOLLOW_UP_TEMPLATES.map(t => {
                 const on = t.id === draft.templateId;
                 return (
                   <button key={t.id} role="radio" aria-checked={on} onClick={() => pick(t)} title={t.hint}
-                    className={`relative px-3 h-8 rounded-lg border text-[13px] cursor-pointer transition-colors ${on ? "bg-[#ededed] border-[#ededed] text-black font-medium" : "bg-transparent border-[#222] text-[#aaa] hover:border-[#3a3a3a] hover:text-[#ededed]"}`}>
+                    className={`btn btn-secondary relative ${on ? "btn-on" : ""}`}>
                     {t.label}
-                    {t.id === suggestedTemplate?.id && !on && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#3ecf8e]" title="Suggested for this user" />}
+                    {t.id === suggestedTemplate?.id && !on && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-success" title="Suggested for this user" />}
                   </button>
                 );
               })}
             </div>
-            <p className="text-[12px] text-[#555] mt-2">{tpl.hint}</p>
+            <p className="text-[12px] text-fg-4 mt-2">{tpl.hint}</p>
           </Step>
 
           <Step n={3} title="Content">
@@ -342,7 +344,7 @@ export function EmailComposer({
               <input value={draft.heading} onChange={e => set("heading", e.target.value)} className={inputCls} placeholder="Defaults to the subject" maxLength={120} />
             </label>
             <label className="block mt-3">
-              <span className={LABEL}>Message <span className="text-[#555] font-normal">· {"{{first_name}}"} is filled in for each person · a blank line starts a new paragraph</span></span>
+              <span className={LABEL}>Message <span className="text-fg-4 font-normal">· {"{{first_name}}"} is filled in for each person · a blank line starts a new paragraph</span></span>
               <textarea value={draft.body} onChange={e => set("body", e.target.value)} rows={11} spellCheck
                 className={`${inputCls} resize-y leading-relaxed`} placeholder="Write your message." />
             </label>
@@ -353,31 +355,31 @@ export function EmailComposer({
               <div className="flex flex-col gap-2 mb-3">
                 {draft.buttons.map((b, i) => (
                   <div key={i} className="grid grid-cols-[auto_1fr_2fr_auto] gap-2 items-center">
-                    <span className={`text-[11px] font-medium px-2 h-6 inline-flex items-center rounded-md ${i === 0 ? "bg-[rgba(99,102,241,0.15)] text-[#a5b4fc]" : "bg-[#141414] text-[#888]"}`}>{i === 0 ? "Main" : "Extra"}</span>
+                    <span className={`badge ${i === 0 ? "badge-brand" : "badge-neutral"}`}>{i === 0 ? "Main" : "Extra"}</span>
                     <input value={b.label} onChange={e => setButton(i, { label: e.target.value })} className={inputCls}
                       placeholder="Button text" maxLength={40} aria-label={`Button ${i + 1} text`} />
                     <input value={b.url} onChange={e => setButton(i, { url: e.target.value })} className={inputCls}
                       placeholder="https://..." aria-label={`Button ${i + 1} link`} />
                     <button type="button" onClick={() => set("buttons", draft.buttons.filter((_, j) => j !== i))} aria-label={`Remove button ${i + 1}`}
-                      className="w-8 h-8 flex items-center justify-center rounded-md text-[#555] hover:text-[#f44] hover:bg-[#141414] bg-transparent border border-[#1a1a1a] cursor-pointer">×</button>
+                      className="btn btn-lg btn-secondary btn-icon hover:text-danger-fg">×</button>
                   </div>
                 ))}
               </div>
             )}
             {draft.buttons.length < MAX_BUTTONS ? (
               <button type="button" onClick={() => set("buttons", [...draft.buttons, { label: "", url: "" }])}
-                className="inline-flex items-center gap-2 px-3.5 h-9 rounded-lg border border-dashed border-[#333] bg-transparent text-[13px] font-medium text-[#ddd] hover:border-[#555] hover:bg-[#0d0d0d] cursor-pointer transition-colors">
-                <span className="text-[16px] leading-none">+</span> Add a button
+                className="btn btn-secondary border-dashed">
+                <span className="text-[14px] leading-none">+</span> Add a button
               </button>
-            ) : <p className="text-[12px] text-[#555]">Three buttons is the most an email should carry.</p>}
-            {ctaErr && <p className="text-[12px] text-[#f5a623] mt-2">{ctaErr}</p>}
+            ) : <p className="text-[12px] text-fg-4">Three buttons is the most an email should carry.</p>}
+            {ctaErr && <p className="text-[12px] text-warning-fg mt-2">{ctaErr}</p>}
           </Step>
 
           <Step n={5} title="Delivery">
-            <div role="radiogroup" aria-label="Delivery" className="inline-flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5">
+            <div role="radiogroup" aria-label="Delivery" className="seg">
               {(["now", "schedule"] as const).map(m => (
                 <button key={m} role="radio" aria-checked={mode === m} onClick={() => { setMode(m); if (m === "schedule") setBounds(scheduleBounds()); }}
-                  className={`px-3.5 h-8 rounded-md text-[13px] font-medium border-none cursor-pointer transition-colors ${mode === m ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#666] hover:text-[#aaa]"}`}>
+                  className={`seg-item ${mode === m ? "seg-item-active" : ""}`}>
                   {m === "now" ? "Send now" : "Schedule"}
                 </button>
               ))}
@@ -387,19 +389,19 @@ export function EmailComposer({
                 <div className="flex flex-wrap items-center gap-1.5">
                   {bounds.presets.map(p => (
                     <button key={p.label} onClick={() => setWhen(p.value)}
-                      className={`px-2.5 h-7 rounded-md border text-[12px] cursor-pointer transition-colors ${when === p.value ? "border-[#3a3a3a] bg-[#141414] text-[#ededed]" : "border-[#1a1a1a] bg-transparent text-[#888] hover:text-[#ededed]"}`}>
+                      className={`btn btn-sm btn-secondary ${when === p.value ? "btn-on" : ""}`}>
                       {p.label}
                     </button>
                   ))}
                   <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} aria-label="Send at"
-                    min={bounds.min} max={bounds.max} className={`${inputCls} w-auto h-7 py-0 text-[12px]`} />
+                    min={bounds.min} max={bounds.max} className={`${inputCls} field-sm w-auto`} />
                 </div>
-                <p className={`text-[12px] ${whenErr ? "text-[#f5a623]" : "text-[#666]"}`}>
+                <p className={`text-[12px] ${whenErr ? "text-warning-fg" : "text-fg-4"}`}>
                   {whenErr ?? <>Sends {whenLabel(whenIso)} (your time) · up to {MAX_SCHEDULE_DAYS} days ahead · cancel it from the user&apos;s page until then</>}
                 </p>
               </div>
             )}
-            <div className={`flex items-start gap-2.5 mt-4 text-[12px] leading-relaxed ${many ? "text-[#666]" : "text-[#aaa]"}`}>
+            <div className={`flex items-start gap-2.5 mt-4 text-[12px] leading-relaxed ${many ? "text-fg-4" : "text-fg-3"}`}>
               <Checkbox checked={optional} disabled={many} onChange={() => set("optional", !draft.optional)} label="Optional email" className="mt-0.5" />
               <span onClick={() => { if (!many) set("optional", !draft.optional); }} className={many ? "" : "cursor-pointer"}>
                 Optional email: adds an unsubscribe link and skips anyone who opted out.{many ? " Always on when sending to several people." : " Turn off only for a reply or an account issue."}
@@ -409,28 +411,28 @@ export function EmailComposer({
         </div>
 
         {/* ── Live preview ── */}
-        <div className="min-w-0 bg-[#030303]">
+        <div className="min-w-0 bg-subtle">
           <div>
-            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[#141414]">
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-line-soft">
               <div className="min-w-0">
-                <div className="text-[13px] font-medium text-[#ededed]">Live preview</div>
+                <div className="text-[13px] font-medium text-fg">Live preview</div>
                 <div className="flex items-center gap-2 mt-1 min-w-0">
-                  <span className="text-[12px] text-[#666] shrink-0">Preview as</span>
+                  <span className="text-[12px] text-fg-4 shrink-0">Preview as</span>
                   {recipients.length > 1 ? (
                     <select value={previewFor ? keyOf(previewFor) : ""} onChange={e => setPreviewKey(e.target.value)} aria-label="Preview as"
-                      className="min-w-0 max-w-[260px] h-7 px-2 rounded-md border border-[#222] bg-[#0a0a0a] text-[12px] text-[#ddd] outline-none focus:border-[#444] cursor-pointer">
+                      className="field field-sm w-auto min-w-0 max-w-[260px] cursor-pointer">
                       {recipients.map(r => <option key={keyOf(r)} value={keyOf(r)}>{r.name ? `${r.name} (${r.email})` : r.email}</option>)}
                     </select>
                   ) : (
-                    <span className="text-[12px] text-[#bbb] truncate">{previewFor?.name || previewFor?.email || "the first recipient"}</span>
+                    <span className="text-[12px] text-fg-2 truncate">{previewFor?.name || previewFor?.email || "the first recipient"}</span>
                   )}
                 </div>
-                <div className="text-[12px] text-[#555] truncate mt-1">Subject: {fillPreviewSubject(draft.subject, previewFor?.name) || "No subject yet"}</div>
+                <div className="text-[12px] text-fg-4 truncate mt-1">Subject: {fillPreviewSubject(draft.subject, previewFor?.name) || "No subject yet"}</div>
               </div>
-              <div className="inline-flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0">
+              <div className="seg shrink-0">
                 {(["desktop", "mobile"] as const).map(w => (
                   <button key={w} onClick={() => setPreviewWidth(w)} aria-pressed={previewWidth === w}
-                    className={`px-2.5 h-7 rounded-md text-[12px] font-medium border-none cursor-pointer ${previewWidth === w ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#666] hover:text-[#aaa]"}`}>
+                    className={`seg-item ${previewWidth === w ? "seg-item-active" : ""}`}>
                     {w === "desktop" ? "Desktop" : "Phone"}
                   </button>
                 ))}
@@ -441,7 +443,7 @@ export function EmailComposer({
                   popups so its links can open in a new tab. */}
               <iframe ref={frameRef} title="Email preview" srcDoc={previewHtml} onLoad={measure}
                 sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-                className="rounded-lg border border-[#1a1a1a] bg-[#05070c] transition-[width]"
+                className="rounded-lg border border-line bg-subtle transition-[width]"
                 style={{ width: previewWidth === "desktop" ? "100%" : 390, height: frameH }} />
             </div>
           </div>
@@ -449,14 +451,14 @@ export function EmailComposer({
       </div>
 
       {/* ── Send bar ── */}
-      <div className="sticky bottom-0 z-10 border-t border-[#141414] bg-[#080808]/95 backdrop-blur px-5 py-3">
+      <div className="sticky bottom-0 z-10 border-t border-line-soft bg-surface/95 backdrop-blur px-5 py-3">
         {results && (
-          <div role="status" className="mb-3 rounded-lg border border-[#1a1a1a] divide-y divide-[#111] max-h-48 overflow-auto">
+          <div role="status" className="mb-3 rounded-lg border border-line divide-y divide-line-soft max-h-48 overflow-auto">
             {results.map(r => (
               <div key={r.email} className="px-3 py-2 flex items-start justify-between gap-3 text-[12px]">
-                <span className="text-[#bbb] truncate">{r.name ? `${r.name} · ` : ""}{r.email}</span>
+                <span className="text-fg-2 truncate">{r.name ? `${r.name} · ` : ""}{r.email}</span>
                 <span className="shrink-0 text-right" style={{ color: RESULT_COLOR[r.status] }}>
-                  {human(r.status)}{r.reason ? <span className="block text-[#666] max-w-[320px]">{r.reason}</span> : null}
+                  {human(r.status)}{r.reason ? <span className="block text-fg-4 max-w-[320px]">{r.reason}</span> : null}
                 </span>
               </div>
             ))}
@@ -464,12 +466,12 @@ export function EmailComposer({
         )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 text-[12px]">
-            {err ? <span role="alert" className="text-[#f44]">{err}</span>
-              : placeholders.length ? <span className="text-[#f5a623]">Replace {placeholders.join(", ")} before sending.</span>
-              : <span className="text-[#666]">Replies go to {SENDERS[draft.sender].replyTo}</span>}
+            {err ? <span role="alert" className="text-danger-fg">{err}</span>
+              : placeholders.length ? <span className="text-warning-fg">Replace {placeholders.join(", ")} before sending.</span>
+              : <span className="text-fg-4">Replies go to {SENDERS[draft.sender].replyTo}</span>}
           </div>
           <button onClick={submit} disabled={!canSend}
-            className="inline-flex items-center gap-2 px-5 h-10 rounded-lg text-[14px] font-semibold border-none cursor-pointer bg-[#ededed] text-black hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            className="btn btn-lg btn-primary">
             {working ? (mode === "schedule" ? "Scheduling…" : "Sending…")
               : `${mode === "schedule" ? "Schedule" : "Send"}${many ? ` to ${recipients.length}` : ""}`}
             {!working && <span aria-hidden="true">→</span>}
@@ -489,10 +491,10 @@ function Step({ n, title, aside, children }: { n: number; title: string; aside?:
     <div className="px-5 py-5">
       <div className="flex items-baseline justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
-          <span className="w-5 h-5 rounded-full border border-[#2a2a2a] text-[11px] font-semibold text-[#888] inline-flex items-center justify-center tabular-nums">{n}</span>
-          <h3 className="text-[13px] font-semibold text-[#ededed]">{title}</h3>
+          <span className="w-5 h-5 rounded-full border border-line text-[11px] font-semibold text-fg-3 inline-flex items-center justify-center num">{n}</span>
+          <h3 className="section-title">{title}</h3>
         </div>
-        {aside && <span className="text-[12px] text-[#555] truncate">{aside}</span>}
+        {aside && <span className="text-[12px] text-fg-4 truncate">{aside}</span>}
       </div>
       {children}
     </div>
@@ -505,7 +507,7 @@ export function FollowUpPanel({ user, token = "", onDone, allUsers }: { user: Us
   const suggestion = useMemo(() => suggest(user), [user]);
   const emails = useUserEmails(user.id, token);
   return (
-    <div className="flex flex-col gap-7 min-w-0">
+    <div className="flex flex-col gap-5 min-w-0">
       <EmailComposer key={user.id} initialRecipients={[recipientFromUser(user)]} allUsers={allUsers} token={token}
         suggestedTemplate={suggestion}
         onSent={msg => { onDone?.(msg); void emails.reload(); }} />
@@ -534,22 +536,22 @@ function EmailHistory({ q, token }: { q: ReturnType<typeof useUserEmails>; token
 
   return (
     <Block title="Emails to this user" count={list.length || undefined}
-      action={<button onClick={() => void q.reload()} className="text-[12px] text-[#888] hover:text-[#ededed] bg-transparent border-none cursor-pointer">Refresh</button>}>
+      action={<button onClick={() => void q.reload()} className="btn btn-sm btn-ghost">Refresh</button>}>
       {q.error ? <Empty>Couldn&apos;t load emails: {q.error}</Empty>
         : q.loading && !q.data ? <div className="p-4"><div className="skeleton h-24 rounded-lg" /></div>
         : list.length === 0 ? <Empty>No emails sent to this user yet</Empty>
         : (<>
           {delivered > 0 && (
-            <div className="px-4 py-2.5 border-b border-[#141414] text-[12px] text-[#888]">
-              Opened <span className="text-[#ededed] tabular-nums">{opened}</span> of <span className="text-[#ededed] tabular-nums">{delivered}</span> delivered
+            <div className="px-4 py-2.5 border-b border-line-soft text-[12px] text-fg-3">
+              Opened <span className="text-fg tabular-nums">{opened}</span> of <span className="text-fg tabular-nums">{delivered}</span> delivered
             </div>
           )}
-          <ul className="divide-y divide-[#111]">
+          <ul className="divide-y divide-line-soft">
             {list.map(e => (
               <li key={e.resendId} className="px-4 py-3 flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="text-[13px] text-[#ddd] truncate">{e.subject ?? "(no subject)"}</div>
-                  <div className="text-[12px] text-[#555] mt-0.5">
+                  <div className="text-[13px] text-fg-2 truncate">{e.subject ?? "(no subject)"}</div>
+                  <div className="text-[12px] text-fg-4 mt-0.5">
                     {typeLabel(e.emailType)} · {e.status === "scheduled" ? `sends ${whenLabel(e.sentAt)}` : fmtFull(e.sentAt)}
                   </div>
                   <Engagement e={e} />
@@ -558,7 +560,7 @@ function EmailHistory({ q, token }: { q: ReturnType<typeof useUserEmails>; token
                   <StatusPill s={e.status} />
                   {e.status === "scheduled" && e.fromErp && (
                     <button onClick={() => void cancel(e)} disabled={canceling === e.resendId}
-                      className="text-[12px] text-[#888] hover:text-[#f44] bg-transparent border-none p-0 cursor-pointer disabled:opacity-50">
+                      className="link text-[12px] hover:text-danger-fg">
                       {canceling === e.resendId ? "Cancelling…" : "Cancel"}
                     </button>
                   )}
@@ -566,7 +568,7 @@ function EmailHistory({ q, token }: { q: ReturnType<typeof useUserEmails>; token
               </li>
             ))}
           </ul>
-          {err && <div role="alert" className="px-4 py-2 text-[12px] text-[#f44] border-t border-[#141414]">{err}</div>}
+          {err && <div role="alert" className="px-4 py-2 text-[12px] text-danger-fg border-t border-line-soft">{err}</div>}
         </>)}
       {tracking && <TrackingNote webhook={tracking.webhook} />}
     </Block>
@@ -579,22 +581,22 @@ function Engagement({ e }: { e: UserEmail }) {
   if (e.clicks) bits.push(`${e.clicks} click${e.clicks === 1 ? "" : "s"}${e.links.length ? ` · ${e.links.map(l => l.replace(/^https?:\/\//, "").split("?")[0]).join(", ")}` : ""}`);
   if (!bits.length && e.deliveredAt && e.status === "delivered") bits.push(`Delivered ${fmtFull(e.deliveredAt)}`);
   if (!bits.length && e.source === "resend" && (e.status === "opened" || e.status === "clicked")) bits.push("Open time not available (from Resend's latest status)");
-  return bits.length ? <div className="text-[12px] text-[#777] mt-1 wrap-break-word">{bits.join(" · ")}</div> : null;
+  return bits.length ? <div className="text-[12px] text-fg-3 mt-1 wrap-break-word">{bits.join(" · ")}</div> : null;
 }
 
 function TrackingNote({ webhook }: { webhook: boolean }) {
   return (
-    <details className="border-t border-[#141414] px-4 py-2.5 text-[12px] text-[#666] group">
-      <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 hover:text-[#aaa]">
+    <details className="border-t border-line-soft px-4 py-2.5 text-[12px] text-fg-4 group">
+      <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 hover:text-fg-3">
         <span className="inline-block transition-transform group-open:rotate-90">›</span>
         {webhook ? "How open tracking works" : "Open times need the Resend webhook. Showing Resend's latest status for now"}
       </summary>
       <div className="mt-2 flex flex-col gap-1.5 leading-relaxed">
         {!webhook && (
           <ol className="list-decimal pl-5 flex flex-col gap-1">
-            <li>Resend → <b className="text-[#aaa] font-medium">Domains → preciprocal.com</b>: turn on <b className="text-[#aaa] font-medium">Open tracking</b> and <b className="text-[#aaa] font-medium">Click tracking</b>.</li>
-            <li>Resend → <b className="text-[#aaa] font-medium">Webhooks → Add endpoint</b>: <code className="font-mono text-[#aaa]">https://app.preciprocal.com/api/webhooks/resend</code>, with events delivered, opened, clicked, bounced, complained, delivery_delayed.</li>
-            <li>Copy its signing secret into <code className="font-mono text-[#aaa]">RESEND_WEBHOOK_SECRET</code> on the Dashboard&apos;s Vercel project and redeploy.</li>
+            <li>Resend → <b className="text-fg-3 font-medium">Domains → preciprocal.com</b>: turn on <b className="text-fg-3 font-medium">Open tracking</b> and <b className="text-fg-3 font-medium">Click tracking</b>.</li>
+            <li>Resend → <b className="text-fg-3 font-medium">Webhooks → Add endpoint</b>: <code className="font-mono text-fg-3">https://app.preciprocal.com/api/webhooks/resend</code>, with events delivered, opened, clicked, bounced, complained, delivery_delayed.</li>
+            <li>Copy its signing secret into <code className="font-mono text-fg-3">RESEND_WEBHOOK_SECRET</code> on the Dashboard&apos;s Vercel project and redeploy.</li>
           </ol>
         )}
         <p>An open is recorded when the email&apos;s tracking image loads. Apple Mail preloads images, which can show an open the person never made, and clients that block images hide real opens. Treat opens as a signal and clicks as the reliable one.</p>

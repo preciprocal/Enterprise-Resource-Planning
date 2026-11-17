@@ -16,7 +16,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, SL, Spinner, useIsMobile } from "./admin-shared";
+import { User, Spinner, useIsMobile } from "./admin-shared";
 import { AnalyticsTab as TabId, AppPayload } from "../analytics/analytics-types";
 import OverviewSub  from "../analytics/OverviewSub";
 import RevenueSub   from "../analytics/RevenueSub";
@@ -47,7 +47,7 @@ const TABS: { id: TabId; label: string; emoji: string; hint: string }[] = [
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function AnalyticsTab({ users, loading, token = "", theme = "dark" }: Props) {
+export default function AnalyticsTab({ users, loading, token = "" }: Props) {
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<TabId>("overview");
   const [data, setData] = useState<AppPayload | null>(null);
@@ -86,7 +86,7 @@ export default function AnalyticsTab({ users, loading, token = "", theme = "dark
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading || fetching) {
     return (
-      <div className="flex-1 overflow-auto p-4 md:p-7 flex flex-col min-w-0">
+      <div className="flex-1 overflow-auto p-4 md:p-6 flex flex-col min-w-0 bg-canvas">
         <Spinner />
       </div>
     );
@@ -95,10 +95,10 @@ export default function AnalyticsTab({ users, loading, token = "", theme = "dark
   // ── Error ──────────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className={`${theme !== "light" ? "analytics-dark" : ""} flex-1 overflow-auto p-4 md:p-7 flex flex-col min-w-0`}>
-        <div className="px-4 py-3 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg">
-          <div className="text-[14px] font-semibold text-[#f44] mb-1">Could not load analytics</div>
-          <div className="text-[13px] text-[#f44]/70">{error}</div>
+      <div className="flex-1 overflow-auto p-4 md:p-6 flex flex-col min-w-0 bg-canvas">
+        <div className="px-4 py-3 bg-danger-soft border border-danger-line rounded-xl">
+          <div className="text-[14px] font-semibold text-danger-fg mb-1">Could not load analytics</div>
+          <div className="text-[13px] text-danger-fg/70">{error}</div>
         </div>
       </div>
     );
@@ -121,64 +121,24 @@ export default function AnalyticsTab({ users, loading, token = "", theme = "dark
   };
 
   return (
-    <div className={`${theme !== "light" ? "analytics-dark" : ""} flex-1 overflow-auto p-4 md:p-6 flex flex-col gap-5 min-w-0 bg-black`}>
+    <div className="flex-1 overflow-auto p-4 md:p-6 flex flex-col gap-5 min-w-0 bg-canvas">
 
       {/* Sub-tab nav */}
       <div>
-        <SL>Analytics</SL>
+        <div className="tabs">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`tab shrink-0 ${tab === t.id ? "tab-active" : ""}`}
+              title={t.hint}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-        {!isMobile && (
-          <div
-            className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-1"
-            style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${TABS.length}, 1fr)`,
-              gap: "2px",
-              width: "100%",
-            }}
-          >
-            {TABS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`px-1.5 lg:px-3 py-2 rounded-lg text-[13px] font-semibold transition-all border-none cursor-pointer flex items-center justify-center gap-1.5 ${
-                  tab === t.id
-                    ? "bg-[#ededed] text-black"
-                    : "bg-transparent text-[#555] hover:text-[#ededed] hover:bg-[#111]"
-                }`}
-                style={{ width: "100%", minWidth: 0 }}
-                title={t.hint}
-              >
-                {/* Emoji only when there's room — 6 equal columns get tight on tablets */}
-                <span className="hidden lg:inline">{t.emoji}</span>
-                <span className="truncate">{t.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {isMobile && (
-          <div className="overflow-x-auto -mx-1 px-1">
-            <div className="flex gap-1.5 pb-1">
-              {TABS.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`shrink-0 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all border cursor-pointer flex items-center gap-1.5 ${
-                    tab === t.id
-                      ? "bg-[#ededed] text-black border-transparent"
-                      : "bg-[#0a0a0a] text-[#555] border-[#1a1a1a] hover:text-[#ededed]"
-                  }`}
-                >
-                  <span>{t.emoji}</span>
-                  <span>{t.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="text-[12px] text-[#555] mt-2">
+        <div className="text-caption mt-2">
           {TABS.find(t => t.id === tab)?.hint}
         </div>
       </div>

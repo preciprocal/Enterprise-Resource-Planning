@@ -128,10 +128,10 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
     await load();
   }
 
-  const L = "block text-[12px] font-medium text-[#888] mb-1.5";
+  const L = "field-label";
 
   return (
-    <div className="flex flex-col gap-7 min-w-0">
+    <div className="flex flex-col gap-5 min-w-0">
       <Block title="Give bonus credits">
         <div className="p-4 flex flex-col gap-5">
           <div>
@@ -139,12 +139,12 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
             <div className="flex flex-wrap gap-1.5">
               {([...PACK_KEYS, STANDALONE_KEY] as Source[]).map(k => (
                 <button key={k} onClick={() => choosePack(k)}
-                  className={`px-3 h-8 rounded-lg border text-[13px] cursor-pointer transition-colors ${k === STANDALONE_KEY ? "ml-1.5 " : ""}${packKey === k ? "bg-[#ededed] border-[#ededed] text-black font-medium" : "bg-transparent border-[#222] text-[#aaa] hover:border-[#3a3a3a] hover:text-[#ededed]"}`}>
+                  className={`btn btn-secondary ${k === STANDALONE_KEY ? "ml-1.5 " : ""}${packKey === k ? "btn-on" : ""}`}>
                   {k === STANDALONE_KEY ? "Standalone (any feature)" : PACKS[k].name}
                 </button>
               ))}
             </div>
-            <p className="text-[12px] text-[#555] mt-1.5">
+            <p className="text-[12px] text-fg-4 mt-1.5">
               {standalone ? "Not tied to a pack. Pick the features to give credits for." : `The pack gives ${describe(PACKS[packKey].grants)}.`}
             </p>
           </div>
@@ -157,7 +157,7 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
                   const on = picked.includes(k);
                   return (
                     <button key={k} onClick={() => togglePick(k)} aria-pressed={on}
-                      className={`px-3 h-8 rounded-lg border text-[13px] capitalize cursor-pointer transition-colors ${on ? "bg-[rgba(62,207,142,0.1)] border-[rgba(62,207,142,0.45)] text-[#3ecf8e] font-medium" : "bg-transparent border-[#222] text-[#aaa] hover:border-[#3a3a3a] hover:text-[#ededed]"}`}>
+                      className={`btn btn-secondary capitalize ${on ? "btn-on" : ""}`}>
                       {on ? "✓ " : "+ "}{label(k)}
                     </button>
                   );
@@ -171,34 +171,34 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
             <div className="flex flex-wrap gap-1.5">
               {PRESETS.map(p => (
                 <button key={p.id} onClick={() => choosePreset(p.id)}
-                  className={`px-3 h-8 rounded-lg border text-[13px] cursor-pointer transition-colors ${preset === p.id ? "bg-[rgba(99,102,241,0.15)] border-[rgba(99,102,241,0.5)] text-[#c7d2fe] font-medium" : "bg-transparent border-[#222] text-[#aaa] hover:border-[#3a3a3a] hover:text-[#ededed]"}`}>
-                  {p.label} <span className="text-[#666] ml-1">{p.pct}%</span>
+                  className={`btn btn-secondary ${preset === p.id ? "btn-on" : ""}`}>
+                  {p.label} <span className="text-fg-4 num">{p.pct}%</span>
                 </button>
               ))}
-              <span className={`px-3 h-8 inline-flex items-center rounded-lg border text-[13px] ${preset === "custom" ? "border-[rgba(99,102,241,0.5)] text-[#c7d2fe]" : "border-transparent text-[#555]"}`}>Custom</span>
+              <span className={`px-3 h-8 inline-flex items-center rounded-lg border text-[13px] font-medium ${preset === "custom" ? "border-brand-line bg-brand-soft text-brand-fg" : "border-transparent text-fg-4"}`}>Custom</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 mt-3">
               {Object.keys(base).map(k => (
-                <label key={k} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-[#1a1a1a] bg-[#080808]">
-                  <span className="text-[13px] text-[#ccc] capitalize">{label(k)}</span>
+                <label key={k} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-line bg-subtle">
+                  <span className="text-[13px] text-fg-2 capitalize">{label(k)}</span>
                   <span className="flex items-center gap-2">
                     <input type="number" min={0} max={capFor(packKey, k)} value={amounts[k] ?? 0} onChange={e => setAmount(k, e.target.value)}
-                      className={`${inputCls} w-20 h-8 py-0 text-right tabular-nums`} aria-label={`${label(k)} credits`} />
-                    <span className="text-[11px] text-[#555] w-12">{standalone ? `max ${STANDALONE_MAX}` : `of ${base[k]}`}</span>
+                      className={`${inputCls} field-sm w-20 text-right num`} aria-label={`${label(k)} credits`} />
+                    <span className="text-[11px] text-fg-4 w-12">{standalone ? `max ${STANDALONE_MAX}` : `of ${base[k]}`}</span>
                   </span>
                 </label>
               ))}
             </div>
-            {standalone && !picked.length && <p className="text-[12px] text-[#555] mt-2">Pick at least one feature above.</p>}
+            {standalone && !picked.length && <p className="text-[12px] text-fg-4 mt-2">Pick at least one feature above.</p>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-4 items-start">
             <div>
               <span className={L}>When</span>
-              <div className="inline-flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5">
+              <div className="seg">
                 {(standalone ? (["now"] as const) : (["now", "next_purchase"] as const)).map(m => (
                   <button key={m} onClick={() => setMode(m)}
-                    className={`px-3.5 h-8 rounded-md text-[13px] font-medium border-none cursor-pointer ${mode === m ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#666] hover:text-[#aaa]"}`}>
+                    className={`seg-item ${mode === m ? "seg-item-active" : ""}`}>
                     {m === "now" ? "Give now" : `On next ${sourceName(packKey)} purchase`}
                   </button>
                 ))}
@@ -210,12 +210,12 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
             </label>
           </div>
 
-          {msg && <div role="status" className={`px-3 py-2 rounded-lg text-[13px] border ${msg.ok ? "text-[#3ecf8e] bg-[rgba(62,207,142,0.06)] border-[rgba(62,207,142,0.2)]" : "text-[#f44] bg-[rgba(255,68,68,0.06)] border-[rgba(255,68,68,0.2)]"}`}>{msg.text}</div>}
+          {msg && <div role="status" className={`px-3 py-2 rounded-lg text-[13px] border ${msg.ok ? "text-success-fg bg-success-soft border-success-line" : "text-danger-fg bg-danger-soft border-danger-line"}`}>{msg.text}</div>}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-[12px] text-[#666]">{total ? describe(amounts) : "Nothing selected"}</span>
+            <span className="text-[12px] text-fg-4">{total ? describe(amounts) : "Nothing selected"}</span>
             <button onClick={submit} disabled={busy || total === 0}
-              className="px-4 h-9 rounded-lg text-[13px] font-semibold border-none cursor-pointer bg-[#ededed] text-black hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed">
+              className="btn btn-lg btn-primary">
               {busy ? "Saving…" : mode === "now" ? "Give credits" : "Add bonus offer"}
             </button>
           </div>
@@ -225,14 +225,14 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
       <Block title="Bonuses for this user" count={(list?.granted.length ?? 0) + (list?.offers?.length ?? 0) || undefined}>
         {!list ? <div className="p-4"><div className="skeleton h-16 rounded-lg" /></div>
           : list.granted.length + (list.offers?.length ?? 0) === 0 ? <Empty>No bonuses yet</Empty> : (
-          <ul className="divide-y divide-[#111]">
+          <ul className="divide-y divide-line-soft">
             {(list.offers ?? []).map(o => (
               <li key={o.id} className="px-4 py-3 flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="text-[13px] text-[#ddd]">{describe(o.bonus)} <span className="text-[#666]">on next {sourceName(o.packKey)}</span></div>
-                  <div className="text-[12px] text-[#555] mt-0.5">{o.claimedAt ? `Used ${fmtFull(o.claimedAt)}` : `Waiting since ${fmtFull(o.at)}`}{o.reason ? ` · ${o.reason}` : ""}</div>
+                  <div className="text-[13px] text-fg-2">{describe(o.bonus)} <span className="text-fg-4">on next {sourceName(o.packKey)}</span></div>
+                  <div className="text-[12px] text-fg-4 mt-0.5">{o.claimedAt ? `Used ${fmtFull(o.claimedAt)}` : `Waiting since ${fmtFull(o.at)}`}{o.reason ? ` · ${o.reason}` : ""}</div>
                 </div>
-                {!o.claimedAt && <button onClick={() => void revoke("offer", o.id, describe(o.bonus))} className="shrink-0 text-[12px] text-[#888] hover:text-[#f44] bg-transparent border-none cursor-pointer p-0">Remove</button>}
+                {!o.claimedAt && <button onClick={() => void revoke("offer", o.id, describe(o.bonus))} className="link shrink-0 text-[12px] hover:text-danger-fg">Remove</button>}
               </li>
             ))}
             {list.granted.map(g => {
@@ -240,16 +240,16 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
               return (
                 <li key={g.id} className="px-4 py-3 flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <div className={`text-[13px] ${g.revokedAt ? "text-[#555] line-through" : "text-[#ddd]"}`}>{describe(g.granted)}</div>
-                    <div className="text-[12px] text-[#555] mt-0.5">{sourceName(g.packKey)} · given {fmtFull(g.at)}{g.revokedAt ? ` · removed ${fmtFull(g.revokedAt)}` : ` · ${describe(left) || "all used"} left`}</div>
+                    <div className={`text-[13px] ${g.revokedAt ? "text-fg-4 line-through" : "text-fg-2"}`}>{describe(g.granted)}</div>
+                    <div className="text-[12px] text-fg-4 mt-0.5">{sourceName(g.packKey)} · given {fmtFull(g.at)}{g.revokedAt ? ` · removed ${fmtFull(g.revokedAt)}` : ` · ${describe(left) || "all used"} left`}</div>
                   </div>
-                  {!g.revokedAt && <button onClick={() => void revoke("pack", g.id, describe(left))} className="shrink-0 text-[12px] text-[#888] hover:text-[#f44] bg-transparent border-none cursor-pointer p-0">Remove</button>}
+                  {!g.revokedAt && <button onClick={() => void revoke("pack", g.id, describe(left))} className="link shrink-0 text-[12px] hover:text-danger-fg">Remove</button>}
                 </li>
               );
             })}
           </ul>
         )}
-        {list?.offers === null && <p className="px-4 py-2.5 text-[12px] text-[#f5a623] border-t border-[#141414]">Offers on next purchase need Dashboard migration 0053.</p>}
+        {list?.offers === null && <p className="px-4 py-2.5 text-[12px] text-warning-fg border-t border-line-soft">Offers on next purchase need Dashboard migration 0053.</p>}
       </Block>
     </div>
   );

@@ -6,6 +6,10 @@ let _usersCache: import("./admin/admin-shared").User[] | null = null;
 let _cacheTime = 0;
 const CACHE_TTL = 60_000;
 
+import {
+  LayoutGrid, Users, Activity, Globe, Puzzle, ScrollText, Mail, KanbanSquare, BarChart3, LifeBuoy, Lock,
+  ChevronRight, Code2, RefreshCw, Sun, Moon, LogOut, AlertCircle, type LucideIcon,
+} from "lucide-react";
 import { User, AnalyticsData, USAGE_FIELDS, CODE_REFS, AdminTokenContext, useIsMobile, planMonthlyPrice } from "./admin/admin-shared";
 import OverviewTab  from "./admin/OverviewTab";
 import UsersTab     from "./admin/UsersTab";
@@ -21,18 +25,18 @@ import ExtensionTab from "./admin/ExtensionTab";
 
 const SUPABASE_PROJECT = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/^https?:\/\//, "").split(".")[0] || "supabase";
 
-const NAV = [
-  { id: "overview",  label: "Overview",  icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> },
-  { id: "users",     label: "Users",     icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
-  { id: "analytics", label: "Analytics", icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
-  { id: "marketing", label: "Marketing", icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg> },
-  { id: "extension", label: "Extension", icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M10 3h4v3a2 2 0 1 0 4 0V3h3v6h-3a2 2 0 1 0 0 4h3v8h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3h7z"/></svg> },
-  { id: "logs",      label: "Logs",      icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M9 12h6M9 16h6M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l5 5v11a2 2 0 0 1-2 2z"/></svg> },
-  { id: "email",     label: "Email",     icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg> },
-  { id: "kanban",    label: "Tasks",     icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg> },
-  { id: "usage",     label: "Usage",     icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> },
-  { id: "support",   label: "Support",   icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
-  { id: "access",    label: "Access",    icon: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> },
+const NAV: { id: string; label: string; icon: LucideIcon }[] = [
+  { id: "overview",  label: "Overview",  icon: LayoutGrid },
+  { id: "users",     label: "Users",     icon: Users },
+  { id: "analytics", label: "Analytics", icon: Activity },
+  { id: "marketing", label: "Marketing", icon: Globe },
+  { id: "extension", label: "Extension", icon: Puzzle },
+  { id: "logs",      label: "Logs",      icon: ScrollText },
+  { id: "email",     label: "Email",     icon: Mail },
+  { id: "kanban",    label: "Tasks",     icon: KanbanSquare },
+  { id: "usage",     label: "Usage",     icon: BarChart3 },
+  { id: "support",   label: "Support",   icon: LifeBuoy },
+  { id: "access",    label: "Access",    icon: Lock },
 ];
 
 const NAV_GROUPS = [
@@ -47,6 +51,23 @@ const NAV_TITLES: Record<string, string> = {
   overview: "Overview", users: "Users",
   analytics: "Analytics", logs: "Activity Logs", email: "Inbox", kanban: "Tasks", usage: "API Usage", support: "Support", access: "ERP Access", marketing: "Marketing", extension: "Extension",
 };
+
+// One line beside the page title, so every page says what it is for.
+const NAV_DESCRIPTIONS: Record<string, string> = {
+  overview:  "Revenue, signups and activity at a glance",
+  users:     "Every account, its plan, usage and history",
+  analytics: "Billing, revenue, retention and churn",
+  marketing: "Visitors and conversions on preciprocal.com",
+  extension: "Chrome extension installs and activity",
+  logs:      "Sign-ins, feature use and ERP actions",
+  email:     "Shared inbox and outgoing email",
+  kanban:    "Team tasks, meetings and the calendar",
+  usage:     "API spend and what is left per provider",
+  support:   "Tickets from users and their replies",
+  access:    "Who can sign in to the ERP",
+};
+
+const groupOf = (id: string) => NAV_GROUPS.find(g => g.ids.includes(id))?.g ?? "";
 
 export default function AdminDashboard({ onLogout, token = "", me }: {
   onLogout?: () => void; token?: string; me?: { uid: string; name: string; email: string } | null;
@@ -136,7 +157,7 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
       dormant: users.filter(u => USAGE_FIELDS.every(f => !(u.usage?.[f.key]))).length,
       powerUsers: power, avgUsage: users.length ? Math.round((tu / users.length) * 10) / 10 : 0,
       featureRank: fr, maxFeature: Math.max(...fr.map(f => f.value), 1),
-      planSegments: [{ color: "#888", value: pc.free, label: "Free" }, { color: "#0070f3", value: pc.pro, label: "Pro" }, { color: "#f5a623", value: pc.premium, label: "Premium" }],
+      planSegments: [{ color: "#9aa3b2", value: pc.free, label: "Free" }, { color: "#5b6cff", value: pc.pro, label: "Pro" }, { color: "#f59e0b", value: pc.premium, label: "Premium" }],
       providers: prov, conversionRate: users.length ? Math.round(((pc.pro + pc.premium) / users.length) * 100) : 0, totalUsage: tu,
     };
   }, [users]);
@@ -195,149 +216,139 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
   }, [token, users]);
 
   const noRefreshTabs = new Set(["email", "logs", "kanban", "access", "marketing", "extension"]);
+  const logout = () => { sessionStorage.removeItem("admin_token"); onLogout?.(); };
+  const paid = analytics ? analytics.planCounts.pro + analytics.planCounts.premium : 0;
 
   return (
-    <div className="min-h-screen flex bg-[#000]" style={{ fontFamily: "var(--font-geist-sans), -apple-system, sans-serif" }}>
+    <div className="min-h-screen flex bg-canvas text-fg">
 
-      {/* Desktop Sidebar */}
+      {/* ── Sidebar ── */}
       {!isMobile && (
-        <aside className="w-55 bg-[#000] border-r border-[#111] flex flex-col shrink-0 h-screen sticky top-0">
-          {/* Logo */}
-          <div className="px-4 h-12 border-b border-[#111] flex items-center gap-2.5 shrink-0">
-            <img src="/logo.png" alt="Preciprocal" className="w-6 h-6 shrink-0 object-contain" />
-            <div className="text-[14px] font-semibold text-[#ededed] tracking-tight flex-1 min-w-0 truncate">Preciprocal</div>
-            <span className="text-[10px] font-medium text-[#2a2a2a] bg-[#0f0f0f] border border-[#1a1a1a] px-1.5 py-0.5 rounded shrink-0">Admin</span>
+        <aside className="w-60 bg-sidebar-bg border-r border-line-soft flex flex-col shrink-0 h-screen sticky top-0">
+          <div className="px-4 h-14 flex items-center gap-2.5 shrink-0">
+            <img src="/logo.png" alt="" className="w-7 h-7 shrink-0 object-contain rounded-[8px]" />
+            <div className="text-[15px] font-bold text-fg tracking-tight flex-1 min-w-0 truncate">Preciprocal</div>
+            <span className="badge badge-brand h-[18px]! px-1.5! text-[10px]! uppercase tracking-wider">ERP</span>
           </div>
 
-          {/* Nav */}
-          <nav className="p-2 flex-1 overflow-y-auto">
+          {me && (
+            <div className="mx-3 mb-1 px-2.5 py-2 rounded-lg flex items-center gap-2.5 bg-hover border border-line-soft">
+              <div className="relative shrink-0">
+                <div className="w-7 h-7 rounded-full bg-brand-soft text-brand-fg text-[11px] font-semibold flex items-center justify-center">
+                  {(me.name || me.email || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success border-2 border-sidebar-bg" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-semibold text-fg truncate">{me.name || "Admin"}</div>
+                <div className="text-[11px] text-fg-4 truncate" title={me.email}>{me.email}</div>
+              </div>
+            </div>
+          )}
+
+          <nav className="px-3 pb-3 flex-1 overflow-y-auto scrollbar-hide" aria-label="ERP sections">
             {NAV_GROUPS.map(({ g, ids }) => (
-              <div key={g} className="mb-3">
-                <div className="text-[10px] font-semibold text-[#333] uppercase tracking-[0.12em] px-2 py-1.5 mb-0.5 select-none">{g}</div>
-                {NAV.filter(n => ids.includes(n.id)).map(n => (
-                  <button
-                    key={n.id}
-                    onClick={() => setNav(n.id)}
-                    className={`w-full flex items-center gap-2 px-2 h-[30px] rounded-md text-[13px] font-medium transition-colors duration-100 cursor-pointer border-none text-left mb-px ${
-                      nav === n.id
-                        ? "bg-[rgba(255,255,255,0.07)] text-[#ededed]"
-                        : "bg-transparent text-[#555] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#999]"
-                    }`}
-                    style={{ fontFamily: "inherit" }}
-                  >
-                    <span className={`shrink-0 transition-colors duration-100 ${nav === n.id ? "text-[#ededed]" : "text-[#3a3a3a]"}`}>{n.icon}</span>
-                    <span className="truncate">{n.label}</span>
-                    {n.id === "email" && emailUnread > 0 && (
-                      <span className="ml-auto text-[10px] bg-[rgba(0,112,243,0.15)] text-[#0070f3] border border-[rgba(0,112,243,0.2)] px-1.5 py-0.5 rounded-full font-bold leading-none">{emailUnread}</span>
-                    )}
-                  </button>
-                ))}
+              <div key={g} className="pt-4">
+                <div className="px-2.5 pb-1.5 text-[10px] font-semibold text-fg-5 uppercase tracking-[0.16em] select-none">{g}</div>
+                {NAV.filter(n => ids.includes(n.id)).map(n => {
+                  const active = nav === n.id;
+                  const Icon = n.icon;
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => setNav(n.id)}
+                      aria-current={active ? "page" : undefined}
+                      className={`group relative w-full flex items-center gap-2.5 px-2.5 h-8 rounded-lg text-[13px] font-medium transition-colors duration-150 border-0 text-left mb-px font-[inherit] ${
+                        active ? "bg-active text-fg" : "bg-transparent text-fg-3 hover:bg-hover hover:text-fg"
+                      }`}
+                    >
+                      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-r-full bg-brand" aria-hidden="true" />}
+                      <Icon className={`w-4 h-4 shrink-0 ${active ? "text-brand-fg" : "text-fg-4 group-hover:text-fg-3"}`} strokeWidth={1.75} />
+                      <span className="truncate">{n.label}</span>
+                      {n.id === "email" && emailUnread > 0 && (
+                        <span className="ml-auto badge badge-brand h-[18px]! px-1.5! num">{emailUnread}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </nav>
 
-          {/* Footer */}
-          <div className="px-3 py-3 border-t border-[#111] shrink-0">
+          <div className="p-3 border-t border-line-soft shrink-0">
             {analytics ? (
-              <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg px-3 py-2.5">
-                <div className="text-[13px] font-bold text-[#3ecf8e] tabular-nums">
-                  ${analytics.revenue.toFixed(0)}<span className="text-[11px] font-normal text-[#1e6644] ml-0.5">/mo</span>
+              <div className="rounded-lg px-3 py-2.5 bg-subtle border border-line-soft">
+                <div className="label">Monthly revenue</div>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-[17px] font-semibold text-fg num tracking-tight">${analytics.revenue.toFixed(0)}</span>
+                  <span className="text-[11px] text-fg-4">/mo</span>
                 </div>
-                <div className="text-[11px] text-[#444] mt-0.5">
-                  {analytics.total} users · {analytics.planCounts.pro + analytics.planCounts.premium} paid
-                </div>
+                <div className="text-[11px] text-fg-4 mt-0.5 num">{analytics.total} users · <span className="text-success-fg">{paid} paid</span></div>
               </div>
             ) : (
-              <div className="skeleton h-12 rounded-lg" />
+              <div className="skeleton h-[74px] rounded-lg" />
             )}
           </div>
         </aside>
       )}
 
-      {/* Main content */}
-      <div className={`flex-1 flex flex-col min-w-0 h-screen overflow-hidden ${isMobile ? "pb-14" : ""}`}>
+      {/* ── Main ── */}
+      <div className={`flex-1 flex flex-col min-w-0 h-screen overflow-hidden ${isMobile ? "pb-16" : ""}`}>
 
-        {/* Header */}
-        <div className="bg-[#000] border-b border-[#111] px-4 md:px-5 h-12 flex items-center gap-2 shrink-0">
-          <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-semibold text-[#ededed] tracking-tight">{NAV_TITLES[nav] ?? nav}</div>
+        <header className="bg-canvas border-b border-line-soft px-4 md:px-6 h-14 flex items-center gap-2 shrink-0">
+          {isMobile && <img src="/logo.png" alt="" className="w-6 h-6 shrink-0 object-contain rounded-md mr-1" />}
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            {!isMobile && (
+              <>
+                <span className="text-[13px] text-fg-4 shrink-0">{groupOf(nav)}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-fg-5 shrink-0" aria-hidden="true" />
+              </>
+            )}
+            <h1 className="text-[14px] font-semibold text-fg tracking-tight truncate">{NAV_TITLES[nav] ?? nav}</h1>
+            {!isMobile && NAV_DESCRIPTIONS[nav] && (
+              <span className="hidden lg:inline text-[13px] text-fg-4 truncate pl-2 ml-1 border-l border-line">{NAV_DESCRIPTIONS[nav]}</span>
+            )}
           </div>
 
-          {/* Code refs toggle */}
           {!isMobile && (
-            <button
-              onClick={() => setShowRefs(s => !s)}
-              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border text-[12px] font-medium cursor-pointer transition-colors duration-100 ${
-                showRefs
-                  ? "bg-[rgba(99,102,241,0.08)] border-[rgba(99,102,241,0.2)] text-[#818cf8]"
-                  : "bg-transparent border-[#1a1a1a] text-[#444] hover:border-[#2a2a2a] hover:text-[#777]"
-              }`}
-            >
-              <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-              Code Refs
+            <button onClick={() => setShowRefs(s => !s)} className={`btn btn-sm btn-secondary ${showRefs ? "btn-on" : ""}`}>
+              <Code2 className="w-3.5 h-3.5" /> Code refs
             </button>
           )}
 
-          {/* Refresh */}
           {!noRefreshTabs.has(nav) && (
-            <button
-              onClick={() => { _usersCache = null; void loadUsers(true); }}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-1.5 h-7 w-7 rounded-md border border-[#1a1a1a] bg-transparent text-[#444] cursor-pointer hover:border-[#2a2a2a] hover:text-[#777] disabled:opacity-25 transition-colors duration-100"
-              title={loading ? "Loading…" : "Refresh"}
-            >
-              <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ animation: loading ? "spin .8s linear infinite" : "none" }}>
-                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-              </svg>
+            <button onClick={() => { _usersCache = null; void loadUsers(true); }} disabled={loading}
+              className="btn btn-sm btn-secondary btn-icon" title={loading ? "Loading…" : "Refresh"} aria-label="Refresh">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
           )}
 
-          {/* Supabase project badge */}
-          <span className="hidden md:inline-flex items-center text-[11px] bg-[rgba(62,207,142,0.05)] text-[#2a8c5a] border border-[rgba(62,207,142,0.12)] px-2 py-1 rounded-md font-medium shrink-0 gap-1.5" title="Supabase project">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#3ecf8e] shrink-0" />
-            {SUPABASE_PROJECT}
+          <span className="hidden md:inline-flex badge badge-success h-7! px-2.5! rounded-lg! font-medium!" title="Supabase project">
+            <span className="dot bg-success" />{SUPABASE_PROJECT}
           </span>
 
-          {/* Theme toggle */}
-          <button
-            onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-[#1a1a1a] bg-transparent text-[#444] cursor-pointer hover:border-[#2a2a2a] hover:text-[#777] transition-colors duration-100 shrink-0"
-          >
-            {theme === "dark" ? (
-              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-              </svg>
-            ) : (
-              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-              </svg>
-            )}
+          <button onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle theme"
+            className="btn btn-sm btn-secondary btn-icon">
+            {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Logout */}
-          <button
-            onClick={() => { sessionStorage.removeItem("admin_token"); onLogout?.(); }}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-[#1a1a1a] bg-transparent text-[12px] font-medium text-[#444] cursor-pointer hover:border-[rgba(255,68,68,0.25)] hover:text-[#cc3333] transition-colors duration-100 shrink-0"
-          >
-            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            {!isMobile && "Logout"}
+          <button onClick={logout} className="btn btn-sm btn-secondary hover:text-danger-fg! hover:border-danger-line!" aria-label="Log out">
+            <LogOut className="w-3.5 h-3.5" />{!isMobile && "Log out"}
           </button>
-        </div>
+        </header>
 
-        {/* Code references panel */}
+        {/* Code references */}
         {showRefs && !isMobile && (
-          <div className="bg-[#050505] border-b border-[#1a1a1a] px-6 py-3 shrink-0">
-            <div className="text-[11px] font-medium text-[#333] uppercase tracking-widest mb-2">Codebase References</div>
+          <div className="bg-subtle border-b border-line-soft px-6 py-3 shrink-0">
+            <div className="label mb-2">Codebase references</div>
             <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
               {Object.entries(CODE_REFS).map(([k, v]) => (
-                <div key={k} title={v.desc} className="flex gap-2 rounded-md px-2.5 py-1.5 border border-[#1a1a1a] bg-[#0a0a0a] cursor-help">
-                  <svg width="9" height="9" fill="none" stroke="#818cf8" strokeWidth="2" viewBox="0 0 24 24" className="mt-0.5 shrink-0"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                  <div>
-                    <div className="font-mono text-[11px] text-[#818cf8] mb-0.5">{v.file}</div>
-                    <div className="text-[11px] text-[#444]">{v.desc}</div>
+                <div key={k} title={v.desc} className="flex gap-2 rounded-lg px-2.5 py-1.5 border border-line-soft bg-surface cursor-help">
+                  <Code2 className="w-3 h-3 mt-0.5 shrink-0 text-brand-fg" />
+                  <div className="min-w-0">
+                    <div className="font-mono text-[11px] text-brand-fg mb-0.5 truncate">{v.file}</div>
+                    <div className="text-[11px] text-fg-4">{v.desc}</div>
                   </div>
                 </div>
               ))}
@@ -345,46 +356,29 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
           </div>
         )}
 
-        {/* Error banner */}
+        {/* Load error */}
         {loadError && (
           loadError === "__auth__" ? (
-            <div className="shrink-0 mx-4 my-2 px-4 py-3 bg-[rgba(245,166,35,0.06)] border border-[rgba(245,166,35,0.2)] rounded-xl flex items-center gap-3">
-              <svg width="14" height="14" fill="none" stroke="#f5a623" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0">
-                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-semibold text-[#f5a623]">Session expired — </span>
-                <span className="text-sm text-[#f5a623]/70">your admin token is no longer valid</span>
+            <div className="shrink-0 mx-4 md:mx-6 mt-3 px-4 py-3 bg-warning-soft border border-warning-line rounded-xl flex items-center gap-3">
+              <Lock className="w-4 h-4 text-warning-fg shrink-0" />
+              <div className="flex-1 min-w-0 text-[13px] text-warning-fg">
+                <span className="font-semibold">Session expired.</span> Your admin sign-in is no longer valid.
               </div>
-              <button
-                onClick={() => { sessionStorage.removeItem("admin_token"); onLogout?.(); }}
-                className="shrink-0 text-xs font-semibold text-[#f5a623] border border-[rgba(245,166,35,0.3)] bg-transparent rounded-md px-3 py-1.5 cursor-pointer hover:bg-[rgba(245,166,35,0.06)] transition-colors"
-              >
-                Re-login
-              </button>
+              <button onClick={logout} className="btn btn-sm btn-secondary">Sign in again</button>
             </div>
           ) : (
-            <div className="shrink-0 mx-4 my-2 px-4 py-3 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-xl flex items-center gap-3">
-              <svg width="14" height="14" fill="none" stroke="#f44" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-semibold text-[#f44]">Failed to load: </span>
-                <span className="text-sm text-[#f44]/70">{loadError}</span>
+            <div className="shrink-0 mx-4 md:mx-6 mt-3 px-4 py-3 bg-danger-soft border border-danger-line rounded-xl flex items-center gap-3">
+              <AlertCircle className="w-4 h-4 text-danger-fg shrink-0" />
+              <div className="flex-1 min-w-0 text-[13px] text-danger-fg">
+                <span className="font-semibold">Couldn&apos;t load users:</span> {loadError}
               </div>
-              <button
-                onClick={() => { _usersCache = null; void loadUsers(true); }}
-                className="shrink-0 text-xs font-medium text-[#f44] border border-[rgba(255,68,68,0.3)] bg-transparent rounded-md px-2.5 py-1 cursor-pointer hover:bg-[rgba(255,68,68,0.06)]"
-              >
-                Retry
-              </button>
+              <button onClick={() => { _usersCache = null; void loadUsers(true); }} className="btn btn-sm btn-secondary">Retry</button>
             </div>
           )
         )}
 
-        {/* Tab content */}
         <AdminTokenContext.Provider value={token}>
-          <div className="flex-1 flex overflow-hidden bg-[#000]">
+          <main className="flex-1 flex overflow-hidden bg-canvas">
             {nav === "overview"  && <OverviewTab  analytics={analytics} users={users} loading={loading} token={token} />}
             {nav === "users"     && <UsersTab users={users} filtered={filtered} loading={loading} analytics={analytics} search={search} setSearch={setSearch} planF={planF} setPlanF={setPlanF} sortF={sortF} setSortF={setSortF} sortD={sortD} setSortD={setSortD} saveUser={saveUser} saving={saving} msg={msg} token={token} />}
             {nav === "analytics" && <AnalyticsTab users={users} loading={loading} token={token} theme={theme} />}
@@ -396,30 +390,31 @@ export default function AdminDashboard({ onLogout, token = "", me }: {
             {nav === "access"    && <AccessTab   token={token} />}
             {nav === "marketing" && <MarketingTab token={token} />}
             {nav === "extension" && <ExtensionTab token={token} />}
-          </div>
+          </main>
         </AdminTokenContext.Provider>
       </div>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav: 11 tabs don't fit, so fixed-width items scroll sideways */}
       {isMobile && (
-        // 9 tabs don't fit at phone widths: fixed-width items that scroll sideways
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#000] border-t border-[#1a1a1a] h-14 flex items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {NAV.map(n => (
-            <button
-              key={n.id}
-              onClick={() => setNav(n.id)}
-              ref={el => { if (el && nav === n.id) el.scrollIntoView({ block: "nearest", inline: "nearest" }); }}
-              className={`flex-1 min-w-16 shrink-0 flex flex-col items-center justify-center gap-0.5 border-none cursor-pointer transition-colors ${nav === n.id ? "text-[#ededed]" : "text-[#444]"}`}
-              style={{ background: nav === n.id ? "rgba(255,255,255,0.04)" : "transparent", fontFamily: "inherit" }}
-            >
-              {n.icon}
-              <span className="text-[11px] font-medium whitespace-nowrap">{n.label}</span>
-            </button>
-          ))}
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-sidebar-bg border-t border-line h-16 flex items-stretch overflow-x-auto scrollbar-hide" aria-label="ERP sections">
+          {NAV.map(n => {
+            const active = nav === n.id;
+            const Icon = n.icon;
+            return (
+              <button
+                key={n.id}
+                onClick={() => setNav(n.id)}
+                ref={el => { if (el && active) el.scrollIntoView({ block: "nearest", inline: "nearest" }); }}
+                className={`relative flex-1 min-w-[68px] shrink-0 flex flex-col items-center justify-center gap-1 border-0 bg-transparent font-[inherit] transition-colors ${active ? "text-fg" : "text-fg-4"}`}
+              >
+                {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-b-full bg-brand" />}
+                <Icon className={`w-[18px] h-[18px] ${active ? "text-brand-fg" : ""}`} strokeWidth={1.75} />
+                <span className="text-[11px] font-medium whitespace-nowrap">{n.label}</span>
+              </button>
+            );
+          })}
         </nav>
       )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

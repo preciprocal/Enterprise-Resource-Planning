@@ -5,8 +5,8 @@ import { useState, useMemo, useEffect } from "react";
 import {
   User, AnalyticsData, PRICE_IDS_MAP, WEBHOOK_EVENTS,
   planColor, statusColor, fmtFull,
-  MetricCard, Chip, StatusDot, Avatar, CodeRef, SL, Card, CardTitle, Spinner, FRow, useIsMobile,
-  inputCls, Select,
+  MetricCard, StatusDot, Avatar, CodeRef, SL, Card, CardTitle, Spinner, FRow, useIsMobile,
+  inputCls, Select, Checkbox,
 } from "./admin-shared";
 import { FollowUpPanel } from "./FollowUp";
 
@@ -38,7 +38,7 @@ type Toast = { msg: string; type: "ok"|"err" };
 function ToastBanner({ toast }: { toast: Toast | null }) {
   if (!toast) return null;
   return (
-    <div className={`fixed bottom-7 right-7 z-[999] px-5 py-3 rounded-xl font-semibold text-sm border ${toast.type==="ok" ? "bg-[rgba(62,207,142,0.1)] text-[#3ecf8e] border-[rgba(62,207,142,0.25)]" : "bg-[rgba(255,68,68,0.1)] text-[#f44] border-[rgba(255,68,68,0.25)]"}`}>
+    <div className={`fixed bottom-7 right-7 z-[999] px-4 py-3 rounded-xl font-semibold text-[13px] border ${toast.type==="ok" ? "bg-success-soft text-success-fg border-success-line" : "bg-danger-soft text-danger-fg border-danger-line"}`}>
       {toast.type==="ok" ? "✓ " : "✗ "}{toast.msg}
     </div>
   );
@@ -52,8 +52,8 @@ export function CouponGrid({
   coupons: StripeCoupon[]; loading: boolean; selectedId: string; onSelect: (id: string) => void;
 }) {
   const valid = coupons.filter(c => c.valid);
-  if (loading) return <div className="text-xs text-[#555] py-3">Loading coupons from Stripe…</div>;
-  if (!valid.length) return <div className="text-xs text-[#555] py-3">No active coupons in Stripe.</div>;
+  if (loading) return <div className="text-caption py-3">Loading coupons from Stripe…</div>;
+  if (!valid.length) return <div className="text-caption py-3">No active coupons in Stripe.</div>;
   return (
     <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-0.5">
       {valid.map(c => {
@@ -63,27 +63,27 @@ export function CouponGrid({
         const is100 = c.percentOff === 100;
         return (
           <button key={c.id} onClick={() => onSelect(isSel ? "" : c.id)}
-            className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all cursor-pointer font-[inherit] ${
+            className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors cursor-pointer ${
               isSel
-                ? "bg-[rgba(0,112,243,0.08)] border-[rgba(0,112,243,0.35)] text-[#ededed]"
-                : "bg-[#111] border-[#1a1a1a] text-[#ededed] hover:border-[#2a2a2a]"
+                ? "bg-brand-soft border-brand-line text-fg"
+                : "bg-subtle border-line text-fg hover:border-line-hover"
             }`}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                <div className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${isSel ? "border-[#0070f3] bg-[#0070f3]" : "border-[#2a2a2a] bg-transparent"}`}>
+                <div className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${isSel ? "border-brand bg-brand" : "border-line-hover bg-transparent"}`}>
                   {isSel && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                 </div>
                 <span className="text-[13px] font-semibold truncate">{c.name}</span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${is100 ? "bg-[rgba(62,207,142,0.12)] text-[#3ecf8e] border-[rgba(62,207,142,0.3)]" : "bg-[rgba(0,112,243,0.08)] text-[#4da3ff] border-[rgba(0,112,243,0.2)]"}`}>{disc}</span>
-                <span className="text-[11px] text-[#555]">{dur}</span>
+                <span className={`badge ${is100 ? "badge-success" : "badge-brand"}`}>{disc}</span>
+                <span className="text-caption">{dur}</span>
               </div>
             </div>
             <div className="flex items-center gap-2 mt-1 pl-5">
-              <span className="font-mono text-[11px] text-[#444] truncate">{c.id}</span>
-              {c.timesRedeemed > 0 && <span className="text-[11px] text-[#444]">{c.timesRedeemed} used</span>}
-              {c.maxRedemptions && <span className="text-[11px] text-[#444]">max {c.maxRedemptions}</span>}
+              <span className="font-mono text-[11px] text-fg-5 truncate">{c.id}</span>
+              {c.timesRedeemed > 0 && <span className="text-[11px] text-fg-5">{c.timesRedeemed} used</span>}
+              {c.maxRedemptions && <span className="text-[11px] text-fg-5">max {c.maxRedemptions}</span>}
             </div>
           </button>
         );
@@ -160,7 +160,7 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
     <div className="flex flex-col gap-3.5">
       {/* Plan */}
       <div>
-        <label className="block text-[12px] font-semibold text-[#555] uppercase tracking-wide mb-1.5">Plan & Price</label>
+        <label className="field-label">Plan & Price</label>
         <Select value={priceId} onChange={e=>setPriceId(e.target.value)}>
           <option value="">Select price</option>
           {Object.entries(PRICE_IDS_MAP).map(([id,info]) => (
@@ -172,8 +172,8 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
         </Select>
         {selectedPrice && (
           <div className="flex items-center gap-2 mt-1.5">
-            <Chip label={selectedPrice.plan} className={`border font-bold ${planColor(selectedPrice.plan).tw}`} />
-            <span className="text-[12px] text-[#888]">{selectedPrice.billing} · {selectedPrice.price}</span>
+            <span className={`badge ${planColor(selectedPrice.plan).tw}`}>{selectedPrice.plan}</span>
+            <span className="text-[12px] text-fg-3">{selectedPrice.billing} · {selectedPrice.price}</span>
           </div>
         )}
       </div>
@@ -182,7 +182,7 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
         // Free (or nothing) selected → nothing will be created in Stripe
         const noPaid = !priceId || priceId === "__free__" || selectedPrice?.plan === "free";
         return (
-        <div className={`px-3.5 py-2.5 rounded-lg text-xs border ${noPaid ? "bg-[rgba(245,166,35,0.06)] border-[rgba(245,166,35,0.2)] text-[#f5a623]" : "bg-[rgba(0,112,243,0.06)] border-[rgba(0,112,243,0.15)] text-[#0070f3]"}`}>
+        <div className={`px-3.5 py-2.5 rounded-lg text-[12px] border ${noPaid ? "bg-warning-soft border-warning-line text-warning-fg" : "bg-brand-soft border-brand-line text-brand-fg"}`}>
           {noPaid
             ? "No Stripe subscription. Select a paid plan to create one in Stripe."
             : "No existing subscription. A new Stripe customer & subscription will be created automatically."}
@@ -193,18 +193,18 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
       {/* Coupon (optional) */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-[12px] font-semibold text-[#555] uppercase tracking-wide">Coupon (optional)</label>
+          <label className="field-label mb-0!">Coupon (optional)</label>
           {couponId && (
-            <button onClick={() => setCouponId("")} className="text-[11px] text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer transition-colors">
+            <button onClick={() => setCouponId("")} className="link text-[12px]">
               Clear
             </button>
           )}
         </div>
         <CouponGrid coupons={coupons} loading={loadingCoupons} selectedId={couponId} onSelect={setCouponId} />
         {couponId && selectedCoupon && (
-          <div className="mt-2 px-3 py-2 bg-[rgba(0,112,243,0.06)] border border-[rgba(0,112,243,0.2)] rounded-lg flex items-center gap-2">
-            <svg width="11" height="11" fill="none" stroke="#0070f3" strokeWidth="2" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-            <span className="text-[12px] text-[#0070f3] font-medium">{couponLabel(selectedCoupon)} will be applied</span>
+          <div className="mt-2 px-3 py-2 bg-brand-soft border border-brand-line rounded-lg flex items-center gap-2">
+            <svg className="text-brand-fg shrink-0" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            <span className="text-[12px] text-brand-fg font-medium">{couponLabel(selectedCoupon)} will be applied</span>
           </div>
         )}
       </div>
@@ -213,7 +213,7 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
       <div className={`grid gap-2.5 ${isMobile?"grid-cols-1":"grid-cols-3"}`}>
         {([["Period Start",periodStart,setPeriodStart],["Period End",periodEnd,setPeriodEnd],["Trial End",trialEnd,setTrialEnd]] as [string,string,(s:string)=>void][]).map(([l,v,set])=>(
           <div key={l}>
-            <label className="block text-[12px] font-semibold text-[#555] uppercase tracking-wide mb-1.5">{l}</label>
+            <label className="field-label">{l}</label>
             <input type="date" value={v} onChange={e=>set(e.target.value)} className={inputCls} />
           </div>
         ))}
@@ -221,22 +221,22 @@ export function PlanEditorPanel({ user, onSaved, isMobile, token = "", coupons, 
 
       {sub.canceledAt && sub.plan && sub.plan !== "free" ? (
         // Already set to cancel: the only useful action is undoing it.
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={undoCancel} onChange={e=>setUndoCancel(e.target.checked)} className="w-3.5 h-3.5 accent-[#0070f3]" />
-          <span className="text-sm text-[#ededed] font-medium">Undo the scheduled cancellation</span>
-          <span className="text-[12px] text-[#555] hidden sm:inline">(the plan renews as normal)</span>
-        </label>
+        <div className="flex items-center gap-2 cursor-pointer select-none" onClick={()=>setUndoCancel(v=>!v)}>
+          <Checkbox checked={undoCancel} onChange={()=>setUndoCancel(v=>!v)} label="Undo the scheduled cancellation" />
+          <span className="text-[13px] text-fg font-medium">Undo the scheduled cancellation</span>
+          <span className="text-caption hidden sm:inline">(the plan renews as normal)</span>
+        </div>
       ) : (
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={cancelEoP} onChange={e=>setCancelEoP(e.target.checked)} className="w-3.5 h-3.5 accent-[#0070f3]" />
-          <span className="text-sm text-[#ededed] font-medium">Cancel at period end</span>
-          <span className="text-[12px] text-[#555] hidden sm:inline">(keeps access until end date)</span>
-        </label>
+        <div className="flex items-center gap-2 cursor-pointer select-none" onClick={()=>setCancelEoP(v=>!v)}>
+          <Checkbox checked={cancelEoP} onChange={()=>setCancelEoP(v=>!v)} label="Cancel at period end" />
+          <span className="text-[13px] text-fg font-medium">Cancel at period end</span>
+          <span className="text-caption hidden sm:inline">(keeps access until end date)</span>
+        </div>
       )}
 
-      {err && <div className="px-3 py-2 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg text-xs text-[#f44]">{err}</div>}
+      {err && <div className="px-3 py-2 bg-danger-soft border border-danger-line rounded-lg text-[12px] text-danger-fg">{err}</div>}
       <button onClick={apply} disabled={working || noChanges} title={noChanges ? "Pick a different plan, change a date or add a coupon first" : undefined}
-        className={`self-start px-5 py-2 rounded-lg text-sm font-bold border-none cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${working ? "bg-[#1a1a1a] text-[#555] cursor-wait" : "bg-[#0070f3] text-white hover:bg-[#0060df]"}`}>
+        className="btn btn-primary self-start">
         {working ? "Applying…" : couponId ? "Apply Plan + Coupon" : "Apply to Stripe + Supabase"}
       </button>
     </div>
@@ -274,7 +274,7 @@ export function CouponPanel({ user, onDone, token = "", coupons, loadingCoupons 
   return (
     <div className="flex flex-col gap-4">
       {user.subscription?.lastAppliedCoupon && (
-        <div className="px-3 py-2 bg-[rgba(62,207,142,0.06)] border border-[rgba(62,207,142,0.2)] rounded-lg text-xs text-[#3ecf8e] font-medium">
+        <div className="px-3 py-2 bg-success-soft border border-success-line rounded-lg text-[12px] text-success-fg font-medium">
           Last applied: <strong>{user.subscription.lastAppliedCoupon}</strong>
           {user.subscription.lastCouponAppliedAt ? ` on ${fmtFull(user.subscription.lastCouponAppliedAt)}` : ""}
         </div>
@@ -282,19 +282,19 @@ export function CouponPanel({ user, onDone, token = "", coupons, loadingCoupons 
 
       {/* Coupon cards */}
       <div>
-        <div className="text-[11px] font-bold text-[#555] uppercase tracking-wide mb-2">Select Coupon</div>
+        <div className="label mb-2">Select Coupon</div>
         <CouponGrid coupons={coupons} loading={loadingCoupons} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
 
       {/* Apply button for selected coupon */}
       {selectedCoupon && (
-        <div className="flex items-center gap-2 px-3.5 py-3 bg-[rgba(0,112,243,0.06)] border border-[rgba(0,112,243,0.2)] rounded-xl">
+        <div className="flex items-center gap-2 px-3.5 py-3 bg-brand-soft border border-brand-line rounded-lg">
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-semibold text-[#ededed]">{selectedCoupon.name}</div>
-            <div className="text-[11px] text-[#555] mt-0.5">{couponLabel(selectedCoupon)}</div>
+            <div className="text-[13px] font-semibold text-fg">{selectedCoupon.name}</div>
+            <div className="text-caption mt-0.5">{couponLabel(selectedCoupon)}</div>
           </div>
           <button onClick={() => apply()} disabled={working || !user.subscription?.stripeCustomerId}
-            className={`shrink-0 px-4 py-2 rounded-lg text-[13px] font-bold border-none cursor-pointer disabled:opacity-40 transition-colors ${working ? "bg-[#3ecf8e]/60 text-black cursor-wait" : "bg-[#3ecf8e] hover:bg-[#32bf7e] text-black"}`}>
+            className="btn btn-primary shrink-0">
             {working ? "Applying…" : "Apply to Account"}
           </button>
         </div>
@@ -302,9 +302,9 @@ export function CouponPanel({ user, onDone, token = "", coupons, loadingCoupons 
 
       {/* Divider */}
       <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-[#1a1a1a]" />
-        <span className="text-[11px] text-[#333] uppercase tracking-wider font-semibold">or enter code manually</span>
-        <div className="flex-1 h-px bg-[#1a1a1a]" />
+        <div className="flex-1 h-px bg-line-soft" />
+        <span className="label">or enter code manually</span>
+        <div className="flex-1 h-px bg-line-soft" />
       </div>
 
       {/* Manual code */}
@@ -313,15 +313,15 @@ export function CouponPanel({ user, onDone, token = "", coupons, loadingCoupons 
           placeholder="PROMO_CODE or coupon_id"
           className={`${inputCls} flex-1`} />
         <button onClick={()=>apply()} disabled={working || !user.subscription?.stripeCustomerId || !code.trim()}
-          className={`px-4 py-2 rounded-lg text-sm font-bold text-black border-none whitespace-nowrap cursor-pointer disabled:opacity-40 transition-colors ${working ? "bg-[#3ecf8e]/60 cursor-wait" : "bg-[#3ecf8e] hover:bg-[#32bf7e]"}`}>
+          className="btn btn-secondary btn-lg">
           {working ? "…" : "Apply"}
         </button>
       </div>
 
       {!user.subscription?.stripeCustomerId && (
-        <p className="text-[12px] text-[#555]">No Stripe customer ID on this user — assign a subscription first.</p>
+        <p className="text-caption">No Stripe customer ID on this user — assign a subscription first.</p>
       )}
-      {err && <div className="px-3 py-2 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-lg text-xs text-[#f44]">{err}</div>}
+      {err && <div className="px-3 py-2 bg-danger-soft border border-danger-line rounded-lg text-[12px] text-danger-fg">{err}</div>}
     </div>
   );
 }
@@ -387,36 +387,36 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
   if (loading) return <Spinner />;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-black">
+    <div className="flex-1 flex flex-col overflow-hidden bg-canvas">
       <ToastBanner toast={toast} />
 
       {selectedUser ? (
         /* ── DETAIL VIEW ─────────────────────────────────── */
         <div className="flex-1 overflow-auto">
-          <div className="p-4 md:p-7 flex flex-col gap-4 max-w-4xl mx-auto">
+          <div className="p-4 md:p-6 flex flex-col gap-4 max-w-4xl mx-auto">
             <button onClick={()=>setSelectedUser(null)}
-              className="flex items-center gap-2 text-sm text-[#555] hover:text-[#ededed] border-none bg-transparent cursor-pointer transition-colors self-start">
-              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              className="btn btn-ghost btn-sm self-start -ml-2.5">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               Back to all users
             </button>
 
             {(()=>{
               const pc=planColor(selectedUser.subscription?.plan), sc=statusColor(selectedUser.subscription?.status);
               return (
-                <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl overflow-hidden">
-                  <div className="h-[2px]" style={{background:`linear-gradient(90deg,${pc.accent},${pc.accent}44)`}} />
+                <div className="card overflow-hidden">
+                  <div className="h-[2px]" style={{background:pc.accent}} />
                   <div className="p-4">
                     <div className="flex items-center gap-3 mb-3">
                       <Avatar name={selectedUser.name} size={44} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-base font-extrabold text-[#ededed] tracking-tight">{selectedUser.name??"Unknown"}</div>
-                        <div className="text-xs text-[#888] truncate mt-0.5">{selectedUser.email}</div>
+                        <div className="text-[16px] font-semibold text-fg tracking-tight">{selectedUser.name??"Unknown"}</div>
+                        <div className="text-[12px] text-fg-3 truncate mt-0.5">{selectedUser.email}</div>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <Chip label={selectedUser.subscription?.plan??"free"} className={`border font-bold ${pc.tw}`} />
-                          <div className="flex items-center gap-1"><StatusDot color={sc.dot}/><span className="text-xs font-semibold" style={{color:sc.text}}>{selectedUser.subscription?.status??""}</span></div>
-                          {selectedUser.subscription?.stripeCustomerId && <Chip label="Stripe" className="bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border border-[rgba(62,207,142,0.2)] font-bold" />}
+                          <span className={`badge ${pc.tw}`}>{selectedUser.subscription?.plan??"free"}</span>
+                          <div className="flex items-center gap-1"><StatusDot color={sc.dot}/><span className="text-[12px] font-semibold" style={{color:sc.text}}>{selectedUser.subscription?.status??""}</span></div>
+                          {selectedUser.subscription?.stripeCustomerId && <span className="badge badge-success">Stripe</span>}
                           {selectedUser.subscription?.lastAppliedCoupon && (
-                            <Chip label={`Coupon: ${selectedUser.subscription.lastAppliedCoupon}`} className="bg-[rgba(0,112,243,0.08)] text-[#4da3ff] border border-[rgba(0,112,243,0.2)] font-bold" />
+                            <span className="badge badge-brand">{`Coupon: ${selectedUser.subscription.lastAppliedCoupon}`}</span>
                           )}
                         </div>
                       </div>
@@ -424,8 +424,8 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
                     <div className="grid grid-cols-2 gap-x-5 gap-y-1.5">
                       {([["Customer ID",selectedUser.subscription?.stripeCustomerId],["Sub ID",selectedUser.subscription?.stripeSubscriptionId],["Period End",fmtFull(selectedUser.subscription?.currentPeriodEnd)],["UID",selectedUser.id]] as [string,string|undefined][]).map(([l,v])=>(
                         <div key={l} className="min-w-0">
-                          <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider">{l}</div>
-                          <div className="font-mono text-[12px] text-[#0070f3] mt-0.5 truncate">{v??""}</div>
+                          <div className="label">{l}</div>
+                          <div className="font-mono text-[12px] text-brand-fg mt-0.5 truncate">{v??""}</div>
                         </div>
                       ))}
                     </div>
@@ -434,14 +434,14 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
               );
             })()}
 
-            <div className="flex gap-1 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-1">
+            <div className="tabs">
               {([
                 { id:"plan",    label:"Change Plan",   icon:<svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> },
                 { id:"coupon",  label:"Apply Coupon",  icon:<svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> },
                 { id:"contact", label:"Contact User",  icon:<svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> },
               ] as {id:"plan"|"coupon"|"contact";label:string;icon:React.ReactNode}[]).map(p=>(
                 <button key={p.id} onClick={()=>setActivePanel(p.id)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border-none cursor-pointer font-[inherit] transition-all text-xs font-semibold ${activePanel===p.id ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#555] hover:text-[#888]"}`}>
+                  className={`tab ${activePanel===p.id ? "tab-active" : ""}`}>
                   {p.icon}<span className={isMobile?"hidden sm:inline":""}>{p.label}</span>
                 </button>
               ))}
@@ -478,8 +478,8 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
 
             <Card>
               <CardTitle>Current Subscription</CardTitle>
-              <FRow label="Plan"         badgeLabel={selectedUser.subscription?.plan??"free"} badgeClassName={`border font-bold ${planColor(selectedUser.subscription?.plan).tw}`} />
-              <FRow label="Status"       badgeLabel={selectedUser.subscription?.status??""} badgeClassName="text-xs font-semibold" />
+              <FRow label="Plan"         badgeLabel={selectedUser.subscription?.plan??"free"} badgeClassName={`border ${planColor(selectedUser.subscription?.plan).tw}`} />
+              <FRow label="Status"       badgeLabel={selectedUser.subscription?.status??""} badgeClassName="bg-raised text-fg-3 border-line" />
               <FRow label="Period Start" value={fmtFull(selectedUser.subscription?.currentPeriodStart)} />
               <FRow label="Period End"   value={fmtFull(selectedUser.subscription?.currentPeriodEnd)} />
               <FRow label="Trial Ends"   value={fmtFull(selectedUser.subscription?.trialEndsAt)} />
@@ -497,17 +497,17 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#555] pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, Stripe ID…" className={`${inputCls} pl-8 text-xs`} />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-4 pointer-events-none" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, Stripe ID…" className={`${inputCls} pl-9`} />
               </div>
-              <Select value={planFilter} onChange={e=>setPlanFilter(e.target.value)} className="text-xs">
+              <Select value={planFilter} onChange={e=>setPlanFilter(e.target.value)}>
                 <option value="all">All Plans</option>
                 <option value="free">Free</option>
                 <option value="pro">Pro</option>
                 <option value="premium">Premium</option>
                 <option value="enterprise">Enterprise</option>
               </Select>
-              <Select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="text-xs">
+              <Select value={sortBy} onChange={e=>setSortBy(e.target.value)}>
                 <option value="recent">Recent</option>
                 <option value="name_asc">Name A-Z</option>
                 <option value="name_desc">Name Z-A</option>
@@ -516,36 +516,36 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[#555]">{filteredUsers.length} users</span>
+              <span className="text-caption num">{filteredUsers.length} users</span>
               {planFilter !== "all" && (
-                <button onClick={()=>setPlanFilter("all")} className="text-[11px] text-[#0070f3] font-medium cursor-pointer border-none bg-transparent">Clear filter</button>
+                <button onClick={()=>setPlanFilter("all")} className="link text-[12px]">Clear filter</button>
               )}
             </div>
 
             {/* Stripe Health — collapsible */}
-            <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl overflow-hidden">
+            <div className="card overflow-hidden">
               <button
                 onClick={()=>setHealthOpen(o=>!o)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left border-none bg-transparent cursor-pointer"
+                className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer hover:bg-hover transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <svg width="13" height="13" fill="none" stroke="#3ecf8e" strokeWidth="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                  <span className="text-[13px] font-bold text-[#ededed]">Stripe Health</span>
+                  <svg width="14" height="14" fill="none" stroke="var(--success)" strokeWidth="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  <span className="section-title">Stripe Health</span>
                   {analytics && (
-                    <span className="text-[11px] text-[#555] font-medium ml-1">
+                    <span className="text-caption num ml-1">
                       {analytics.stripeCount} active · ${analytics.revenue.toFixed(2)} MRR
                     </span>
                   )}
                 </div>
-                <svg width="12" height="12" fill="none" stroke="#555" strokeWidth="2" viewBox="0 0 24 24" style={{transform:healthOpen?"rotate(180deg)":"none",transition:"transform 0.15s"}}><polyline points="6 9 12 15 18 9"/></svg>
+                <svg width="14" height="14" fill="none" stroke="var(--fg-4)" strokeWidth="2" viewBox="0 0 24 24" style={{transform:healthOpen?"rotate(180deg)":"none",transition:"transform 0.15s"}}><polyline points="6 9 12 15 18 9"/></svg>
               </button>
               {healthOpen && (
-                <div className="px-4 pb-5 flex flex-col gap-4 border-t border-[#1a1a1a]">
+                <div className="px-4 pb-5 flex flex-col gap-4 border-t border-line-soft">
                   {analytics && (
                     <div className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <MetricCard label="Active Customers" value={analytics.stripeCount}              color="#0070f3" />
-                      <MetricCard label="Est. MRR"         value={`$${analytics.revenue.toFixed(2)}`} color="#3ecf8e" />
-                      <MetricCard label="Canceled"         value={analytics.canceledCount}            color="#f44" />
+                      <MetricCard label="Active Customers" value={analytics.stripeCount}              color="var(--brand-fg)" />
+                      <MetricCard label="Est. MRR"         value={`$${analytics.revenue.toFixed(2)}`} color="var(--success-fg)" />
+                      <MetricCard label="Canceled"         value={analytics.canceledCount}            color="var(--danger-fg)" />
                     </div>
                   )}
                   <section>
@@ -553,23 +553,23 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
                     {isMobile ? (
                       <div className="flex flex-col gap-2">
                         {Object.entries(PRICE_IDS_MAP).map(([id,info])=>{const pc=planColor(info.plan);return(
-                          <div key={id} className="bg-[#111] border border-[#1a1a1a] rounded-lg px-3.5 py-3">
+                          <div key={id} className="bg-subtle border border-line-soft rounded-lg px-3.5 py-3">
                             <div className="flex items-center justify-between mb-1.5">
-                              <Chip label={info.plan} className={`border font-bold ${pc.tw}`} />
-                              <span className="text-sm font-bold text-[#ededed]">{info.price}</span>
+                              <span className={`badge ${pc.tw}`}>{info.plan}</span>
+                              <span className="text-[13px] font-semibold text-fg num">{info.price}</span>
                             </div>
                             <div className="flex items-center justify-between">
-                              <code className="font-mono text-[11px] text-[#0070f3] truncate max-w-[60%]">{id}</code>
-                              <span className="text-xs text-[#888]">{info.billing}</span>
+                              <code className="font-mono text-[11px] text-brand-fg truncate max-w-[60%]">{id}</code>
+                              <span className="text-[12px] text-fg-3">{info.billing}</span>
                             </div>
                           </div>
                         );})}
                       </div>
                     ) : (
                       <Card className="p-0 overflow-hidden">
-                        <table className="w-full border-collapse">
-                          <thead><tr className="bg-[#111] border-b border-[#1a1a1a]">{["Price ID","Plan","Billing","Price"].map(h=><th key={h} className="px-4 py-2.5 text-left text-[11px] font-bold text-[#555] uppercase tracking-wider">{h}</th>)}</tr></thead>
-                          <tbody>{Object.entries(PRICE_IDS_MAP).map(([id,info])=>{const pc=planColor(info.plan);return(<tr key={id} className="border-b border-[#111] hover:bg-[#111] transition-colors"><td className="px-4 py-2.5 font-mono text-xs text-[#0070f3]">{id}</td><td className="px-4 py-2.5"><Chip label={info.plan} className={`border font-bold ${pc.tw}`}/></td><td className="px-4 py-2.5 text-sm text-[#888]">{info.billing}</td><td className="px-4 py-2.5 text-sm font-bold text-[#ededed]">{info.price}</td></tr>);})}</tbody>
+                        <table className="data-table">
+                          <thead><tr>{["Price ID","Plan","Billing","Price"].map(h=><th key={h}>{h}</th>)}</tr></thead>
+                          <tbody>{Object.entries(PRICE_IDS_MAP).map(([id,info])=>{const pc=planColor(info.plan);return(<tr key={id}><td className="font-mono text-[12px] text-brand-fg">{id}</td><td><span className={`badge ${pc.tw}`}>{info.plan}</span></td><td className="text-fg-3">{info.billing}</td><td className="font-semibold text-fg num">{info.price}</td></tr>);})}</tbody>
                         </table>
                       </Card>
                     )}
@@ -578,12 +578,12 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
                     <SL>Webhook Events <CodeRef k="stripeWebhook" /></SL>
                     <Card>
                       {WEBHOOK_EVENTS.map(e=>(
-                        <div key={e.event} className={`flex gap-3 py-2.5 border-b border-[#111] last:border-0 ${isMobile?"flex-col":"flex-row items-center"}`}>
+                        <div key={e.event} className={`flex gap-3 py-2.5 border-b border-line-soft last:border-0 ${isMobile?"flex-col":"flex-row items-center"}`}>
                           <div className="flex items-center gap-2.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#3ecf8e] shrink-0" />
-                            <code className={`font-mono text-[#ededed] ${isMobile?"text-[11px] break-all":"text-sm"}`}>{e.event}</code>
+                            <span className="dot bg-success" />
+                            <code className={`font-mono text-fg ${isMobile?"text-[11px] break-all":"text-[13px]"}`}>{e.event}</code>
                           </div>
-                          <code className={`font-mono text-[#555] ${isMobile?"text-[11px] ml-4":"text-xs ml-auto"}`}>{e.handler}()</code>
+                          <code className={`font-mono text-fg-4 ${isMobile?"text-[11px] ml-4":"text-[12px] ml-auto"}`}>{e.handler}()</code>
                         </div>
                       ))}
                     </Card>
@@ -600,33 +600,33 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
                 return (
                   <div key={u.id}
                     onClick={() => { setSelectedUser(u); setActivePanel("plan"); }}
-                    className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl overflow-hidden cursor-pointer hover:border-[#2a2a2a] hover:bg-[#111] transition-all flex flex-col"
+                    className="card overflow-hidden cursor-pointer hover:border-line-hover transition-colors flex flex-col"
                   >
-                    <div className="h-[2px] shrink-0" style={{background:`linear-gradient(90deg,${pc.accent},${pc.accent}44)`}} />
+                    <div className="h-[2px] shrink-0" style={{background:pc.accent}} />
                     <div className="p-4 flex flex-col flex-1 gap-3">
                       <div className="flex items-start gap-3">
                         <Avatar name={u.name} size={38} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-[14px] font-bold text-[#ededed] truncate leading-tight">{u.name??"Unknown"}</div>
-                          <div className="text-[12px] text-[#555] truncate mt-0.5">{u.email??""}</div>
+                          <div className="text-[14px] font-semibold text-fg truncate leading-tight">{u.name??"Unknown"}</div>
+                          <div className="text-[12px] text-fg-4 truncate mt-0.5">{u.email??""}</div>
                         </div>
                         <StatusDot color={sc.dot} />
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <Chip label={u.subscription?.plan??"free"} className={`border text-[11px] font-bold ${pc.tw}`} />
+                        <span className={`badge ${pc.tw}`}>{u.subscription?.plan??"free"}</span>
                         {u.subscription?.status && (
                           <span className="text-[11px] font-semibold" style={{color:sc.text}}>{u.subscription.status}</span>
                         )}
                         {u.subscription?.stripeCustomerId && (
-                          <Chip label="Stripe" className="bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border border-[rgba(62,207,142,0.2)] text-[11px] font-bold" />
+                          <span className="badge badge-success">Stripe</span>
                         )}
                       </div>
                       {u.subscription?.stripeCustomerId && (
-                        <div className="font-mono text-[11px] text-[#444] truncate">{u.subscription.stripeCustomerId}</div>
+                        <div className="font-mono text-[11px] text-fg-5 truncate">{u.subscription.stripeCustomerId}</div>
                       )}
                       <button
                         onClick={e => { e.stopPropagation(); setSelectedUser(u); setActivePanel("plan"); }}
-                        className="mt-auto w-full py-1.5 rounded-lg text-[12px] font-bold text-white bg-[#0070f3] hover:bg-[#0060df] border-none cursor-pointer transition-colors"
+                        className="btn btn-sm btn-secondary mt-auto w-full"
                       >
                         View
                       </button>
@@ -635,7 +635,7 @@ export default function StripeTab({ analytics, users, loading, token = "" }: Pro
                 );
               })}
               {!filteredUsers.length && (
-                <div className="col-span-full py-16 text-center text-sm text-[#555]">No users found.</div>
+                <div className="col-span-full empty py-16">No users found.</div>
               )}
             </div>
 

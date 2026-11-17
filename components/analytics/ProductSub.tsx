@@ -32,7 +32,7 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
     const isStar = f.adoptionPct >= 50 && f.retentionLift >= 5;
     const isHidden = f.adoptionPct < 50 && f.retentionLift >= 5;
     const isHygiene = f.adoptionPct >= 50 && f.retentionLift < 5;
-    const color = isStar ? "#10B981" : isHidden ? "#8B5CF6" : isHygiene ? "#6B7280" : "#EF4444";
+    const color = isStar ? "#10B981" : isHidden ? "#8B5CF6" : isHygiene ? "#9aa3b2" : "#EF4444";
     return { x: f.adoptionPct, y: f.retentionLift, r: radius, label: f.feature, color };
   });
 
@@ -75,11 +75,11 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
           />
         </div>
         {!productWorks && lastValidAttempt && (
-          <div className="mt-3 px-3 py-2.5 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5">
-            <svg width="14" height="14" fill="none" stroke="#DC2626" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 mt-0.5">
+          <div className="mt-3 px-3 py-2.5 bg-danger-soft border border-danger-line rounded-xl flex items-start gap-2.5">
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 mt-0.5 text-danger-fg">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            <div className="flex-1 text-[11px] text-rose-900">
+            <div className="flex-1 text-[12px] text-danger-fg">
               <strong>Product impact alert:</strong> users aren&apos;t improving meaningfully across attempts.
               The core value proposition needs to show measurable skill development.
             </div>
@@ -93,7 +93,7 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Feature ROI matrix</CardTitle>
-            <span className="text-[10px] text-gray-400">Adoption × retention impact · bubble size = total usage</span>
+            <span className="text-[11px] text-fg-4">Adoption × retention impact · bubble size = total usage</span>
           </div>
           <BubbleChart
             points={bubblePoints}
@@ -108,19 +108,19 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
             {[
               { label: "Star — invest more",       color: "#10B981", desc: "High adoption, helps retention" },
               { label: "Hidden gem — promote",     color: "#8B5CF6", desc: "Low adoption, high impact" },
-              { label: "Hygiene — maintain",       color: "#6B7280", desc: "Used a lot, doesn't lift retention" },
+              { label: "Hygiene — maintain",       color: "#9aa3b2", desc: "Used a lot, doesn't lift retention" },
               { label: "Cut candidate",            color: "#EF4444", desc: "Low both — kill or rework" },
             ].map(q => (
-              <div key={q.label} className="px-2.5 py-2 rounded-lg bg-gray-50 border border-gray-100">
+              <div key={q.label} className="px-2.5 py-2 rounded-lg bg-subtle border border-line-soft">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: q.color }} />
-                  <span className="text-[11px] font-bold text-gray-700">{q.label}</span>
+                  <span className="text-[11px] font-bold text-fg-2">{q.label}</span>
                 </div>
-                <div className="text-[10px] text-gray-500">{q.desc}</div>
+                <div className="text-[11px] text-fg-3">{q.desc}</div>
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-gray-400 mt-3">
+          <p className="text-[11px] text-fg-4 mt-3">
             Correlation, not causation. Features with sample size &lt; 50 users are unreliable — interpret cautiously.
           </p>
         </Card>
@@ -132,7 +132,7 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Score progression by attempt</CardTitle>
-            <span className="text-[10px] text-gray-400">A flat or declining line means the product isn&apos;t teaching</span>
+            <span className="text-[11px] text-fg-4">A flat or declining line means the product isn&apos;t teaching</span>
           </div>
           <LineChart
             labels={scoreProg.map(s => `#${s.attempt}${s.attempt === 8 ? "+" : ""}`)}
@@ -141,16 +141,16 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
             yMax={100}
             showLegend
             series={[
-              { label: "Avg score", data: scoreProg.map(s => s.sampleSize >= 3 ? s.avgScore : null), color: "#6366F1", fill: true },
-              { label: "+1 SD", data: scoreProg.map(s => s.sampleSize >= 3 ? Math.min(100, s.avgScore + s.stdDev) : null), color: "#C4B5FD", dashed: true },
-              { label: "−1 SD", data: scoreProg.map(s => s.sampleSize >= 3 ? Math.max(0, s.avgScore - s.stdDev) : null), color: "#C4B5FD", dashed: true },
+              { label: "Avg score", data: scoreProg.map(s => s.sampleSize >= 3 ? s.avgScore : null), color: "#5b6cff", fill: true },
+              { label: "+1 SD", data: scoreProg.map(s => s.sampleSize >= 3 ? Math.min(100, s.avgScore + s.stdDev) : null), color: "#a855f7", dashed: true },
+              { label: "−1 SD", data: scoreProg.map(s => s.sampleSize >= 3 ? Math.max(0, s.avgScore - s.stdDev) : null), color: "#a855f7", dashed: true },
             ]}
           />
           <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mt-3">
             {scoreProg.map(s => (
               <div key={s.attempt} className="text-center px-1">
-                <div className="text-[10px] text-gray-400">#{s.attempt}{s.attempt === 8 ? "+" : ""}</div>
-                <div className="text-[11px] font-bold text-gray-700">n={s.sampleSize}</div>
+                <div className="text-[11px] text-fg-4">#{s.attempt}{s.attempt === 8 ? "+" : ""}</div>
+                <div className="text-[11px] font-bold text-fg-2">n={s.sampleSize}</div>
               </div>
             ))}
           </div>
@@ -164,7 +164,7 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
           <Card>
             <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
               <CardTitle>Skill categories — weakest first</CardTitle>
-              <span className="text-[10px] text-gray-400">Average feedback score per category</span>
+              <span className="text-[11px] text-fg-4">Average feedback score per category</span>
             </div>
             <Bars
               labels={catStrength.map(c => c.category)}
@@ -188,7 +188,7 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
           <Card>
             <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
               <CardTitle>Score distribution by interview type</CardTitle>
-              <span className="text-[10px] text-gray-400">Box = IQR · line = median · whiskers = min/max</span>
+              <span className="text-[11px] text-fg-4">Box = IQR · line = median · whiskers = min/max</span>
             </div>
             <BoxPlot rows={typeDist.map(t => ({
               label: t.type,
@@ -209,25 +209,25 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Trending {popDim}</CardTitle>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+            <div className="seg">
               {(["role", "techstack", "company"] as const).map(d => (
                 <button key={d} onClick={() => setPopDim(d)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border-none cursor-pointer ${popDim === d ? "bg-white text-gray-900 shadow-sm" : "bg-transparent text-gray-500"}`}>
+                  className={`seg-item capitalize ${popDim === d ? "seg-item-active" : ""}`}>
                   {d}
                 </button>
               ))}
             </div>
           </div>
           {popDrift.length === 0 ? (
-            <div className="text-xs text-gray-400 py-8 text-center">Not enough recent interviews to detect trends in this dimension.</div>
+            <div className="text-xs text-fg-4 py-8 text-center">Not enough recent interviews to detect trends in this dimension.</div>
           ) : (
             <div className="flex flex-col">
               {popDrift.map(p => (
-                <div key={p.item} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                  <span className="text-xs text-gray-700 font-medium flex-1 truncate min-w-0">{p.item}</span>
+                <div key={p.item} className="flex items-center gap-3 py-2 border-b border-line-soft last:border-0">
+                  <span className="text-xs text-fg-2 font-medium flex-1 truncate min-w-0">{p.item}</span>
                   <Sparkline data={p.trend} color={p.growthPct >= 0 ? "#10B981" : "#EF4444"} width={60} height={20} />
-                  <span className="text-[10px] text-gray-400 w-16 text-right shrink-0">{p.recent} recent</span>
-                  <span className={`text-xs font-bold w-14 text-right shrink-0 ${p.growthPct > 0 ? "text-emerald-600" : p.growthPct < 0 ? "text-rose-500" : "text-gray-400"}`}>
+                  <span className="text-[11px] text-fg-4 w-16 text-right shrink-0">{p.recent} recent</span>
+                  <span className={`text-xs font-bold w-14 text-right shrink-0 ${p.growthPct > 0 ? "text-success-fg" : p.growthPct < 0 ? "text-danger-fg" : "text-fg-4"}`}>
                     {p.growthPct > 0 ? "+" : ""}{p.growthPct}%
                   </span>
                 </div>
@@ -243,27 +243,27 @@ export default function ProductSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Abandonment by {abandonDim}</CardTitle>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+            <div className="seg">
               {(["type", "role", "level"] as const).map(d => (
                 <button key={d} onClick={() => setAbandonDim(d)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border-none cursor-pointer ${abandonDim === d ? "bg-white text-gray-900 shadow-sm" : "bg-transparent text-gray-500"}`}>
+                  className={`seg-item capitalize ${abandonDim === d ? "seg-item-active" : ""}`}>
                   {d}
                 </button>
               ))}
             </div>
           </div>
           {abandonment.length === 0 ? (
-            <div className="text-xs text-gray-400 py-8 text-center">Not enough data yet.</div>
+            <div className="text-xs text-fg-4 py-8 text-center">Not enough data yet.</div>
           ) : (
             <div className="flex flex-col">
               {abandonment.slice(0, 10).map(a => (
-                <div key={a.slice} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                  <span className="text-xs text-gray-700 font-medium w-32 truncate shrink-0">{a.slice}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full overflow-hidden h-2">
+                <div key={a.slice} className="flex items-center gap-3 py-2 border-b border-line-soft last:border-0">
+                  <span className="text-xs text-fg-2 font-medium w-32 truncate shrink-0">{a.slice}</span>
+                  <div className="flex-1 bg-raised-2 rounded-full overflow-hidden h-2">
                     <div className="h-full rounded-full" style={{ width: `${a.rate}%`, background: a.rate > 50 ? "#EF4444" : a.rate > 25 ? "#F59E0B" : "#10B981" }} />
                   </div>
-                  <span className="text-[10px] text-gray-400 w-20 text-right shrink-0">{a.abandoned}/{a.total}</span>
-                  <span className={`text-xs font-bold w-12 text-right shrink-0`} style={{ color: a.rate > 50 ? "#EF4444" : a.rate > 25 ? "#F59E0B" : "#10B981" }}>
+                  <span className="text-[11px] text-fg-4 w-20 text-right shrink-0">{a.abandoned}/{a.total}</span>
+                  <span className="text-xs font-bold w-12 text-right shrink-0" style={{ color: a.rate > 50 ? "#EF4444" : a.rate > 25 ? "#F59E0B" : "#10B981" }}>
                     {a.rate.toFixed(0)}%
                   </span>
                 </div>

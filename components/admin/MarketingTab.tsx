@@ -80,20 +80,20 @@ const DEF = {
 function Hint({ text }: { text: string }) {
   return (
     <span title={text} tabIndex={0} aria-label={text}
-      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-[#333] text-[9px] font-semibold text-[#666] cursor-help align-middle ml-1 select-none">i</span>
+      className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-line-hover text-[11px] leading-none font-semibold text-fg-4 cursor-help align-middle ml-1 select-none">i</span>
   );
 }
 const H = ({ children, hint }: { children: ReactNode; hint: string }) => <>{children}<Hint text={hint} /></>;
 
 function Note({ children }: { children: ReactNode }) {
-  return <p className="text-[12px] text-[#555] leading-relaxed">{children}</p>;
+  return <p className="text-[12px] text-fg-4 leading-relaxed">{children}</p>;
 }
 
 function State({ loading, error, reload, empty, children }: { loading: boolean; error: string; reload: () => void; empty?: boolean; children: ReactNode }) {
   if (error) return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[rgba(255,68,68,0.2)] bg-[rgba(255,68,68,0.05)]">
-      <span className="text-[13px] text-[#f55]">Couldn&apos;t load analytics: {error}</span>
-      <button onClick={reload} className="text-[12px] font-medium text-[#f55] border border-[rgba(255,68,68,0.3)] bg-transparent rounded-md px-2.5 py-1 cursor-pointer">Retry</button>
+    <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-danger-line bg-danger-soft">
+      <span className="text-[13px] text-danger-fg">Couldn&apos;t load analytics: {error}</span>
+      <button onClick={reload} className="btn btn-sm btn-danger shrink-0">Retry</button>
     </div>
   );
   if (loading) return (
@@ -103,29 +103,29 @@ function State({ loading, error, reload, empty, children }: { loading: boolean; 
     </div>
   );
   if (empty) return (
-    <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-      <div className="text-[14px] text-[#888]">No visits in this range</div>
-      <div className="text-[12px] text-[#555] max-w-sm">The marketing site only started recording recently. Try a longer range, or check back once traffic comes in.</div>
+    <div className="empty py-20">
+      <div className="text-[14px] font-medium text-fg-3">No visits in this range</div>
+      <div className="text-caption max-w-sm">The marketing site only started recording recently. Try a longer range, or check back once traffic comes in.</div>
     </div>
   );
   return <>{children}</>;
 }
 
 /** Horizontal bar list — used for breakdowns, scroll funnels and sections. */
-function Bars({ items, max, color = "#ededed" }: { items: { label: ReactNode; value: number; right?: ReactNode; sub?: ReactNode; highlight?: boolean }[]; max?: number; color?: string }) {
+function Bars({ items, max, color = "var(--brand)" }: { items: { label: ReactNode; value: number; right?: ReactNode; sub?: ReactNode; highlight?: boolean }[]; max?: number; color?: string }) {
   const top = max ?? Math.max(1, ...items.map(i => i.value));
   return (
     <ul className="px-4 py-3 flex flex-col gap-3">
       {items.map((it, i) => (
         <li key={i} className="flex flex-col gap-1">
           <div className="flex items-baseline justify-between gap-3 text-[12px]">
-            <span className={`truncate ${it.highlight ? "text-[#3ecf8e]" : "text-[#bbb]"}`}>{it.label}</span>
-            <span className="shrink-0 text-[#888] tabular-nums">{it.right ?? it.value}</span>
+            <span className={`truncate ${it.highlight ? "text-success-fg" : "text-fg-2"}`}>{it.label}</span>
+            <span className="shrink-0 text-fg-3 tabular-nums">{it.right ?? it.value}</span>
           </div>
-          <span className="h-1.5 rounded-full bg-[#141414] overflow-hidden">
-            <span className="block h-full rounded-full" style={{ width: `${Math.max(it.value > 0 ? 2 : 0, Math.round((it.value / top) * 100))}%`, background: it.highlight ? "#3ecf8e" : color, opacity: it.highlight ? 1 : 0.7 }} />
+          <span className="h-1.5 rounded-full bg-raised-2 overflow-hidden">
+            <span className="block h-full rounded-full" style={{ width: `${Math.max(it.value > 0 ? 2 : 0, Math.round((it.value / top) * 100))}%`, background: it.highlight ? "var(--success)" : color }} />
           </span>
-          {it.sub && <span className="text-[11px] text-[#555]">{it.sub}</span>}
+          {it.sub && <span className="text-[11px] text-fg-4">{it.sub}</span>}
         </li>
       ))}
     </ul>
@@ -148,13 +148,13 @@ function SortTable<T>({ rows, cols, initial, rowKey, empty }: { rows: T[]; cols:
   if (!rows.length) return <Empty>{empty}</Empty>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left">
-        <thead><tr className="border-b border-[#141414]">
+      <table className="data-table">
+        <thead><tr>
           {cols.map(c => (
-            <th key={c.key} className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#444] whitespace-nowrap ${c.align === "right" ? "text-right" : ""} ${c.hide ? HIDE[c.hide] : ""}`}
+            <th key={c.key} className={`${c.align === "right" ? "text-right" : ""} ${c.hide ? HIDE[c.hide] : ""}`}
               aria-sort={sort.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}>
               <button onClick={() => setSort(s => ({ key: c.key, dir: s.key === c.key ? (s.dir === 1 ? -1 : 1) : -1 }))}
-                className={`bg-transparent border-none p-0 cursor-pointer uppercase tracking-wider font-semibold text-[11px] inline-flex items-center gap-1 ${sort.key === c.key ? "text-[#999]" : "text-[#444] hover:text-[#777]"}`}>
+                className={`label bg-transparent border-0 p-0 cursor-pointer inline-flex items-center gap-1 transition-colors ${sort.key === c.key ? "text-fg-2" : "hover:text-fg-2"}`}>
                 {c.label}{sort.key === c.key && <span aria-hidden>{sort.dir === 1 ? "↑" : "↓"}</span>}
               </button>
             </th>
@@ -162,9 +162,9 @@ function SortTable<T>({ rows, cols, initial, rowKey, empty }: { rows: T[]; cols:
         </tr></thead>
         <tbody>
           {sorted.map(r => (
-            <tr key={rowKey(r)} className="border-b border-[#0f0f0f] last:border-0 hover:bg-[#0d0d0d] transition-colors">
+            <tr key={rowKey(r)}>
               {cols.map((c, i) => (
-                <td key={c.key} className={`px-4 py-2.5 text-[13px] align-top ${i === 0 ? "text-[#ddd]" : "text-[#999] whitespace-nowrap tabular-nums"} ${c.align === "right" ? "text-right" : ""} ${c.hide ? HIDE[c.hide] : ""}`}>
+                <td key={c.key} className={`align-top ${i === 0 ? "text-fg-2" : "text-fg-3 whitespace-nowrap num"} ${c.align === "right" ? "text-right" : ""} ${c.hide ? HIDE[c.hide] : ""}`}>
                   {c.cell ? c.cell(r) : (c.get(r) ?? "—")}
                 </td>
               ))}
@@ -216,28 +216,33 @@ export default function MarketingTab({ token }: { token: string }) {
   const [view, setView] = useState<Section>("overview");
   const [days, setDays] = useState("30");
   return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-black">
-      <div className="px-4 md:px-8 pt-6 pb-4 border-b border-[#111] shrink-0">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-          <div>
-            <h1 className="text-[20px] font-semibold text-[#ededed] tracking-tight">Marketing site</h1>
-            <p className="text-[13px] text-[#666] mt-1">First-party analytics for preciprocal.com · visit times in your time zone ({zone()}) · daily totals by UTC day</p>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-canvas">
+      <div className="shrink-0">
+        <div className="px-4 md:px-6 pt-5 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="page-title">Marketing site</h1>
+            <p className="text-caption mt-1">First-party analytics for preciprocal.com · visit times in your time zone ({zone()}) · daily totals by UTC day</p>
           </div>
-          <Select value={days} onChange={e => setDays(e.target.value)} leading="Range" wrapperClassName="w-auto" className="h-8 text-[12px]" aria-label="Date range">
-            {RANGES.map(r => <option key={r.v} value={r.v}>{r.l}</option>)}
-          </Select>
+          <div className="seg self-start md:self-auto max-w-full overflow-x-auto shrink-0" role="group" aria-label="Date range">
+            {RANGES.map(r => (
+              <button key={r.v} type="button" onClick={() => setDays(r.v)} aria-pressed={days === r.v}
+                className={`seg-item ${days === r.v ? "seg-item-active" : ""}`}>
+                {r.l}
+              </button>
+            ))}
+          </div>
         </div>
-        <nav className="mt-4 flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Marketing sections">
+        <nav className="tabs mt-3 px-2.5 md:px-4" aria-label="Marketing sections">
           {SECTIONS.map(s => (
             <button key={s.id} onClick={() => setView(s.id)} aria-current={view === s.id ? "page" : undefined}
-              className={`shrink-0 h-8 px-3 rounded-md text-[13px] font-medium border-none cursor-pointer transition-colors ${view === s.id ? "bg-[#111] text-[#ededed]" : "bg-transparent text-[#555] hover:text-[#999]"}`}>
+              className={`tab shrink-0 ${view === s.id ? "tab-active" : ""}`}>
               {s.label}
             </button>
           ))}
         </nav>
       </div>
       <div className="flex-1 min-h-0 overflow-auto">
-        <div className="px-4 md:px-8 py-6 flex flex-col gap-7">
+        <div className="p-4 md:p-6 flex flex-col gap-5">
           {view === "overview" && <OverviewView token={token} days={days} />}
           {view === "sources"  && <SourcesView  token={token} days={days} />}
           {view === "pages"    && <PagesView    token={token} days={days} />}
@@ -265,7 +270,7 @@ function OverviewView({ token, days }: { token: string; days: string }) {
             : <Stat label="Avg daily uniques" value={t.avgDailyUniques} sub={<H hint={DEF.uniques}>not summed across days</H>} />}
           <Stat label="Page views" value={n(t.pageViews)} sub={t.pagesPerSession != null ? `${t.pagesPerSession.toFixed(2)} per session` : undefined} />
           <Stat label="Bounce rate" value={pctS(t.bounceRatePct)} sub={<H hint={DEF.bounce}>custom definition</H>} />
-          <Stat label="Clicked through to app" value={n(t.reachedApp)} sub={<H hint={DEF.app}>{pctS(t.appClickRatePct)} of sessions</H>} tone={t.reachedApp ? "#3ecf8e" : undefined} />
+          <Stat label="Clicked through to app" value={n(t.reachedApp)} sub={<H hint={DEF.app}>{pctS(t.appClickRatePct)} of sessions</H>} tone={t.reachedApp ? "var(--success-fg)" : undefined} />
           <Stat label="Avg session" value={dur(t.avgSessionMs)} sub={<H hint={DEF.sessionTime}>from {t.timedSessions} timed session{t.timedSessions === 1 ? "" : "s"}</H>} />
           <Stat label="Consent rate" value={pctS(t.consentRatePct)} sub={<H hint={DEF.consent}>accepted cookies</H>} />
           <Stat label="Range" value={single ? "Today" : `${q.data.range.days} days`} sub={`${shortDay(q.data.range.from)} – ${shortDay(q.data.range.to)}`} />
@@ -276,15 +281,15 @@ function OverviewView({ token, days }: { token: string; days: string }) {
             <div className="px-2 pt-2">
               <LineChart data={[q.data.series.map(s => s.sessions), q.data.series.map(s => s.pageViews)]}
                 labels={q.data.series.map(s => shortDay(s.day))} h={200} area smooth={false} />
-              <div className="flex gap-4 px-3 pb-3 text-[11px] text-[#666]">
-                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-[#0070f3] rounded" />Sessions</span>
-                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-[#3ecf8e] rounded" />Page views</span>
+              <div className="flex gap-4 px-3 pb-3 text-[11px] text-fg-4">
+                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-brand rounded-full" />Sessions</span>
+                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-success rounded-full" />Page views</span>
               </div>
             </div>
           ) : (
             <div className="px-4 py-5 flex items-baseline gap-6">
-              <div><div className="text-[24px] font-semibold text-[#ededed] tabular-nums">{n(t.sessions)}</div><div className="text-[12px] text-[#555]">sessions today</div></div>
-              <div><div className="text-[24px] font-semibold text-[#ededed] tabular-nums">{n(t.pageViews)}</div><div className="text-[12px] text-[#555]">page views today</div></div>
+              <div><div className="text-[24px] font-semibold text-fg num">{n(t.sessions)}</div><div className="text-[12px] text-fg-4">sessions today</div></div>
+              <div><div className="text-[24px] font-semibold text-fg num">{n(t.pageViews)}</div><div className="text-[12px] text-fg-4">page views today</div></div>
               <Note>Pick a longer range to see a trend.</Note>
             </div>
           )}
@@ -303,7 +308,7 @@ function SourcesView({ token, days }: { token: string; days: string }) {
   const srcCols: SortCol<SourcesData["bySource"][number]>[] = [
     { key: "source", label: "Source", get: r => r.source, cell: r => <Primary sub={human(r.channel) ?? undefined}>{r.source}</Primary> },
     { key: "sessions", label: "Sessions", get: r => r.sessions, cell: r => <>{n(r.sessions)} <Muted>· {total ? Math.round((100 * r.sessions) / total) : 0}%</Muted></> },
-    { key: "leads", label: <>Clicked through to app<Hint text={DEF.app} /></>, get: r => r.leads, cell: r => <span className={r.leads ? "text-[#3ecf8e]" : ""}>{n(r.leads)}</span> },
+    { key: "leads", label: <>Clicked through to app<Hint text={DEF.app} /></>, get: r => r.leads, cell: r => <span className={r.leads ? "text-success-fg" : ""}>{n(r.leads)}</span> },
     { key: "conv", label: "Conversion", get: r => r.conversionPct, cell: r => pctS(r.conversionPct) },
     { key: "bounce", label: <>Bounce<Hint text={DEF.bounce} /></>, get: r => r.bounceRatePct, cell: r => pctS(r.bounceRatePct), hide: "sm" },
     { key: "pages", label: "Pages / session", get: r => r.avgPages, cell: r => r.avgPages != null ? r.avgPages.toFixed(2) : "—", hide: "md" },
@@ -313,15 +318,15 @@ function SourcesView({ token, days }: { token: string; days: string }) {
     <State loading={q.loading && !d} error={q.error} reload={q.reload} empty={!!d && total === 0}>
       {d && (<>
         <Note>
-          Where should we spend effort? Sessions show reach; <b className="text-[#999] font-medium">clicked through to app</b>{" "}is the strongest outcome the marketing site can see.
-          Signups aren&apos;t attributed to sources yet — the app doesn&apos;t store the <code className="font-mono text-[#777]">pr_sid</code> / <code className="font-mono text-[#777]">pr_vid</code> link ids on new accounts — so nothing here can be tied to a named customer.
+          Where should we spend effort? Sessions show reach; <b className="text-fg-3 font-medium">clicked through to app</b>{" "}is the strongest outcome the marketing site can see.
+          Signups aren&apos;t attributed to sources yet — the app doesn&apos;t store the <code className="font-mono text-fg-3">pr_sid</code> / <code className="font-mono text-fg-3">pr_vid</code> link ids on new accounts — so nothing here can be tied to a named customer.
         </Note>
 
         <Block title="Sources" count={d.bySource.length}>
           <SortTable rows={d.bySource} cols={srcCols} initial="sessions" rowKey={r => `${r.source}|${r.channel}`} empty="No traffic in this range" />
         </Block>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-7">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
           <Block title="Sessions by source">
             {d.bySource.length ? <div className="px-2 pt-2"><BarChart data={d.bySource.slice(0, 10).map(s => ({ l: s.source, v: s.sessions }))} h={180} /></div> : <Empty>No traffic</Empty>}
           </Block>
@@ -352,7 +357,7 @@ function SourcesView({ token, days }: { token: string; days: string }) {
           ]} />
         </Block>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-7">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {([["Devices", d.devices], ["Countries", d.countries], ["Browsers", d.browsers]] as [string, AudRow[]][]).map(([title, list]) => (
             <Block key={title} title={title}>
               {list.length ? <Bars items={list.slice(0, 8).map(a => ({ label: human(a.name), value: a.sessions, right: n(a.sessions) }))} /> : <Empty>No data</Empty>}
@@ -384,7 +389,7 @@ function PagesView({ token, days }: { token: string; days: string }) {
                 const thin = r.timedViews < 5 || r.timedViews < r.views / 2;
                 return r.avgTimeOnPageMs == null ? <Muted>no timed views</Muted> : (
                   <span title={thin ? `Based on only ${r.timedViews} of ${r.views} views — treat as indicative` : undefined}>
-                    {dur(r.avgTimeOnPageMs)} <Muted>({r.timedViews} timed)</Muted>{thin && <span className="text-[#f5a623] ml-1" aria-label="thin sample">·thin</span>}
+                    {dur(r.avgTimeOnPageMs)} <Muted>({r.timedViews} timed)</Muted>{thin && <span className="text-warning-fg ml-1" aria-label="thin sample">·thin</span>}
                   </span>);
               } },
             { label: "Median", hide: "md", cell: r => r.medianTimeOnPageMs != null ? dur(r.medianTimeOnPageMs) : <span title="Medians can't be combined across days — pick “Today”.">{dash}</span> },
@@ -392,7 +397,7 @@ function PagesView({ token, days }: { token: string; days: string }) {
         </Block>
         <Note><H hint={DEF.timed}>Time on page</H> is only measured when we see the visitor leave, so each average shows how many views it&apos;s based on. Medians are shown for single-day ranges only{single ? "" : " (choose Today)"}.</Note>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-7">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
           <Block title="Scroll depth" action={d.scrollFunnels.length > 1 ? (
             <Select value={funnel?.path ?? ""} onChange={e => setScrollPath(e.target.value)} wrapperClassName="w-auto max-w-[60%]" className="h-7 text-[12px]" aria-label="Page">
               {d.scrollFunnels.map(f => <option key={f.path} value={f.path}>{f.path}</option>)}
@@ -408,7 +413,7 @@ function PagesView({ token, days }: { token: string; days: string }) {
           </Block>
         </div>
 
-        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-7">
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
           <Block title="Entry pages" count={d.entries.length}>
             <Table rows={d.entries} rowKey={r => r.path} empty="No sessions" cols={[
               { label: "Page", cell: r => <Primary><code className="font-mono text-[12px]">{r.path}</code></Primary> },
@@ -472,22 +477,22 @@ function SectionsView({ token, days }: { token: string; days: string }) {
         </div>
         <Block title={current} count={`${list.length} section${list.length === 1 ? "" : "s"}${list[0] ? ` · ${n(list[0].pageViews)} page view${list[0].pageViews === 1 ? "" : "s"}` : ""}`}>
           {list.length ? (
-            <ol className="divide-y divide-[#0f0f0f]">
+            <ol className="divide-y divide-line-soft">
               {list.map((s, i) => (
                 <li key={s.id} className="px-4 py-3">
                   {drop?.at === i && (
-                    <div className="mb-2 text-[11px] font-medium text-[#f5a623]">▼ Biggest drop-off: {Math.round(drop.by)} points fewer reach this section</div>
+                    <div className="mb-2 text-[11px] font-medium text-warning-fg">▼ Biggest drop-off: {Math.round(drop.by)} points fewer reach this section</div>
                   )}
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[13px] text-[#ddd] truncate"><span className="text-[#444] tabular-nums mr-2">{s.index + 1}</span>{s.name}</span>
-                    <span className="shrink-0 text-[12px] text-[#888] tabular-nums">
+                    <span className="text-[13px] text-fg-2 truncate"><span className="text-fg-5 tabular-nums mr-2">{s.index + 1}</span>{s.name}</span>
+                    <span className="shrink-0 text-[12px] text-fg-3 tabular-nums">
                       {pctS(s.viewRatePct)} reached · {dur(s.avgDwellMs)} avg{s.medianDwellMs != null ? ` (median ${dur(s.medianDwellMs)})` : ""} · {pctS(s.engagementRatePct)} engaged
                     </span>
                   </div>
-                  <span className="mt-2 block h-2 rounded-full bg-[#141414] overflow-hidden">
-                    <span className="block h-full rounded-full bg-[#ededed]" style={{ width: `${Math.min(100, s.viewRatePct ?? 0)}%`, opacity: 0.25 + 0.75 * Math.min(1, (s.engagementRatePct ?? 0) / 100) }} />
+                  <span className="mt-2 block h-2 rounded-full bg-raised-2 overflow-hidden">
+                    <span className="block h-full rounded-full bg-brand" style={{ width: `${Math.min(100, s.viewRatePct ?? 0)}%`, opacity: 0.25 + 0.75 * Math.min(1, (s.engagementRatePct ?? 0) / 100) }} />
                   </span>
-                  <div className="mt-1 text-[11px] text-[#555]">{n(s.impressions)} impression{s.impressions === 1 ? "" : "s"} · {n(s.sessions)} session{s.sessions === 1 ? "" : "s"}{s.avgVisiblePct != null ? ` · ${Math.round(s.avgVisiblePct)}% visible on average` : ""}</div>
+                  <div className="mt-1 text-[11px] text-fg-4">{n(s.impressions)} impression{s.impressions === 1 ? "" : "s"} · {n(s.sessions)} session{s.sessions === 1 ? "" : "s"}{s.avgVisiblePct != null ? ` · ${Math.round(s.avgVisiblePct)}% visible on average` : ""}</div>
                 </li>
               ))}
             </ol>
@@ -509,27 +514,27 @@ function VisitorsView({ token, days }: { token: string; days: string }) {
   const list = q.data?.visitors ?? [];
   return (
     <State loading={q.loading && !q.data} error={q.error} reload={q.reload} empty={!!q.data && list.length === 0}>
-      <div className="flex flex-col xl:flex-row gap-7 min-w-0">
+      <div className="flex flex-col xl:flex-row gap-5 min-w-0">
         <div className={`${sel ? "hidden xl:block" : ""} xl:w-[46%] min-w-0`}>
           <Block title="Visitors" count={list.length}>
-            <ul className="divide-y divide-[#0f0f0f] max-h-[70vh] overflow-y-auto">
+            <ul className="divide-y divide-line-soft max-h-[70vh] overflow-y-auto">
               {list.map(v => (
                 <li key={v.key}>
-                  <button onClick={() => setSel(v)} className={`w-full text-left px-4 py-3 border-none cursor-pointer transition-colors ${sel?.key === v.key ? "bg-[#111]" : "bg-transparent hover:bg-[#0d0d0d]"}`}>
+                  <button onClick={() => setSel(v)} className={`w-full text-left px-4 py-3 border-0 cursor-pointer transition-colors ${sel?.key === v.key ? "bg-active" : "bg-transparent hover:bg-hover"}`}>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[13px] text-[#ddd] truncate">
+                      <span className="text-[13px] text-fg-2 truncate">
                         {visitorLabel(v)}
-                        <span className={`ml-2 text-[11px] ${v.persistent ? "text-[#0070f3]" : "text-[#666]"}`} title={v.persistent ? "Accepted cookies — stable id across days" : "Declined cookies — id resets daily, so this is one day of history"}>
+                        <span className={`ml-2 text-[11px] ${v.persistent ? "text-brand-fg" : "text-fg-4"}`} title={v.persistent ? "Accepted cookies — stable id across days" : "Declined cookies — id resets daily, so this is one day of history"}>
                           {v.persistent ? "Returning id" : "1-day profile"}
                         </span>
-                        {v.reachedApp && <span className="ml-2 text-[11px] text-[#3ecf8e]">→ app</span>}
+                        {v.reachedApp && <span className="ml-2 text-[11px] text-success-fg">→ app</span>}
                       </span>
-                      <time dateTime={v.lastSeenAt} className="text-[12px] text-[#888] shrink-0 tabular-nums"
+                      <time dateTime={v.lastSeenAt} className="text-[12px] text-fg-3 shrink-0 tabular-nums"
                         title={`${v.sessions > 1 ? `First visit ${fmtFull(v.firstSeenAt)} ${zone(v.firstSeenAt)} · ` : ""}Last active ${fmtFull(v.lastSeenAt)} ${zone(v.lastSeenAt)}`}>
-                        {dayMonth(v.lastSeenAt)}, {clock(v.lastSeenAt)} <span className="text-[#555]">{zone(v.lastSeenAt)}</span>
+                        {dayMonth(v.lastSeenAt)}, {clock(v.lastSeenAt)} <span className="text-fg-4">{zone(v.lastSeenAt)}</span>
                       </time>
                     </div>
-                    <div className="mt-0.5 text-[12px] text-[#555] truncate">
+                    <div className="mt-0.5 text-[12px] text-fg-4 truncate">
                       {[v.country, human(v.device), v.browser, v.firstSource ?? human(v.firstChannel),
                         `${v.sessions} session${v.sessions === 1 ? "" : "s"}`, `${v.pageViews} page${v.pageViews === 1 ? "" : "s"}`,
                         v.totalTimeMs ? dur(v.totalTimeMs) : null].filter(Boolean).join(" · ")}
@@ -543,7 +548,7 @@ function VisitorsView({ token, days }: { token: string; days: string }) {
         </div>
         <div className={`${sel ? "" : "hidden xl:block"} flex-1 min-w-0`}>
           {sel ? <VisitorDetail key={sel.key} v={sel} token={token} onBack={() => setSel(null)} />
-            : <div className="h-full min-h-40 flex items-center justify-center text-[13px] text-[#555] border border-dashed border-[#1a1a1a] rounded-xl">Select a visitor to replay their visits</div>}
+            : <div className="empty h-full min-h-40 border border-dashed border-line rounded-xl">Select a visitor to replay their visits</div>}
         </div>
       </div>
     </State>
@@ -563,29 +568,29 @@ function VisitorDetail({ v, token, onBack }: { v: Visitor; token: string; onBack
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <button onClick={onBack} className="xl:hidden mb-2 text-[13px] text-[#888] hover:text-[#ededed] bg-transparent border-none p-0 cursor-pointer">‹ All visitors</button>
-          <h2 className="text-[16px] font-semibold text-[#ededed]">{visitorLabel(v)}</h2>
-          <p className="text-[12px] text-[#555] mt-0.5">
+          <button onClick={onBack} className="link xl:hidden mb-2 text-[13px]">‹ All visitors</button>
+          <h2 className="section-title">{visitorLabel(v)}</h2>
+          <p className="text-caption mt-0.5">
             {v.persistent
               ? `Returning id · first visit ${fmtFull(v.firstSeenAt)} · last active ${fmtFull(v.lastSeenAt)} ${zone(v.lastSeenAt)}`
               : `1-day profile · ${fmt(v.lastSeenAt)} — id resets daily, so earlier or later visits can't be linked`}
           </p>
         </div>
-        {v.reachedApp && <span className="shrink-0 text-[12px] font-medium text-[#3ecf8e] border border-[rgba(62,207,142,0.3)] rounded-md px-2 py-0.5">Clicked through to app</span>}
+        {v.reachedApp && <span className="badge badge-success shrink-0">Clicked through to app</span>}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Sessions" value={v.sessions} sub={v.bouncedSessions ? `${v.bouncedSessions} bounced` : "none bounced"} />
         <Stat label="Page views" value={v.pageViews} />
         <Stat label="Time on site" value={v.totalTimeMs > 0 ? dur(v.totalTimeMs) : "—"} sub={v.totalTimeMs > 0 ? undefined : "not measured"} />
-        <Stat label="Source" value={<span className="text-[15px]">{v.firstSource ?? human(v.firstChannel) ?? "Direct"}</span>} sub={v.firstCampaign ? `campaign ${v.firstCampaign}` : v.firstEntryPath ?? undefined} />
+        <Stat label="Source" value={<span className="text-[14px]">{v.firstSource ?? human(v.firstChannel) ?? "Direct"}</span>} sub={v.firstCampaign ? `campaign ${v.firstCampaign}` : v.firstEntryPath ?? undefined} />
       </div>
 
       {(v.topPaths.length > 0 || v.topSections.length > 0) && (
         <Block title="Spent most time on">
           <div className="px-4 py-3 flex flex-col gap-2">
-            {v.topPaths.length > 0 && <div className="text-[12px] text-[#888]">Pages: <span className="text-[#ccc]">{v.topPaths.slice(0, 5).join(" · ")}</span></div>}
-            {v.topSections.length > 0 && <div className="text-[12px] text-[#888]">Sections: <span className="text-[#ccc]">{v.topSections.slice(0, 6).join(" · ")}</span></div>}
+            {v.topPaths.length > 0 && <div className="text-[12px] text-fg-3">Pages: <span className="text-fg-2">{v.topPaths.slice(0, 5).join(" · ")}</span></div>}
+            {v.topSections.length > 0 && <div className="text-[12px] text-fg-3">Sections: <span className="text-fg-2">{v.topSections.slice(0, 6).join(" · ")}</span></div>}
           </div>
         </Block>
       )}
@@ -593,7 +598,7 @@ function VisitorDetail({ v, token, onBack }: { v: Visitor; token: string; onBack
       {q.error ? <Note>Couldn&apos;t load visits: {q.error}</Note> : q.loading && !q.data ? <div className="skeleton h-40 rounded-xl" /> : (<>
         <Block title="Visits" count={sessions.length}>
           {sessions.length ? (
-            <ul className="divide-y divide-[#0f0f0f] max-h-72 overflow-y-auto">
+            <ul className="divide-y divide-line-soft max-h-72 overflow-y-auto">
               {sessions.map(s => <VisitRow key={s.session_id} s={s} active={s.session_id === current} onSelect={() => setSid(s.session_id)} />)}
             </ul>
           ) : <Empty>No visits recorded</Empty>}
@@ -627,15 +632,15 @@ function VisitRow({ s, active, onSelect }: { s: SessionRow; active: boolean; onS
   return (
     <li>
       <button onClick={onSelect} aria-pressed={active}
-        className={`w-full text-left px-4 py-2.5 border-none cursor-pointer transition-colors ${active ? "bg-[#111]" : "bg-transparent hover:bg-[#0d0d0d]"}`}
-        style={{ boxShadow: active ? "inset 2px 0 0 #0070f3" : undefined }}>
+        className={`w-full text-left px-4 py-2.5 border-0 cursor-pointer transition-colors ${active ? "bg-active" : "bg-transparent hover:bg-hover"}`}
+        style={{ boxShadow: active ? "inset 2px 0 0 var(--brand)" : undefined }}>
         <div className="flex items-baseline justify-between gap-3">
-          <time dateTime={s.started_at} className="text-[13px] text-[#ddd] tabular-nums">
-            {fmt(s.started_at)}, {clock(s.started_at)}{endClock ? ` – ${endClock}` : ""} <span className="text-[#555]">{zone(s.started_at)}</span>
+          <time dateTime={s.started_at} className="text-[13px] text-fg-2 tabular-nums">
+            {fmt(s.started_at)}, {clock(s.started_at)}{endClock ? ` – ${endClock}` : ""} <span className="text-fg-4">{zone(s.started_at)}</span>
           </time>
-          <span className="shrink-0 text-[12px] text-[#888] tabular-nums">{s.duration_ms != null ? dur(s.duration_ms) : "not timed"}</span>
+          <span className="shrink-0 text-[12px] text-fg-3 tabular-nums">{s.duration_ms != null ? dur(s.duration_ms) : "not timed"}</span>
         </div>
-        <div className="mt-0.5 text-[12px] text-[#555] truncate">
+        <div className="mt-0.5 text-[12px] text-fg-4 truncate">
           {[local ? `${local} their time (${s.timezone})` : null,
             `${s.page_count ?? 0} page${s.page_count === 1 ? "" : "s"}`,
             s.entry_path, s.is_bounce ? "bounced" : null].filter(Boolean).join(" · ")}
@@ -650,7 +655,7 @@ interface Step { step: number; occurred_at: string; type: string; path: string |
   scroll_pct: number | null; time_on_page_ms: number | null; metadata: Record<string, unknown> | null; country: string | null; device_type: string | null;
   browser: string | null; channel: string | null; source_name: string | null; utm_campaign: string | null }
 
-const STEP_COLOR: Record<string, string> = { page: "#ededed", leave: "#555", section: "#0070f3", click: "#f5a623", app: "#3ecf8e", scroll: "#666", end: "#444" };
+const STEP_COLOR: Record<string, string> = { page: "var(--fg)", leave: "var(--fg-4)", section: "#5b6cff", click: "#f59e0b", app: "#10b981", scroll: "var(--fg-4)", end: "var(--fg-5)" };
 
 function describe(s: Step): { kind: keyof typeof STEP_COLOR; title: ReactNode; detail?: ReactNode } {
   const closing = s.metadata && String((s.metadata as Record<string, unknown>).closing) === "true";
@@ -684,24 +689,24 @@ function Journey({ token, sessionId }: { token: string; sessionId: string }) {
   const first = steps[0], start = Date.parse(first.occurred_at);
   return (
     <div className="px-4 py-4">
-      <div className="text-[12px] text-[#666] mb-4">
+      <div className="text-[12px] text-fg-4 mb-4">
         {[first.source_name ?? human(first.channel) ?? "Direct", first.utm_campaign ? `campaign ${first.utm_campaign}` : null, first.country, human(first.device_type), first.browser].filter(Boolean).join(" · ")}
         {" · "}{fmtFull(first.occurred_at)} {zone(first.occurred_at)}
       </div>
-      <ol className="relative border-l border-[#1f1f1f] ml-1.5 flex flex-col gap-4">
+      <ol className="relative border-l border-line ml-1.5 flex flex-col gap-4">
         {steps.map(s => {
           const d = describe(s);
           const t = Math.max(0, Date.parse(s.occurred_at) - start);
           return (
             <li key={s.step} className="pl-4 relative">
-              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-black" style={{ background: STEP_COLOR[d.kind] }} />
+              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-line" style={{ background: STEP_COLOR[d.kind] }} />
               <div className="flex items-baseline justify-between gap-3">
-                <span className={`text-[13px] ${d.kind === "app" ? "text-[#3ecf8e]" : d.kind === "leave" || d.kind === "end" ? "text-[#888]" : "text-[#ddd]"}`}>{d.title}</span>
-                <span className="shrink-0 text-[11px] text-[#555] tabular-nums" title={`${fmtFull(s.occurred_at)} ${zone(s.occurred_at)}`}>
-                  <time dateTime={s.occurred_at} className="text-[#888]">{clock(s.occurred_at, true)}</time> · +{dur(t)}
+                <span className={`text-[13px] ${d.kind === "app" ? "text-success-fg" : d.kind === "leave" || d.kind === "end" ? "text-fg-3" : "text-fg-2"}`}>{d.title}</span>
+                <span className="shrink-0 text-[11px] text-fg-4 tabular-nums" title={`${fmtFull(s.occurred_at)} ${zone(s.occurred_at)}`}>
+                  <time dateTime={s.occurred_at} className="text-fg-3">{clock(s.occurred_at, true)}</time> · +{dur(t)}
                 </span>
               </div>
-              {d.detail && <div className="text-[12px] text-[#555] mt-0.5 break-all">{d.detail}</div>}
+              {d.detail && <div className="text-[12px] text-fg-4 mt-0.5 break-all">{d.detail}</div>}
             </li>
           );
         })}

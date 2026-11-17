@@ -2,19 +2,19 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { User, USAGE_FIELDS, Avatar, Card, CardTitle, SL, Spinner, LineChart, BarChart, Donut, useIsMobile, Select } from "./admin-shared";
+import { User, USAGE_FIELDS, Avatar, Card, CardTitle, SL, Spinner, LineChart, BarChart, Donut, useIsMobile, Select, tint } from "./admin-shared";
 
 // Map derived action keys → display label + color (matches USAGE_FIELDS colors)
 const FEATURE_ACTIONS: Record<string, { label: string; color: string }> = {
-  resume_analyse:  { label: "Resume",        color: "#0070f3" },
-  cover_letter:    { label: "Cover Letter",  color: "#3ecf8e" },
-  interview_start: { label: "Interview",     color: "#f5a623" },
+  resume_analyse:  { label: "Resume",        color: "#5b6cff" },
+  cover_letter:    { label: "Cover Letter",  color: "#10b981" },
+  interview_start: { label: "Interview",     color: "#f59e0b" },
   study_plan:      { label: "Study Plan",    color: "#a855f7" },
   debrief:         { label: "Debrief",       color: "#ec4899" },
   linkedin_opt:    { label: "LinkedIn",      color: "#0ea5e9" },
-  cold_outreach:   { label: "Cold Outreach", color: "#f44"    },
+  cold_outreach:   { label: "Cold Outreach", color: "#ef4444"    },
   find_contacts:   { label: "Contacts",      color: "#06b6d4" },
-  job_tracker:     { label: "Job Tracker",   color: "#888"    },
+  job_tracker:     { label: "Job Tracker",   color: "var(--fg-3)"    },
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -71,16 +71,16 @@ function deviceIcon(device?: string) {
 
 function typeBadge(type: LogEntry["type"]) {
   const map: Record<string, { label: string; cls: string }> = {
-    login:    { label: "Login",   cls: "bg-[rgba(0,112,243,0.08)] text-[#0070f3] border-[rgba(0,112,243,0.2)]"     },
-    signup:   { label: "Signup",  cls: "bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border-[rgba(62,207,142,0.2)]" },
-    action:   { label: "Action",  cls: "bg-[rgba(0,112,243,0.06)] text-[#4da3ff] border-[rgba(0,112,243,0.15)]"   },
-    logout:   { label: "Logout",  cls: "bg-[#111] text-[#888] border-[#2a2a2a]"                                   },
-    error:    { label: "Error",   cls: "bg-[rgba(255,68,68,0.08)] text-[#f44] border-[rgba(255,68,68,0.2)]"       },
-    pageview: { label: "Page",    cls: "bg-[#0a0a0a] text-[#555] border-[#1a1a1a]"                                },
+    login:    { label: "Login",   cls: "badge-brand"   },
+    signup:   { label: "Signup",  cls: "badge-success" },
+    action:   { label: "Action",  cls: "badge-brand"   },
+    logout:   { label: "Logout",  cls: "badge-neutral" },
+    error:    { label: "Error",   cls: "badge-danger"  },
+    pageview: { label: "Page",    cls: "badge-neutral" },
   };
-  const { label, cls } = map[type] ?? { label: type, cls: "bg-[#111] text-[#888] border-[#2a2a2a]" };
+  const { label, cls } = map[type] ?? { label: type, cls: "badge-neutral" };
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border ${cls} whitespace-nowrap shrink-0`}>
+    <span className={`badge ${cls} shrink-0`}>
       {label}
     </span>
   );
@@ -96,8 +96,8 @@ function appBadge(app: LogApp = "dashboard") {
   const { label, dot } = APPS[app];
   return (
     <span title={app === "erp" ? "Signed in to the admin ERP" : "Signed in to the Preciprocal app"}
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold border bg-[#111] text-[#888] border-[#2a2a2a] whitespace-nowrap shrink-0">
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
+      className="badge badge-neutral shrink-0">
+      <span className="dot" style={{ background: dot }} />
       {label}
     </span>
   );
@@ -110,17 +110,16 @@ function actionBadge(action: string) {
     if (action.startsWith("subscribed_")) {
       const plan = action.replace("subscribed_", "");
       return (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border-[rgba(62,207,142,0.2)] whitespace-nowrap">
+        <span className="badge badge-success">
           Subscribed · {plan}
         </span>
       );
     }
-    return <span className="text-[11px] text-[#555] font-mono">{action.replace(/_/g, " ")}</span>;
+    return <span className="text-[11px] text-fg-4 font-mono">{action.replace(/_/g, " ")}</span>;
   }
-  const bg = meta.color + "12", border = meta.color + "40";
+  const bg = tint(meta.color, "12"), border = tint(meta.color, "40");
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border whitespace-nowrap"
-      style={{ color: meta.color, background: bg, borderColor: border }}>
+    <span className="badge" style={{ color: meta.color, background: bg, borderColor: border }}>
       {meta.label}
     </span>
   );
@@ -217,15 +216,13 @@ function deriveLogsFromUsers(users: User[]): LogEntry[] {
 
 function StatCard({ label, value, sub, color, icon }: { label: string; value: string | number; sub?: string; color: string; icon: React.ReactNode }) {
   return (
-    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-4 flex items-start gap-3">
-      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: color + "18" }}>
-        <span style={{ color }}>{icon}</span>
+    <div className="card px-4 py-3.5 flex flex-col gap-1 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <div className="label truncate">{label}</div>
+        <span className="shrink-0 [&>svg]:w-3.5 [&>svg]:h-3.5" style={{ color }}>{icon}</span>
       </div>
-      <div className="min-w-0">
-        <div className="text-[11px] font-bold text-[#555] uppercase tracking-widest mb-0.5">{label}</div>
-        <div className="text-2xl font-extrabold tracking-tight leading-none" style={{ color }}>{value}</div>
-        {sub && <div className="text-[12px] text-[#888] mt-1">{sub}</div>}
-      </div>
+      <div className="text-[24px] font-semibold leading-none tracking-tight mt-1.5 num truncate" style={{ color }}>{value}</div>
+      {sub && <div className="text-caption mt-1 truncate">{sub}</div>}
     </div>
   );
 }
@@ -242,62 +239,62 @@ function LogRow({ log, isMobile, onClick, selected, now, activityMap }: {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-4 py-3 border-b border-[#111] transition-colors cursor-pointer border-none ${selected ? "bg-[#111]" : "bg-black hover:bg-[#0a0a0a]"}`}
-      style={{ borderLeft: selected ? "2px solid #0070f3" : "2px solid transparent" }}>
+      className={`w-full text-left px-4 py-3 border-b border-line-soft last:border-b-0 cursor-pointer transition-colors ${selected ? "bg-active" : "hover:bg-hover"}`}
+      style={{ borderLeft: selected ? "2px solid var(--brand)" : "2px solid transparent" }}>
       <div className="flex items-start gap-3">
         <Avatar name={log.userName ?? log.userEmail ?? "?"} size={28} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
-            <span className="text-[13px] font-semibold text-[#ededed] truncate max-w-[140px]">
+            <span className="text-[13px] font-semibold text-fg truncate max-w-[140px]">
               {log.userName ?? log.userEmail?.split("@")[0] ?? "Unknown"}
             </span>
             {typeBadge(log.type)}
             {appBadge(log.app)}
             {log.action && actionBadge(log.action)}
             {log.type === "action" && typeof log.details?.count === "number" && log.details.count > 1 && (
-              <span className="text-[11px] text-[#555]">×{log.details.count}</span>
+              <span className="text-[11px] text-fg-4">×{log.details.count}</span>
             )}
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="text-[12px] text-[#888]">{log.userEmail ?? log.userId.slice(0, 12)}</span>
+            <span className="text-[12px] text-fg-3">{log.userEmail ?? log.userId.slice(0, 12)}</span>
             {!isMobile && log.city && (
-              <span className="text-[12px] text-[#555] flex items-center gap-1">
+              <span className="text-[12px] text-fg-4 flex items-center gap-1">
                 <span>{countryFlag(log.countryCode)}</span>
                 <span>{log.city}, {log.country}</span>
               </span>
             )}
             {!isMobile && log.device && (
-              <span className="text-[12px] text-[#555] flex items-center gap-1">
-                <span className="text-[#333]">{deviceIcon(log.device)}</span>
+              <span className="text-[12px] text-fg-4 flex items-center gap-1">
+                <span className="text-fg-5">{deviceIcon(log.device)}</span>
                 <span className="capitalize">{log.browser ?? log.device}</span>
               </span>
             )}
             {log.ip && !isMobile && (
-              <span className="text-[11px] font-mono text-[#333]">{log.ip}</span>
+              <span className="text-[11px] font-mono text-fg-5">{log.ip}</span>
             )}
           </div>
           {activity && !isMobile && (
             <div className="flex items-center gap-1 mt-1.5 flex-wrap">
               {activity.feats.slice(0, 4).map(f => (
                 <span key={f.key}
-                  className="text-[11px] px-1.5 py-0.5 rounded border font-semibold whitespace-nowrap"
-                  style={{ color: f.color, background: f.color + "12", borderColor: f.color + "33" }}>
+                  className="badge"
+                  style={{ color: f.color, background: tint(f.color, "12"), borderColor: tint(f.color, "33") }}>
                   {f.label} {f.count}
                 </span>
               ))}
               {activity.feats.length > 4 && (
-                <span className="text-[11px] text-[#444]">+{activity.feats.length - 4} more</span>
+                <span className="text-[11px] text-fg-5">+{activity.feats.length - 4} more</span>
               )}
             </div>
           )}
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[12px] text-[#555] whitespace-nowrap">{fmtRelative(log.timestamp, now)}</div>
+          <div className="text-[12px] text-fg-4 whitespace-nowrap">{fmtRelative(log.timestamp, now)}</div>
           {!isMobile && (
-            <div className="text-[11px] text-[#333] mt-0.5 whitespace-nowrap">{new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+            <div className="text-[11px] text-fg-5 mt-0.5 whitespace-nowrap">{new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
           )}
           {activity && !isMobile && (
-            <div className="text-[11px] font-bold text-[#3ecf8e] mt-1">{activity.total} uses</div>
+            <div className="text-[11px] font-semibold text-success-fg mt-1 num">{activity.total} uses</div>
           )}
         </div>
       </div>
@@ -309,37 +306,37 @@ function LogRow({ log, isMobile, onClick, selected, now, activityMap }: {
 
 function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
   return (
-    <div className="w-72 shrink-0 border-l border-[#1a1a1a] bg-[#0a0a0a] flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
-        <span className="text-[14px] font-bold text-[#ededed]">Event Detail</span>
-        <button onClick={onClose} className="w-6 h-6 rounded-full hover:bg-[#1a1a1a] flex items-center justify-center cursor-pointer border-none bg-transparent text-[#555] hover:text-[#ededed] transition-colors">
-          <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <div className="w-72 shrink-0 border-l border-line bg-surface flex flex-col overflow-hidden">
+      <div className="card-header">
+        <span className="section-title">Event Detail</span>
+        <button onClick={onClose} aria-label="Close" className="btn btn-ghost btn-sm btn-icon">
+          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* User */}
-        <div className="flex items-center gap-3 p-3 bg-[#111] border border-[#1a1a1a] rounded-xl">
+        <div className="flex items-center gap-3 p-3 bg-subtle border border-line-soft rounded-lg">
           <Avatar name={log.userName ?? log.userEmail ?? "?"} size={36} />
           <div className="min-w-0">
-            <div className="text-[14px] font-semibold text-[#ededed] truncate">{log.userName ?? "Unknown"}</div>
-            <div className="text-[12px] text-[#888] truncate">{log.userEmail ?? log.userId}</div>
+            <div className="text-[14px] font-semibold text-fg truncate">{log.userName ?? "Unknown"}</div>
+            <div className="text-[12px] text-fg-3 truncate">{log.userEmail ?? log.userId}</div>
           </div>
         </div>
 
         {/* Event */}
         <div>
-          <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Event</div>
+          <div className="label mb-2">Event</div>
           <div className="space-y-2">
             {[
               ["Type",    typeBadge(log.type)],
               ["App",     appBadge(log.app)],
-              ["Time",    <span key="t" className="text-[13px] text-[#ededed]">{fmtFull(log.timestamp)}</span>],
-              ["User ID", <span key="u" className="font-mono text-[12px] text-[#0070f3]">{log.userId.slice(0,16)}…</span>],
-              log.action ? ["Action", <span key="a" className="text-[13px] text-[#ededed] font-mono">{log.action}</span>] : null,
-              log.path   ? ["Path",   <span key="p" className="text-[13px] text-[#ededed] font-mono">{log.path}</span>]   : null,
+              ["Time",    <span key="t" className="text-[13px] text-fg">{fmtFull(log.timestamp)}</span>],
+              ["User ID", <span key="u" className="font-mono text-[12px] text-brand-fg">{log.userId.slice(0,16)}…</span>],
+              log.action ? ["Action", <span key="a" className="text-[13px] text-fg font-mono">{log.action}</span>] : null,
+              log.path   ? ["Path",   <span key="p" className="text-[13px] text-fg font-mono">{log.path}</span>]   : null,
             ].filter(Boolean).map((row, i) => (
               <div key={i} className="flex items-start justify-between gap-2">
-                <span className="text-[11px] font-semibold text-[#555] shrink-0 mt-0.5">{(row as [string, React.ReactNode])[0]}</span>
+                <span className="text-[11px] font-semibold text-fg-4 shrink-0 mt-0.5">{(row as [string, React.ReactNode])[0]}</span>
                 <span className="text-right">{(row as [string, React.ReactNode])[1]}</span>
               </div>
             ))}
@@ -349,11 +346,11 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* Location */}
         {(log.ip || log.city || log.country) && (
           <div>
-            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Location</div>
+            <div className="label mb-2">Location</div>
             <div className="space-y-2">
-              {log.ip      && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">IP</span><span className="font-mono text-[12px] text-[#ededed]">{log.ip}</span></div>}
-              {log.city    && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">City</span><span className="text-[13px] text-[#ededed]">{log.city}</span></div>}
-              {log.country && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">Country</span><span className="text-[13px] text-[#ededed]">{countryFlag(log.countryCode)} {log.country}</span></div>}
+              {log.ip      && <div className="flex justify-between"><span className="text-[11px] text-fg-4 font-semibold">IP</span><span className="font-mono text-[12px] text-fg">{log.ip}</span></div>}
+              {log.city    && <div className="flex justify-between"><span className="text-[11px] text-fg-4 font-semibold">City</span><span className="text-[13px] text-fg">{log.city}</span></div>}
+              {log.country && <div className="flex justify-between"><span className="text-[11px] text-fg-4 font-semibold">Country</span><span className="text-[13px] text-fg">{countryFlag(log.countryCode)} {log.country}</span></div>}
             </div>
           </div>
         )}
@@ -361,11 +358,11 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* Device */}
         {(log.device || log.browser || log.os) && (
           <div>
-            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Device</div>
+            <div className="label mb-2">Device</div>
             <div className="space-y-2">
-              {log.device  && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">Type</span><span className="text-[13px] text-[#ededed] capitalize flex items-center gap-1">{deviceIcon(log.device)} {log.device}</span></div>}
-              {log.browser && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">Browser</span><span className="text-[13px] text-[#ededed]">{log.browser}</span></div>}
-              {log.os      && <div className="flex justify-between"><span className="text-[11px] text-[#555] font-semibold">OS</span><span className="text-[13px] text-[#ededed]">{log.os}</span></div>}
+              {log.device  && <div className="flex justify-between"><span className="text-[11px] text-fg-4 font-semibold">Type</span><span className="text-[13px] text-fg capitalize flex items-center gap-1">{deviceIcon(log.device)} {log.device}</span></div>}
+              {log.browser && <div className="flex justify-between"><span className="text-[11px] text-fg-4 font-semibold">Browser</span><span className="text-[13px] text-fg">{log.browser}</span></div>}
+              {log.os      && <div className="flex justify-between"><span className="text-[11px] text-fg-4 font-semibold">OS</span><span className="text-[13px] text-fg">{log.os}</span></div>}
             </div>
           </div>
         )}
@@ -373,9 +370,9 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* Extra details */}
         {log.details && Object.keys(log.details).length > 0 && (
           <div>
-            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">Details</div>
-            <div className="bg-[#050505] border border-[#1a1a1a] rounded-lg p-2.5 overflow-x-auto">
-              <pre className="text-[11px] font-mono text-[#888] whitespace-pre-wrap">{JSON.stringify(log.details, null, 2)}</pre>
+            <div className="label mb-2">Details</div>
+            <div className="bg-subtle border border-line-soft rounded-lg p-2.5 overflow-x-auto">
+              <pre className="text-[11px] font-mono text-fg-3 whitespace-pre-wrap">{JSON.stringify(log.details, null, 2)}</pre>
             </div>
           </div>
         )}
@@ -383,9 +380,9 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
         {/* UA */}
         {log.userAgent && (
           <div>
-            <div className="text-[11px] font-bold text-[#555] uppercase tracking-wider mb-2">User Agent</div>
-            <div className="bg-[#050505] border border-[#1a1a1a] rounded-lg p-2.5">
-              <p className="text-[11px] font-mono text-[#555] break-all leading-relaxed">{log.userAgent}</p>
+            <div className="label mb-2">User Agent</div>
+            <div className="bg-subtle border border-line-soft rounded-lg p-2.5">
+              <p className="text-[11px] font-mono text-fg-4 break-all leading-relaxed">{log.userAgent}</p>
             </div>
           </div>
         )}
@@ -398,10 +395,9 @@ function DetailPanel({ log, onClose }: { log: LogEntry; onClose: () => void }) {
 
 function FilterChip({ label, color, onClear }: { label: string; color: string; onClear: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-semibold whitespace-nowrap"
-      style={{ color, background: color + "14", borderColor: color + "44" }}>
+    <span className="badge" style={{ color, background: tint(color, "14"), borderColor: tint(color, "44") }}>
       {label}
-      <button onClick={onClear} className="ml-0.5 border-none bg-transparent cursor-pointer p-0 leading-none hover:opacity-70 transition-opacity"
+      <button onClick={onClear} aria-label={`Clear ${label}`} className="ml-0.5 p-0 leading-none cursor-pointer hover:opacity-70 transition-opacity"
         style={{ color }}>✕</button>
     </span>
   );
@@ -660,8 +656,8 @@ export default function LogsTab({ users, token = "" }: Props) {
     const inRange = isDerived ? scoped : scoped.filter(l => new Date(l.timestamp).getTime() >= cutoff);
     const m: Record<string, number> = {};
     inRange.forEach(l => { const d = l.device ?? "unknown"; m[d] = (m[d] ?? 0) + 1; });
-    const colors: Record<string, string> = { desktop: "#0070f3", mobile: "#3ecf8e", tablet: "#f5a623", unknown: "#333" };
-    return Object.entries(m).map(([d, v]) => ({ label: d, value: v, color: colors[d] ?? "#555" }));
+    const colors: Record<string, string> = { desktop: "#5b6cff", mobile: "#10b981", tablet: "#f59e0b", unknown: "var(--fg-5)" };
+    return Object.entries(m).map(([d, v]) => ({ label: d, value: v, color: colors[d] ?? "var(--fg-4)" }));
   }, [scoped, cutoff, now]);
 
   const browserChart = useMemo(() => {
@@ -756,15 +752,15 @@ export default function LogsTab({ users, token = "" }: Props) {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-black">
+    <div className="flex-1 flex overflow-hidden bg-canvas">
       {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {/* Fetch-progress banner */}
           {loadingMore && (
-            <div className="mb-4 px-4 py-3 bg-[rgba(0,112,243,0.06)] border border-[rgba(0,112,243,0.15)] rounded-xl flex items-center gap-3">
-              <svg width="14" height="14" fill="none" stroke="#0070f3" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 animate-spin"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-              <div className="text-[13px] text-[#0070f3]">
+            <div className="mb-4 px-4 py-3 bg-brand-soft border border-brand-line rounded-xl flex items-center gap-3">
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 animate-spin text-brand-fg"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              <div className="text-[13px] text-brand-fg">
                 <strong>Fetching all historical logs…</strong> {totalFetched.toLocaleString()} events loaded so far. This may take a moment.
               </div>
             </div>
@@ -774,16 +770,16 @@ export default function LogsTab({ users, token = "" }: Props) {
           <section className="mb-5">
             <SL>Activity Summary · Last {timeRange === "1h" ? "Hour" : timeRange === "24h" ? "24 Hours" : timeRange === "7d" ? "7 Days" : "30 Days"}</SL>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <StatCard label="Unique Logins Today" value={stats.logins} color="#0070f3"
+              <StatCard label="Unique Logins Today" value={stats.logins} color="#5b6cff"
                 sub={appF === "all" ? `${stats.dashLogins} Dashboard · ${stats.erpLogins} ERP` : `${APPS[appF].label} only`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>} />
-              <StatCard label="Unique Users" value={stats.uniqueUsers} color="#3ecf8e"
+              <StatCard label="Unique Users" value={stats.uniqueUsers} color="#10b981"
                 sub={`in last ${timeRange}`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>} />
-              <StatCard label="Mobile" value={`${stats.mobilePercent}%`} color="#f5a623"
+              <StatCard label="Mobile" value={`${stats.mobilePercent}%`} color="#f59e0b"
                 sub={`Top: ${stats.topDevice}`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>} />
-              <StatCard label="Top Country" value={stats.topCountry} color="#888"
+              <StatCard label="Top Country" value={stats.topCountry} color="var(--fg-3)"
                 sub={`${stats.total} total events`}
                 icon={<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>} />
             </div>
@@ -801,16 +797,16 @@ export default function LogsTab({ users, token = "" }: Props) {
                     const pct = Math.round(f.total / max * 100);
                     return (
                       <div key={f.key as string} className="flex items-center gap-2.5">
-                        <span className="text-[12px] text-[#ededed] font-medium shrink-0 w-36 truncate">{f.label}</span>
-                        <div className="flex-1 bg-[#1a1a1a] rounded-full h-1.5 overflow-hidden">
+                        <span className="text-[12px] text-fg font-medium shrink-0 w-36 truncate">{f.label}</span>
+                        <div className="flex-1 bg-raised-2 rounded-full h-1.5 overflow-hidden">
                           <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: f.color }} />
                         </div>
-                        <span className="text-[12px] font-bold shrink-0 w-7 text-right" style={{ color: f.color }}>{f.total}</span>
+                        <span className="text-[12px] font-semibold shrink-0 w-7 text-right num" style={{ color: f.color }}>{f.total}</span>
                       </div>
                     );
                   })}
                   {featureUsage.every(f => f.total === 0) && (
-                    <div className="text-center py-4 text-[13px] text-[#555]">No feature usage data</div>
+                    <div className="text-center py-4 text-[13px] text-fg-4">No feature usage data</div>
                   )}
                 </div>
               </Card>
@@ -818,18 +814,18 @@ export default function LogsTab({ users, token = "" }: Props) {
                 <CardTitle>Most Active Users</CardTitle>
                 <div className="space-y-1 mt-1">
                   {mostActiveUsers.slice(0, 6).map((u, i) => (
-                    <div key={u.id} className="flex items-center gap-2.5 py-1.5 border-b border-[#111] last:border-0">
-                      <span className="text-[11px] font-bold text-[#333] w-4 shrink-0 text-center">{i + 1}</span>
+                    <div key={u.id} className="flex items-center gap-2.5 py-1.5 border-b border-line-soft last:border-0">
+                      <span className="text-[11px] font-semibold text-fg-5 w-4 shrink-0 text-center num">{i + 1}</span>
                       <Avatar name={u.name} size={26} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold text-[#ededed] truncate">{u.name ?? "Unknown"}</div>
-                        <div className="text-[11px] text-[#555] truncate">{u.email}</div>
+                        <div className="text-[13px] font-semibold text-fg truncate">{u.name ?? "Unknown"}</div>
+                        <div className="text-[11px] text-fg-4 truncate">{u.email}</div>
                       </div>
-                      <span className="text-[12px] font-bold text-[#3ecf8e] shrink-0">{u.totalUsage}</span>
+                      <span className="text-[12px] font-semibold text-success-fg shrink-0 num">{u.totalUsage}</span>
                     </div>
                   ))}
                   {mostActiveUsers.length === 0 && (
-                    <div className="text-center py-4 text-[13px] text-[#555]">No usage data</div>
+                    <div className="text-center py-4 text-[13px] text-fg-4">No usage data</div>
                   )}
                 </div>
               </Card>
@@ -841,54 +837,54 @@ export default function LogsTab({ users, token = "" }: Props) {
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <SL>User Activity Monitor · {userActivity.length} active users</SL>
               <div className="relative">
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#555] pointer-events-none" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-4 pointer-events-none" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input value={activitySearch} onChange={e => setActivitySearch(e.target.value)}
                   placeholder="Filter users..."
-                  className="pl-7 pr-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg text-[12px] text-[#ededed] placeholder:text-[#444] outline-none focus:border-[#555] transition-colors font-[inherit] w-44" />
+                  className="field field-sm pl-8 w-44" />
               </div>
             </div>
-            <div className="bg-black border border-[#1a1a1a] rounded-xl overflow-hidden">
+            <div className="card overflow-hidden">
               {userActivity.length === 0 ? (
-                <div className="text-center py-8 text-[13px] text-[#555]">No feature usage recorded yet</div>
+                <div className="empty">No feature usage recorded yet</div>
               ) : (
                 <>
                   {userActivity.slice(0, 20).map((u, i) => (
                     <button key={u.id}
                       onClick={() => { setUserFilter(u.id); setPage(0); }}
-                      className={`w-full text-left flex items-center gap-3 px-4 py-3 border-b border-[#111] last:border-0 cursor-pointer transition-colors font-[inherit] border-none ${
-                        userFilter === u.id ? "bg-[#111]" : "bg-black hover:bg-[#0a0a0a]"
+                      className={`w-full text-left flex items-center gap-3 px-4 py-3 border-b border-line-soft last:border-b-0 cursor-pointer transition-colors ${
+                        userFilter === u.id ? "bg-active" : "hover:bg-hover"
                       }`}
-                      style={{ borderLeft: userFilter === u.id ? "2px solid #0070f3" : "2px solid transparent" }}>
-                      <span className="text-[11px] font-bold text-[#333] w-4 shrink-0 text-center">{i + 1}</span>
+                      style={{ borderLeft: userFilter === u.id ? "2px solid var(--brand)" : "2px solid transparent" }}>
+                      <span className="text-[11px] font-semibold text-fg-5 w-4 shrink-0 text-center num">{i + 1}</span>
                       <Avatar name={u.name} size={30} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[13px] font-semibold text-[#ededed] truncate">{u.name ?? "Unknown"}</span>
-                          <span className="text-[11px] text-[#555] truncate hidden sm:block">{u.email}</span>
+                          <span className="text-[13px] font-semibold text-fg truncate">{u.name ?? "Unknown"}</span>
+                          <span className="text-[11px] text-fg-4 truncate hidden sm:block">{u.email}</span>
                         </div>
                         <div className="flex gap-1 flex-wrap">
                           {u.feats.slice(0, 7).map(f => (
                             <span key={f.key as string}
-                              className="text-[11px] px-1.5 py-0.5 rounded border font-bold whitespace-nowrap"
-                              style={{ color: f.color, background: f.color + "12", borderColor: f.color + "44" }}>
+                              className="badge"
+                              style={{ color: f.color, background: tint(f.color, "12"), borderColor: tint(f.color, "44") }}>
                               {f.label} {f.count}
                             </span>
                           ))}
                           {u.feats.length > 7 && (
-                            <span className="text-[11px] text-[#555] px-1">+{u.feats.length - 7} more</span>
+                            <span className="text-[11px] text-fg-4 px-1">+{u.feats.length - 7} more</span>
                           )}
                         </div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
-                        <div className="text-[13px] font-bold text-[#ededed]">{u.total}</div>
-                        <div className="text-[11px] text-[#555]">{u.lastActive ? fmtRelative(u.lastActive, now) : "—"}</div>
+                        <div className="text-[13px] font-semibold text-fg num">{u.total}</div>
+                        <div className="text-[11px] text-fg-4">{u.lastActive ? fmtRelative(u.lastActive, now) : "—"}</div>
                       </div>
                     </button>
                   ))}
                   {userFilter !== "all" && (
-                    <div className="px-4 py-2 flex items-center gap-2 bg-[#0a0a0a] border-t border-[#111]">
-                      <span className="text-[12px] text-[#0070f3]">Showing log for 1 user</span>
-                      <button onClick={() => setUserFilter("all")} className="text-[12px] text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer transition-colors">
+                    <div className="px-4 py-2 flex items-center gap-2 bg-surface border-t border-line-soft">
+                      <span className="text-[12px] text-brand-fg">Showing log for 1 user</span>
+                      <button onClick={() => setUserFilter("all")} className="link text-[12px]">
                         Clear filter
                       </button>
                     </div>
@@ -908,13 +904,13 @@ export default function LogsTab({ users, token = "" }: Props) {
                   <LineChart
                     data={[activityChart.logins, activityChart.signups]}
                     labels={activityChart.labels}
-                    color="#0070f3"
+                    color="#5b6cff"
                     h={isMobile ? 80 : 110}
                     area
                   />
                   <div className="flex items-center gap-4 mt-2">
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#0070f3]"/><span className="text-[12px] text-[#888]">Logins</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#3ecf8e]"/><span className="text-[12px] text-[#888]">Signups</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-brand"/><span className="text-[12px] text-fg-3">Logins</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-success"/><span className="text-[12px] text-fg-3">Signups</span></div>
                   </div>
                 </Card>
               </div>
@@ -932,16 +928,16 @@ export default function LogsTab({ users, token = "" }: Props) {
                           return (
                             <div key={d.label} className="flex items-center gap-2">
                               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
-                              <span className="text-[12px] text-[#888] flex-1 capitalize">{d.label}</span>
-                              <span className="text-[12px] font-bold text-[#ededed]">{d.value}</span>
-                              <span className="text-[11px] text-[#555] w-7 text-right">{pct}%</span>
+                              <span className="text-[12px] text-fg-3 flex-1 capitalize">{d.label}</span>
+                              <span className="text-[12px] font-semibold text-fg num">{d.value}</span>
+                              <span className="text-[11px] text-fg-4 w-7 text-right">{pct}%</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-6 text-[13px] text-[#555]">No device data</div>
+                    <div className="text-center py-6 text-[13px] text-fg-4">No device data</div>
                   )}
                 </Card>
               </div>
@@ -954,9 +950,9 @@ export default function LogsTab({ users, token = "" }: Props) {
               <Card>
                 <CardTitle>Top Browsers</CardTitle>
                 {browserChart.labels.length > 0 ? (
-                  <BarChart data={browserChart.labels.map((l, i) => ({ l, v: browserChart.values[i] }))} color="#0070f3" h={isMobile ? 60 : 90} />
+                  <BarChart data={browserChart.labels.map((l, i) => ({ l, v: browserChart.values[i] }))} color="#5b6cff" h={isMobile ? 60 : 90} />
                 ) : (
-                  <div className="text-center py-6 text-[13px] text-[#555]">No browser data</div>
+                  <div className="text-center py-6 text-[13px] text-fg-4">No browser data</div>
                 )}
               </Card>
               <Card>
@@ -969,17 +965,17 @@ export default function LogsTab({ users, token = "" }: Props) {
                       return (
                         <div key={country} className="flex items-center gap-2.5">
                           <span className="text-[14px] leading-none">{countryFlag(code)}</span>
-                          <span className="text-[12px] text-[#ededed] font-medium shrink-0 w-24 truncate">{country}</span>
-                          <div className="flex-1 bg-[#1a1a1a] rounded-full h-1.5 overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "#888" }} />
+                          <span className="text-[12px] text-fg font-medium shrink-0 w-24 truncate">{country}</span>
+                          <div className="flex-1 bg-raised-2 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--fg-3)" }} />
                           </div>
-                          <span className="text-[12px] font-bold text-[#ededed] shrink-0 w-5 text-right">{count}</span>
+                          <span className="text-[12px] font-semibold text-fg shrink-0 w-5 text-right num">{count}</span>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="text-center py-6 text-[13px] text-[#555]">No location data</div>
+                  <div className="text-center py-6 text-[13px] text-fg-4">No location data</div>
                 )}
               </Card>
             </div>
@@ -988,25 +984,25 @@ export default function LogsTab({ users, token = "" }: Props) {
           {/* Log table header */}
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-[12px] font-bold text-[#555] uppercase tracking-widest">Event Log</span>
-              <span className="text-[12px] text-[#555]">
+              <span className="label">Event Log</span>
+              <span className="text-[12px] text-fg-4">
                 {filtered.length} event{filtered.length !== 1 ? "s" : ""}{hasActiveFilters ? " (filtered)" : ""} · {logUsers.length} users
               </span>
             </div>
             <div className="flex items-center gap-2">
               {hasActiveFilters && (
                 <button onClick={clearAllFilters}
-                  className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-[#f44] border border-[rgba(255,68,68,0.2)] rounded-lg hover:bg-[rgba(255,68,68,0.06)] cursor-pointer bg-transparent transition-colors">
-                  <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  className="btn btn-sm btn-danger">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   Clear filters
                 </button>
               )}
-              <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#0070f3] border border-[rgba(0,112,243,0.2)] rounded-lg hover:bg-[rgba(0,112,243,0.06)] cursor-pointer bg-transparent transition-colors">
-                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <button onClick={exportCSV} className="btn btn-sm btn-secondary">
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export CSV
               </button>
-              <button onClick={loadLogs} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#888] border border-[#2a2a2a] rounded-lg hover:text-[#ededed] hover:border-[#555] cursor-pointer bg-transparent transition-colors">
-                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              <button onClick={loadLogs} className="btn btn-sm btn-secondary">
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                 Refresh
               </button>
             </div>
@@ -1016,20 +1012,20 @@ export default function LogsTab({ users, token = "" }: Props) {
           <div className="flex flex-col gap-2 mb-3">
             {/* Row 1: Search + Time range */}
             <div className="flex gap-2 items-center flex-wrap">
-              <div className="flex items-center gap-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-1.5 flex-1 min-w-52">
-                <svg width="12" height="12" fill="none" stroke="#555" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <div className="relative flex-1 min-w-52">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-4 pointer-events-none" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
                   placeholder="Search name, email, IP, city, action…"
-                  className="text-[13px] bg-transparent border-none outline-none text-[#ededed] placeholder:text-[#444] flex-1 min-w-0 font-[inherit]" />
+                  className="field pl-9 pr-9" />
                 {search && (
-                  <button onClick={() => { setSearch(""); setPage(0); }}
-                    className="text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer text-[13px] transition-colors shrink-0">✕</button>
+                  <button onClick={() => { setSearch(""); setPage(0); }} aria-label="Clear search"
+                    className="btn btn-ghost btn-sm btn-icon absolute right-1 top-1/2 -translate-y-1/2">✕</button>
                 )}
               </div>
-              <div className="flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0">
+              <div className="seg shrink-0">
                 {RANGES.map(r => (
                   <button key={r.id} onClick={() => { setTimeRange(r.id); setPage(0); }}
-                    className={`px-2.5 py-1 rounded text-[12px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap ${timeRange === r.id ? "bg-[#0070f3] text-white" : "bg-transparent text-[#555] hover:text-[#888]"}`}>
+                    className={`seg-item ${timeRange === r.id ? "seg-item-active" : ""}`}>
                     {r.label}
                   </button>
                 ))}
@@ -1039,33 +1035,33 @@ export default function LogsTab({ users, token = "" }: Props) {
             {/* Row 2: App | Type | Feature | Plan | User | Device */}
             <div className="flex gap-2 items-center flex-wrap">
               {/* App */}
-              <div role="group" aria-label="App" className="flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0 h-9 items-center">
+              <div role="group" aria-label="App" className="seg shrink-0">
                 {APP_FILTERS.map(a => (
                   <button key={a.id} onClick={() => { setAppF(a.id); setPage(0); }} aria-pressed={appF === a.id}
-                    className={`px-2.5 h-7 rounded text-[13px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1.5 ${appF === a.id ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#555] hover:text-[#888]"}`}>
-                    {a.id !== "all" && <span className="w-1.5 h-1.5 rounded-full" style={{ background: APPS[a.id].dot }} />}
+                    className={`seg-item ${appF === a.id ? "seg-item-active" : ""}`}>
+                    {a.id !== "all" && <span className="dot" style={{ background: APPS[a.id].dot }} />}
                     {a.label}
                   </button>
                 ))}
               </div>
 
               {/* Event type pills */}
-              <div className="flex gap-0.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5 shrink-0 h-9 items-center">
+              <div className="seg shrink-0">
                 {TYPES.map(t => (
                   <button key={t.id} onClick={() => { setTypeF(t.id); setPage(0); }}
-                    className={`px-2.5 h-7 rounded text-[13px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap ${typeF === t.id ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#555] hover:text-[#888]"}`}>
+                    className={`seg-item ${typeF === t.id ? "seg-item-active" : ""}`}>
                     {t.label}
                   </button>
                 ))}
               </div>
 
               {/* Feature */}
-              <Select value={featureF} onChange={e => { setFeatureF(e.target.value); setPage(0); }} className="text-[13px] h-9" wrapperClassName="min-w-[130px]">
+              <Select value={featureF} onChange={e => { setFeatureF(e.target.value); setPage(0); }} wrapperClassName="min-w-[130px]">
                 {FEATURES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
               </Select>
 
               {/* Plan */}
-              <Select value={planF} onChange={e => { setPlanF(e.target.value); setPage(0); }} className="text-[13px] h-9" wrapperClassName="min-w-[100px]">
+              <Select value={planF} onChange={e => { setPlanF(e.target.value); setPage(0); }} wrapperClassName="min-w-[100px]">
                 <option value="all">All Plans</option>
                 <option value="free">Free</option>
                 <option value="pro">Pro</option>
@@ -1074,7 +1070,7 @@ export default function LogsTab({ users, token = "" }: Props) {
               </Select>
 
               {/* User */}
-              <Select value={userFilter} onChange={e => { setUserFilter(e.target.value); setPage(0); }} className="text-[13px] h-9" wrapperClassName="max-w-44">
+              <Select value={userFilter} onChange={e => { setUserFilter(e.target.value); setPage(0); }} wrapperClassName="max-w-44">
                 <option value="all">All Users ({logUsers.length})</option>
                 {logUsers.map(u => (
                   <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id.slice(0,12)}</option>
@@ -1082,7 +1078,7 @@ export default function LogsTab({ users, token = "" }: Props) {
               </Select>
 
               {/* Device */}
-              <Select value={deviceF} onChange={e => { setDeviceF(e.target.value as FilterDevice); setPage(0); }} className="text-[13px] h-9" wrapperClassName="min-w-[110px]">
+              <Select value={deviceF} onChange={e => { setDeviceF(e.target.value as FilterDevice); setPage(0); }} wrapperClassName="min-w-[110px]">
                 <option value="all">All Devices</option>
                 <option value="desktop">Desktop</option>
                 <option value="mobile">Mobile</option>
@@ -1093,35 +1089,35 @@ export default function LogsTab({ users, token = "" }: Props) {
             {/* Row 3: Active filter chips — only when something is active */}
             {hasActiveFilters && (
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold text-[#555] uppercase tracking-wider shrink-0 mr-0.5">Active:</span>
+                <span className="label shrink-0 mr-0.5">Active:</span>
                 {appF       !== "all" && <FilterChip label={APPS[appF].label}                                       color={APPS[appF].dot} onClear={() => { setAppF("all");   setPage(0); }} />}
-                {typeF      !== "all" && <FilterChip label={typeF}                                                  color="#0070f3" onClear={() => { setTypeF("all");      setPage(0); }} />}
-                {featureF   !== "all" && <FilterChip label={FEATURE_ACTIONS[featureF]?.label ?? featureF}           color="#3ecf8e" onClear={() => { setFeatureF("all");   setPage(0); }} />}
-                {planF      !== "all" && <FilterChip label={`${planF} plan`}                                        color="#f5a623" onClear={() => { setPlanF("all");      setPage(0); }} />}
+                {typeF      !== "all" && <FilterChip label={typeF}                                                  color="#5b6cff" onClear={() => { setTypeF("all");      setPage(0); }} />}
+                {featureF   !== "all" && <FilterChip label={FEATURE_ACTIONS[featureF]?.label ?? featureF}           color="#10b981" onClear={() => { setFeatureF("all");   setPage(0); }} />}
+                {planF      !== "all" && <FilterChip label={`${planF} plan`}                                        color="#f59e0b" onClear={() => { setPlanF("all");      setPage(0); }} />}
                 {userFilter !== "all" && <FilterChip label={logUsers.find(u => u.id === userFilter)?.name ?? "1 user"} color="#a855f7" onClear={() => { setUserFilter("all"); setPage(0); }} />}
-                {deviceF    !== "all" && <FilterChip label={deviceF}                                                color="#888"    onClear={() => { setDeviceF("all");   setPage(0); }} />}
-                {search.trim()        && <FilterChip label={`"${search}"`}                                          color="#888"    onClear={() => { setSearch("");        setPage(0); }} />}
+                {deviceF    !== "all" && <FilterChip label={deviceF}                                                color="var(--fg-3)"    onClear={() => { setDeviceF("all");   setPage(0); }} />}
+                {search.trim()        && <FilterChip label={`"${search}"`}                                          color="var(--fg-3)"    onClear={() => { setSearch("");        setPage(0); }} />}
               </div>
             )}
           </div>
 
           {/* Log list */}
           {error ? (
-            <div className="text-center py-8 text-[14px] text-[#f44]">{error}</div>
+            <div className="empty text-danger-fg">{error}</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-12 text-[#555]">
-              <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mx-auto mb-2 opacity-40">
+            <div className="empty py-12">
+              <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-1 opacity-40">
                 <path d="M9 12h6M9 16h6M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l5 5v11a2 2 0 0 1-2 2z"/>
               </svg>
               <p className="text-[13px]">{hasActiveFilters ? "No events match the current filters" : "No events in this time range"}</p>
               {hasActiveFilters && (
-                <button onClick={clearAllFilters} className="mt-2 text-[12px] text-[#0070f3] font-semibold border-none bg-transparent cursor-pointer hover:text-[#4da3ff] transition-colors">
+                <button onClick={clearAllFilters} className="link mt-1 text-[12px]">
                   Clear all filters
                 </button>
               )}
             </div>
           ) : (
-            <div className="bg-black border border-[#1a1a1a] rounded-xl overflow-hidden">
+            <div className="card overflow-hidden">
               {filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(log => (
                 <LogRow
                   key={log.id}
@@ -1138,24 +1134,24 @@ export default function LogsTab({ users, token = "" }: Props) {
               ))}
               {/* Pagination footer */}
               {filtered.length > PAGE_SIZE && (
-                <div className="px-4 py-3 flex items-center justify-between border-t border-[#111]">
-                  <span className="text-[12px] text-[#555]">
+                <div className="px-4 py-3 flex items-center justify-between border-t border-line-soft">
+                  <span className="text-[12px] text-fg-4">
                     Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} events
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setPage(p => Math.max(0, p - 1))}
                       disabled={page === 0}
-                      className="px-2.5 py-1 text-[12px] font-semibold border border-[#2a2a2a] rounded-lg bg-transparent text-[#888] hover:text-[#ededed] hover:border-[#555] disabled:opacity-30 cursor-pointer disabled:cursor-default transition-colors">
+                      className="btn btn-sm btn-secondary">
                       ← Prev
                     </button>
-                    <span className="text-[12px] text-[#555] px-2">
+                    <span className="text-[12px] text-fg-4 px-2 num">
                       {page + 1} / {Math.ceil(filtered.length / PAGE_SIZE)}
                     </span>
                     <button
                       onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / PAGE_SIZE) - 1, p + 1))}
                       disabled={(page + 1) * PAGE_SIZE >= filtered.length}
-                      className="px-2.5 py-1 text-[12px] font-semibold border border-[#2a2a2a] rounded-lg bg-transparent text-[#888] hover:text-[#ededed] hover:border-[#555] disabled:opacity-30 cursor-pointer disabled:cursor-default transition-colors">
+                      className="btn btn-sm btn-secondary">
                       Next →
                     </button>
                   </div>
@@ -1174,9 +1170,9 @@ export default function LogsTab({ users, token = "" }: Props) {
       {/* Detail panel (mobile - bottom sheet) */}
       {showDetail && selected && isMobile && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setShowDetail(false)}>
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="relative bg-[#0a0a0a] border-t border-[#1a1a1a] rounded-t-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="w-8 h-1 bg-[#2a2a2a] rounded-full mx-auto mt-3 mb-2" />
+          <div className="absolute inset-0 bg-scrim backdrop-blur-[2px]" />
+          <div className="relative bg-surface border-t border-line rounded-t-xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="w-8 h-1 bg-strong rounded-full mx-auto mt-3 mb-2" />
             <DetailPanel log={selected} onClose={() => { setShowDetail(false); setSelected(null); }} />
           </div>
         </div>

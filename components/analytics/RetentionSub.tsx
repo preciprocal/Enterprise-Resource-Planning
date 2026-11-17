@@ -12,7 +12,7 @@ import { SubProps } from "./analytics-types";
 import {
   computeCohortRetention, computeActivationFunnel, computeTimeToValueHistogram,
 } from "./analytics-helpers";
-import { Bars, HeatCell } from "./analytics-charts";
+import { Bars, HeatCell, HEAT_STEPS } from "./analytics-charts";
 
 export default function RetentionSub({ users, data, isMobile }: SubProps) {
   const cohorts = useMemo(() => computeCohortRetention(users, data, 8), [users, data]);
@@ -49,13 +49,13 @@ export default function RetentionSub({ users, data, isMobile }: SubProps) {
             label="Latest cohort"
             value={latestCohort?.size ?? 0}
             sub={latestCohort?.cohortLabel ?? "—"}
-            color="#6366F1"
+            color="#5b6cff"
           />
           <MetricCard
             label="Month-1 retention"
             value={m1Retention !== null ? `${m1Retention}%` : "—"}
             sub="Most recent fully-elapsed cohort"
-            color={m1Retention !== null ? (m1Retention >= 30 ? "#10B981" : m1Retention >= 15 ? "#F59E0B" : "#EF4444") : "#9CA3AF"}
+            color={m1Retention !== null ? (m1Retention >= 30 ? "#10B981" : m1Retention >= 15 ? "#F59E0B" : "#EF4444") : "var(--fg-4)"}
           />
           <MetricCard
             label="Activation rate"
@@ -78,26 +78,26 @@ export default function RetentionSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Cohort retention triangle</CardTitle>
-            <span className="text-[10px] text-gray-400">% of cohort active in each subsequent month</span>
+            <span className="text-[11px] text-fg-4">% of cohort active in each subsequent month</span>
           </div>
           {cohorts.length === 0 ? (
-            <div className="text-xs text-gray-400 py-8 text-center">No cohort data — need at least one full month of users.</div>
+            <div className="text-xs text-fg-4 py-8 text-center">No cohort data — need at least one full month of users.</div>
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-fit">
                 {/* Header row */}
                 <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `120px 50px repeat(${maxMonths}, minmax(50px, 1fr))` }}>
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cohort</div>
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Size</div>
+                  <div className="label">Cohort</div>
+                  <div className="label text-center">Size</div>
                   {Array.from({ length: maxMonths }, (_, i) => (
-                    <div key={i} className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">M{i}</div>
+                    <div key={i} className="label text-center">M{i}</div>
                   ))}
                 </div>
                 {/* Data rows */}
                 {cohorts.map(c => (
                   <div key={c.cohort} className="grid gap-1 mb-1" style={{ gridTemplateColumns: `120px 50px repeat(${maxMonths}, minmax(50px, 1fr))` }}>
-                    <div className="text-[11px] font-semibold text-gray-700 flex items-center">{c.cohortLabel}</div>
-                    <div className="text-[11px] font-bold text-gray-900 flex items-center justify-center">{c.size}</div>
+                    <div className="text-[11px] font-semibold text-fg-2 flex items-center">{c.cohortLabel}</div>
+                    <div className="text-[11px] font-bold text-fg flex items-center justify-center">{c.size}</div>
                     {Array.from({ length: maxMonths }, (_, i) => (
                       <div key={i}>
                         <HeatCell value={i < c.retention.length ? c.retention[i] : null} />
@@ -108,11 +108,11 @@ export default function RetentionSub({ users, data, isMobile }: SubProps) {
               </div>
             </div>
           )}
-          <div className="mt-4 flex items-center gap-3 text-[10px] text-gray-500">
+          <div className="mt-4 flex items-center gap-3 text-[11px] text-fg-3">
             <span>0%</span>
             <div className="flex gap-0.5 flex-1 max-w-xs">
-              {["#FEF2F2", "#FEE2E2", "#FEF3C7", "#FDE68A", "#A7F3D0", "#6EE7B7", "#10B981"].map(c =>
-                <div key={c} className="flex-1 h-2.5 rounded-sm" style={{ background: c }} />
+              {HEAT_STEPS.map(c =>
+                <div key={c.bg} className="flex-1 h-2.5 rounded-sm" style={{ background: c.bg }} />
               )}
             </div>
             <span>70%+</span>
@@ -133,7 +133,7 @@ export default function RetentionSub({ users, data, isMobile }: SubProps) {
             series={[{
               label: "Users",
               data: funnel.map(s => s.count),
-              color: "#6366F1",
+              color: "#5b6cff",
             }]}
           />
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -142,20 +142,20 @@ export default function RetentionSub({ users, data, isMobile }: SubProps) {
               const isBigDrop = i + 1 === biggestDropIdx && biggestDropIdx > 0;
               return (
                 <div key={s.label}
-                     className={`px-3 py-2.5 rounded-lg border ${isBigDrop ? "bg-rose-50 border-rose-200" : "bg-gray-50 border-gray-100"}`}>
-                  <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1">
+                     className={`px-3 py-2.5 rounded-lg border ${isBigDrop ? "bg-danger-soft border-danger-line" : "bg-subtle border-line-soft"}`}>
+                  <div className="label mb-1">
                     {funnel[i].label.slice(0, 24)} → {s.label.slice(0, 24)}
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className={`text-xl font-extrabold ${isBigDrop ? "text-rose-600" : "text-gray-900"}`}>
+                    <span className={`text-xl font-semibold ${isBigDrop ? "text-danger-fg" : "text-fg"}`}>
                       {dropPct.toFixed(0)}%
                     </span>
-                    <span className="text-[10px] text-gray-500">drop-off</span>
+                    <span className="text-[11px] text-fg-3">drop-off</span>
                     {s.medianHoursFromPrev > 0 && (
-                      <span className="text-[10px] text-gray-400 ml-auto">median {s.medianHoursFromPrev.toFixed(1)}h</span>
+                      <span className="text-[11px] text-fg-4 ml-auto">median {s.medianHoursFromPrev.toFixed(1)}h</span>
                     )}
                   </div>
-                  {isBigDrop && <div className="text-[10px] text-rose-600 font-semibold mt-1">⚠ biggest single leak — fix this first</div>}
+                  {isBigDrop && <div className="text-[11px] text-danger-fg font-semibold mt-1">⚠ biggest single leak — fix this first</div>}
                 </div>
               );
             })}
@@ -169,7 +169,7 @@ export default function RetentionSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Time from signup to first completed interview</CardTitle>
-            <span className="text-[10px] text-gray-400">{ttvWithValue} users · &quot;aha moment&quot; = first finalised interview with a score</span>
+            <span className="text-[11px] text-fg-4">{ttvWithValue} users · &quot;aha moment&quot; = first finalised interview with a score</span>
           </div>
           <Bars
             labels={ttvHist.map(b => b.bucket)}
@@ -177,7 +177,7 @@ export default function RetentionSub({ users, data, isMobile }: SubProps) {
             yFormat={(v) => v.toLocaleString()}
             series={[{ label: "Users", data: ttvHist.map(b => b.count), color: "#8B5CF6" }]}
           />
-          <p className="text-[11px] text-gray-500 mt-3">
+          <p className="text-[11px] text-fg-3 mt-3">
             Most products succeed when users reach value in under a day. If your distribution skews to &quot;1-3d&quot; or longer,
             that&apos;s the strongest signal that onboarding needs to surface the core value faster.
           </p>

@@ -13,13 +13,9 @@ interface AccessEntry {
 
 // Small neutral tag — kept deliberately quiet so the table reads as data, not badges.
 function Tag({ children, tone = "neutral", title }: { children: React.ReactNode; tone?: "neutral" | "blue" | "amber"; title?: string }) {
-  const toneCls = tone === "blue"
-    ? "text-[#0070f3] border-[rgba(0,112,243,0.25)]"
-    : tone === "amber"
-      ? "text-[#f5a623] border-[rgba(245,166,35,0.25)]"
-      : "text-[#888] border-[#2a2a2a]";
+  const toneCls = tone === "blue" ? "badge-brand" : tone === "amber" ? "badge-warning" : "badge-neutral";
   return (
-    <span title={title} className={`inline-flex items-center h-5 px-1.5 rounded border text-[11px] font-medium whitespace-nowrap ${toneCls}`}>
+    <span title={title} className={`badge ${toneCls}`}>
       {children}
     </span>
   );
@@ -92,28 +88,28 @@ export default function AccessTab({ token }: { token: string }) {
   }, [list, query]);
 
   const adding = !!busy && busy === email.trim().toLowerCase();
-  const fieldCls = "h-9 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-3 text-[13px] text-[#ededed] placeholder:text-[#444] outline-none focus:border-[#555] transition-colors font-[inherit] disabled:opacity-40";
+  const fieldCls = "field";
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-black">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-canvas">
       {/* ── Header ── */}
-      <div className="px-4 md:px-8 pt-6 md:pt-8 pb-5 border-b border-[#111] shrink-0">
+      <div className="px-4 md:px-8 pt-6 md:pt-8 pb-5 border-b border-line-soft shrink-0">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-[20px] font-semibold text-[#ededed] tracking-tight">Team access</h1>
-            <p className="text-[13px] text-[#666] mt-1 max-w-2xl leading-relaxed">
+            <h1 className="page-title">Team access</h1>
+            <p className="text-body mt-1 max-w-2xl">
               Only these emails can sign in to the ERP, using their Preciprocal password. New members can set one with “Forgot password?”.
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <div className="relative">
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#444]" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-5 pointer-events-none" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
               </svg>
               <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search members" aria-label="Search members"
-                className={`${fieldCls} w-full md:w-56 pl-8`} />
+                className={`${fieldCls} w-full md:w-56 pl-9`} />
             </div>
-            <span className="text-[12px] text-[#555] tabular-nums whitespace-nowrap">
+            <span className="text-caption num whitespace-nowrap">
               {loading ? "—" : `${list.length} ${list.length === 1 ? "member" : "members"}`}
             </span>
           </div>
@@ -126,21 +122,21 @@ export default function AccessTab({ token }: { token: string }) {
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="Role or note (optional)" maxLength={200}
             aria-label="Role or note" disabled={tableMissing} className={`${fieldCls} sm:w-64`} />
           <button type="submit" disabled={tableMissing || !email.trim() || !!busy}
-            className="h-9 px-4 rounded-md text-[13px] font-semibold bg-[#ededed] text-black border-none cursor-pointer hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0 inline-flex items-center justify-center gap-2">
+            className="btn btn-primary btn-lg shrink-0">
             {adding
-              ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-black/20 border-t-black animate-spin" />Adding…</>
-              : <><svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Grant access</>}
+              ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />Adding…</>
+              : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Grant access</>}
           </button>
         </form>
 
         {(msg || tableMissing) && (
           <div className="mt-3 flex flex-col gap-2">
             {tableMissing && (
-              <p className="text-[12px] text-[#f5a623] leading-relaxed">
+              <p className="text-[12px] text-warning-fg leading-relaxed">
                 The access table doesn&apos;t exist yet — run <code className="font-mono">supabase/erp_schema.sql</code> in Supabase to manage members here. Until then only ERP_ALLOWED_EMAILS can sign in.
               </p>
             )}
-            {msg && <p role="status" className={`text-[12px] font-medium ${msg.ok ? "text-[#3ecf8e]" : "text-[#f55]"}`}>{msg.text}</p>}
+            {msg && <p role="status" className={`text-[12px] font-medium ${msg.ok ? "text-success-fg" : "text-danger-fg"}`}>{msg.text}</p>}
           </div>
         )}
       </div>
@@ -150,13 +146,13 @@ export default function AccessTab({ token }: { token: string }) {
         {loading ? (
           <div className="px-4 md:px-8"><SkeletonTable rows={4} cols={4} /></div>
         ) : (
-          <table className="w-full border-collapse text-left">
-            <thead className="sticky top-0 z-10 bg-black">
-              <tr className="border-b border-[#111]">
-                <th className="pl-4 md:pl-8 pr-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#444]">Member</th>
-                <th className="hidden md:table-cell px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#444]">Role / note</th>
-                <th className="hidden lg:table-cell px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#444]">Added by</th>
-                <th className="hidden sm:table-cell px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#444]">Added</th>
+          <table className="data-table">
+            <thead className="sticky top-0 z-10 [&_th]:bg-canvas">
+              <tr>
+                <th className="pl-4 md:pl-8 pr-4 py-2.5">Member</th>
+                <th className="hidden md:table-cell px-4 py-2.5">Role / note</th>
+                <th className="hidden lg:table-cell px-4 py-2.5">Added by</th>
+                <th className="hidden sm:table-cell px-4 py-2.5">Added</th>
                 <th className="pl-4 pr-4 md:pr-8 py-2.5 w-px"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -164,37 +160,37 @@ export default function AccessTab({ token }: { token: string }) {
               {filtered.map(entry => {
                 const note = entry.note && entry.note !== "ERP_ALLOWED_EMAILS" ? entry.note : null;
                 return (
-                  <tr key={entry.email} className="border-b border-[#0d0d0d] hover:bg-[#070707] transition-colors group">
+                  <tr key={entry.email} className="group">
                     <td className="pl-4 md:pl-8 pr-4 py-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <Avatar name={entry.name ?? entry.email} size={32} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-[13px] font-medium text-[#ededed] truncate">{entry.name ?? entry.email.split("@")[0]}</span>
+                            <span className="text-[13px] font-medium text-fg truncate">{entry.name ?? entry.email.split("@")[0]}</span>
                             {entry.isYou && <Tag tone="blue">You</Tag>}
                             {entry.locked && <Tag title="From ERP_ALLOWED_EMAILS in the server environment — can only be changed there">Locked</Tag>}
                             {!entry.hasAccount && <Tag tone="amber" title="No Preciprocal account with this email yet">No account</Tag>}
                           </div>
-                          <div className="text-[12px] text-[#555] truncate mt-0.5">{entry.email}</div>
-                          {note && <div className="md:hidden text-[12px] text-[#666] truncate mt-0.5">{note}</div>}
+                          <div className="text-[12px] text-fg-4 truncate mt-0.5">{entry.email}</div>
+                          {note && <div className="md:hidden text-[12px] text-fg-4 truncate mt-0.5">{note}</div>}
                         </div>
                       </div>
                     </td>
-                    <td className="hidden md:table-cell px-4 py-3 text-[13px] text-[#888] max-w-xs truncate">{note ?? <span className="text-[#333]">—</span>}</td>
-                    <td className="hidden lg:table-cell px-4 py-3 text-[13px] text-[#888] truncate">
-                      {entry.addedBy === "env" ? <span className="text-[#555]">Server environment</span> : entry.addedBy ?? <span className="text-[#333]">—</span>}
+                    <td className="hidden md:table-cell px-4 py-3 text-[13px] text-fg-3 max-w-xs truncate">{note ?? <span className="text-fg-5">—</span>}</td>
+                    <td className="hidden lg:table-cell px-4 py-3 text-[13px] text-fg-3 truncate">
+                      {entry.addedBy === "env" ? <span className="text-fg-4">Server environment</span> : entry.addedBy ?? <span className="text-fg-5">—</span>}
                     </td>
-                    <td className="hidden sm:table-cell px-4 py-3 text-[13px] text-[#888] whitespace-nowrap" title={entry.createdAt && entry.addedBy !== "env" ? fmtFull(entry.createdAt) : undefined}>
-                      {entry.createdAt && entry.addedBy !== "env" ? fmt(entry.createdAt) : <span className="text-[#333]">—</span>}
+                    <td className="hidden sm:table-cell px-4 py-3 text-[13px] text-fg-3 whitespace-nowrap" title={entry.createdAt && entry.addedBy !== "env" ? fmtFull(entry.createdAt) : undefined}>
+                      {entry.createdAt && entry.addedBy !== "env" ? fmt(entry.createdAt) : <span className="text-fg-5">—</span>}
                     </td>
                     <td className="pl-4 pr-4 md:pr-8 py-3 text-right">
                       {!entry.locked && !entry.isYou ? (
                         <button onClick={() => remove(entry)} disabled={!!busy}
-                          className="h-7 px-2.5 rounded-md border border-transparent text-[12px] font-medium text-[#666] bg-transparent cursor-pointer hover:text-[#f55] hover:border-[rgba(255,68,68,0.25)] hover:bg-[rgba(255,68,68,0.06)] disabled:opacity-40 transition-colors whitespace-nowrap">
+                          className="btn btn-sm btn-ghost hover:text-danger-fg hover:bg-danger-soft">
                           {busy === entry.email ? "Removing…" : "Remove"}
                         </button>
                       ) : (
-                        <span className="text-[12px] text-[#333] whitespace-nowrap" title={entry.isYou ? "You can't remove your own access" : "Change ERP_ALLOWED_EMAILS to remove"}>—</span>
+                        <span className="text-[12px] text-fg-5 whitespace-nowrap" title={entry.isYou ? "You can't remove your own access" : "Change ERP_ALLOWED_EMAILS to remove"}>—</span>
                       )}
                     </td>
                   </tr>
@@ -202,7 +198,7 @@ export default function AccessTab({ token }: { token: string }) {
               })}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={5} className="px-4 md:px-8 py-16 text-center text-[13px] text-[#555]">
+                  <td colSpan={5} className="px-4 md:px-8 py-16 text-center text-[13px] text-fg-4">
                     {query ? `No members match “${query}”` : "Nobody has access yet"}
                   </td>
                 </tr>
@@ -213,9 +209,9 @@ export default function AccessTab({ token }: { token: string }) {
       </div>
 
       {/* ── Footer note ── */}
-      <div className="px-4 md:px-8 py-3 border-t border-[#111] shrink-0">
-        <p className="text-[11px] text-[#444] leading-relaxed">
-          Locked members come from <code className="font-mono text-[#555]">ERP_ALLOWED_EMAILS</code>{" "}in the server environment and can only be changed there — the fallback that keeps you from being locked out.
+      <div className="px-4 md:px-8 py-3 border-t border-line-soft shrink-0">
+        <p className="text-caption">
+          Locked members come from <code className="font-mono text-fg-4">ERP_ALLOWED_EMAILS</code>{" "}in the server environment and can only be changed there — the fallback that keeps you from being locked out.
         </p>
       </div>
     </div>

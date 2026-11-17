@@ -6,7 +6,7 @@ import { useState, useEffect, ReactNode } from "react";
 import {
   User, AnalyticsData, PLANS, USAGE_FIELDS, LIMITS,
   planColor, statusColor, fmtFull, daysAgo,
-  Avatar, Chip, CodeRef, Spinner, HBar, StatusDot, StudentChip, Checkbox,
+  Avatar, CodeRef, Spinner, HBar, StatusDot, StudentChip, Checkbox,
   inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable,
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel } from "./StripeTab";
@@ -42,10 +42,10 @@ function SortChevrons({ active, dir }: { active: boolean; dir: "asc" | "desc" })
   return (
     <span className="inline-flex flex-col gap-[1px] ml-1 shrink-0">
       <svg width="8" height="5" viewBox="0 0 8 5" fill="none">
-        <path d="M4 0L7.5 5H0.5L4 0Z" fill={active && dir === "asc" ? "#aaa" : "#2a2a2a"} />
+        <path d="M4 0L7.5 5H0.5L4 0Z" fill="currentColor" className={active && dir === "asc" ? "text-fg-3" : "text-strong"} />
       </svg>
       <svg width="8" height="5" viewBox="0 0 8 5" fill="none">
-        <path d="M4 5L0.5 0H7.5L4 5Z" fill={active && dir === "desc" ? "#aaa" : "#2a2a2a"} />
+        <path d="M4 5L0.5 0H7.5L4 5Z" fill="currentColor" className={active && dir === "desc" ? "text-fg-3" : "text-strong"} />
       </svg>
     </span>
   );
@@ -93,15 +93,15 @@ export default function UsersTab({
   if (composing) {
     const chosen = users.filter(u => picked.has(u.id));
     return (
-      <div className="flex-1 overflow-auto bg-black">
-        <div className="px-5 py-3 border-b border-[#141414] flex items-center gap-3 sticky top-0 bg-black z-10">
+      <div className="flex-1 overflow-auto bg-canvas">
+        <div className="toolbar sticky top-0 z-10">
           <button onClick={() => setComposing(false)}
-            className="inline-flex items-center gap-1.5 text-[13px] text-[#888] hover:text-[#ededed] bg-transparent border-none cursor-pointer p-0">
+            className="btn btn-sm btn-ghost -ml-2.5">
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
             Back to users
           </button>
         </div>
-        <div className="p-5 w-full">
+        <div className="p-4 md:p-6 w-full">
           <EmailComposer initialRecipients={chosen.map(recipientFromUser)} allUsers={users} token={token}
             title={chosen.length > 1 ? `Email ${chosen.length} users` : "New email"} />
         </div>
@@ -128,22 +128,23 @@ export default function UsersTab({
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
       {/* ── Toolbar ── */}
-      <div className="px-5 py-3 border-b border-[#141414] flex items-center gap-3 bg-black shrink-0">
+      <div className="toolbar shrink-0">
         {/* Search */}
         <div className="relative flex-1 max-w-[340px]">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3a3a3a] pointer-events-none shrink-0" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-5 pointer-events-none shrink-0" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
           </svg>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search name, email, UID…"
-            className="w-full border border-[#1a1a1a] rounded-lg px-3 py-2 pl-9 text-[14px] text-[#ededed] bg-[#080808] outline-none focus:border-[#2d2d2d] transition-colors placeholder:text-[#333] font-[inherit]"
+            className="field pl-9 pr-9"
           />
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#3a3a3a] hover:text-[#777] transition-colors cursor-pointer border-none bg-transparent p-0"
+              aria-label="Clear search"
+              className="btn btn-sm btn-ghost btn-icon absolute right-1 top-1/2 -translate-y-1/2"
             >
               <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
@@ -171,19 +172,16 @@ export default function UsersTab({
         {/* Group email */}
         <div className="flex items-center gap-2 shrink-0">
           {picked.size > 0 && (
-            <div className="flex items-center gap-2 h-[38px] pl-3 pr-1.5 rounded-lg border border-[#1a1a1a] bg-[#080808]">
-              <span className="text-[13px] text-[#888] tabular-nums"><span className="text-[#ededed] font-semibold">{picked.size}</span> selected</span>
+            <div className="flex items-center gap-1.5 h-9 pl-3 pr-1 rounded-lg border border-line bg-subtle">
+              <span className="text-[13px] text-fg-3 num"><span className="text-fg font-semibold">{picked.size}</span> selected</span>
               <button onClick={() => setPicked(new Set())} aria-label="Clear selection" title="Clear selection"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-[#555] hover:text-[#ededed] hover:bg-[#141414] bg-transparent border-none cursor-pointer p-0 transition-colors">
+                className="btn btn-sm btn-ghost btn-icon">
                 <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
             </div>
           )}
           <button onClick={() => setComposing(true)}
-            className={`inline-flex items-center gap-2 h-[38px] px-3.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors border ${
-              picked.size
-                ? "bg-[#ededed] border-[#ededed] text-black hover:bg-white"
-                : "bg-[#080808] border-[#1a1a1a] text-[#bbb] hover:text-[#ededed] hover:border-[#2d2d2d]"}`}>
+            className={`btn ${picked.size ? "btn-primary" : "btn-secondary"}`}>
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>
             </svg>
@@ -193,8 +191,8 @@ export default function UsersTab({
 
         {/* Row count */}
         <div className="ml-auto flex items-baseline gap-1.5 shrink-0">
-          <span className="text-[14px] font-bold text-[#e0e0e0] tabular-nums">{filtered.length.toLocaleString()}</span>
-          <span className="text-[13px] text-[#3a3a3a]">
+          <span className="text-[14px] font-semibold text-fg num">{filtered.length.toLocaleString()}</span>
+          <span className="text-[13px] text-fg-4">
             {filtered.length !== users.length ? `of ${users.length.toLocaleString()} ` : ""}
             {filtered.length === 1 ? "user" : "users"}
           </span>
@@ -202,12 +200,12 @@ export default function UsersTab({
       </div>
 
       {/* ── List ── */}
-      <div className="flex-1 overflow-auto bg-black">
+      <div className="flex-1 overflow-auto bg-canvas">
         {loading ? (
           <SkeletonTable rows={8} cols={5} />
         ) : isMobile ? (
           /* Mobile cards */
-          <div className="flex flex-col divide-y divide-[#0d0d0d]">
+          <div className="flex flex-col divide-y divide-line-soft">
             {filtered.map(u => {
               const p = planColor(u.subscription?.plan);
               const s = statusColor(u.subscription?.status);
@@ -215,7 +213,7 @@ export default function UsersTab({
                 <div
                   key={u.id}
                   onClick={() => setSelectedUser(u)}
-                  className="px-4 py-4 cursor-pointer bg-black hover:bg-[#070707] active:bg-[#0d0d0d] transition-colors"
+                  className="px-4 py-4 cursor-pointer bg-canvas hover:bg-hover active:bg-hover transition-colors"
                 >
                   <div className="flex items-start gap-3">
                     <Checkbox checked={picked.has(u.id)} onChange={() => togglePick(u.id)} label={`Select ${u.name ?? u.email ?? "user"}`} className="mt-3" />
@@ -223,12 +221,12 @@ export default function UsersTab({
                     <Avatar name={u.name} size={40} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-semibold text-[14px] text-[#e0e0e0] truncate">{u.name ?? "Unknown"}</span>
-                        <span className="text-[12px] text-[#3a3a3a] shrink-0">{daysAgo(u.createdAt)}</span>
+                        <span className="font-semibold text-[14px] text-fg truncate">{u.name ?? "Unknown"}</span>
+                        <span className="text-[12px] text-fg-5 shrink-0">{daysAgo(u.createdAt)}</span>
                       </div>
-                      <div className="text-[13px] text-[#555] truncate mt-0.5">{u.email}</div>
+                      <div className="text-[13px] text-fg-4 truncate mt-0.5">{u.email}</div>
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <Chip label={u.subscription?.plan ?? "free"} className={`border text-[12px] font-semibold ${p.tw}`} />
+                        <span className={`badge capitalize ${p.tw}`}>{u.subscription?.plan ?? "free"}</span>
                         {u.subscription?.status && (
                           <div className="flex items-center gap-1.5">
                             <StatusDot color={s.dot} />
@@ -236,12 +234,12 @@ export default function UsersTab({
                           </div>
                         )}
                         {u.subscription?.stripeCustomerId && (
-                          <Chip label="Stripe" className="bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border border-[rgba(62,207,142,0.15)] text-[12px] font-medium" />
+                          <span className="badge badge-success">Stripe</span>
                         )}
                         <StudentChip student={u.student} />
                       </div>
                     </div>
-                    <svg className="text-[#222] shrink-0 mt-1" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <svg className="text-fg-5 shrink-0 mt-1" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <path d="M9 18l6-6-6-6"/>
                     </svg>
                   </div>
@@ -262,7 +260,7 @@ export default function UsersTab({
               <col style={{ width: "21%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10">
-              <tr className="bg-[#050505] border-b border-[#141414]">
+              <tr className="bg-surface border-b border-line-soft">
                 <th className="pl-5 py-3 text-left">
                   <Checkbox checked={allFilteredPicked} indeterminate={somePicked} onChange={togglePickAll} label="Select all shown" />
                 </th>
@@ -274,14 +272,13 @@ export default function UsersTab({
                       {sortable ? (
                         <button
                           onClick={() => handleSort(key, sortable)}
-                          className="inline-flex items-center gap-0.5 cursor-pointer border-none bg-transparent p-0 transition-colors hover:text-[#777] group"
-                          style={{ fontFamily: "inherit" }}
+                          className="inline-flex items-center gap-0.5 cursor-pointer border-0 bg-transparent p-0 font-[inherit] group"
                         >
-                          <span className={`text-[12px] font-semibold tracking-widest uppercase ${active ? "text-[#777]" : "text-[#333]"}`}>{label}</span>
+                          <span className={`label ${active ? "text-fg-2!" : "group-hover:text-fg-3"}`}>{label}</span>
                           <SortChevrons active={active} dir={sortD} />
                         </button>
                       ) : (
-                        <span className="text-[12px] font-semibold tracking-widest uppercase text-[#333]">{label}</span>
+                        <span className="label">{label}</span>
                       )}
                     </th>
                   );
@@ -296,7 +293,7 @@ export default function UsersTab({
                   <tr
                     key={u.id}
                     onClick={() => setSelectedUser(u)}
-                    className={`border-b border-[#0a0a0a] cursor-pointer transition-colors group ${picked.has(u.id) ? "bg-[#0b0b0b] hover:bg-[#0e0e0e]" : "bg-black hover:bg-[#070707]"}`}
+                    className={`border-b border-line-soft cursor-pointer transition-colors group ${picked.has(u.id) ? "bg-brand-soft hover:bg-hover" : "bg-canvas hover:bg-hover"}`}
                   >
                     <td className="pl-5 py-3.5" onClick={e => e.stopPropagation()}>
                       <Checkbox checked={picked.has(u.id)} onChange={() => togglePick(u.id)} label={`Select ${u.name ?? u.email ?? "user"}`} />
@@ -312,25 +309,24 @@ export default function UsersTab({
                         <div className="min-w-0">
                           {/* Name never shrinks below its width; the badge wraps under it when the column is narrow */}
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-                            <span className="text-[14px] font-semibold text-[#e0e0e0] truncate leading-tight shrink-0 max-w-full">{u.name ?? "Unknown"}</span>
+                            <span className="text-[14px] font-semibold text-fg truncate leading-tight shrink-0 max-w-full">{u.name ?? "Unknown"}</span>
                             <StudentChip student={u.student} compact className="shrink-0" />
                             {(u.emailOptOuts?.length ?? 0) > 0 && (
                               <span title={`Turned off: ${u.emailOptOuts!.join(", ")}`}
-                                className="shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-md border border-[rgba(245,166,35,0.25)] bg-[rgba(245,166,35,0.06)] text-[#f5a623]">
+                                className="badge badge-warning shrink-0">
                                 {u.emailOptOuts!.length >= 3 ? "Unsubscribed" : "Some emails off"}
                               </span>
                             )}
                           </div>
-                          <div className="text-[13px] text-[#555] truncate mt-0.5">{u.email}</div>
+                          <div className="text-[13px] text-fg-4 truncate mt-0.5">{u.email}</div>
                         </div>
                       </div>
                     </td>
                     {/* Plan */}
                     <td className="px-4 py-3.5">
-                      <Chip
-                        label={(u.subscription?.plan ?? "free").charAt(0).toUpperCase() + (u.subscription?.plan ?? "free").slice(1)}
-                        className={`border text-[12px] font-semibold ${p.tw}`}
-                      />
+                      <span className={`badge ${p.tw}`}>
+                        {(u.subscription?.plan ?? "free").charAt(0).toUpperCase() + (u.subscription?.plan ?? "free").slice(1)}
+                      </span>
                     </td>
                     {/* Status */}
                     <td className="px-4 py-3.5">
@@ -340,25 +336,25 @@ export default function UsersTab({
                           <span className="text-[13px] font-medium" style={{ color: s.text }}>{u.subscription.status}</span>
                         </div>
                       ) : (
-                        <span className="text-[14px] text-[#222]">—</span>
+                        <span className="text-[14px] text-fg-5">—</span>
                       )}
                     </td>
                     {/* Stripe */}
                     <td className="px-4 py-3.5">
                       {u.subscription?.stripeCustomerId ? (
                         <div className="flex items-center gap-1.5">
-                          <svg width="11" height="11" fill="none" stroke="#3ecf8e" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <svg className="text-success-fg" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                             <polyline points="20 6 9 17 4 12"/>
                           </svg>
-                          <span className="text-[13px] font-medium text-[#3ecf8e]">Connected</span>
+                          <span className="text-[13px] font-medium text-success-fg">Connected</span>
                         </div>
                       ) : (
-                        <span className="text-[14px] text-[#222]">—</span>
+                        <span className="text-[14px] text-fg-5">—</span>
                       )}
                     </td>
                     {/* Joined */}
                     <td className="px-4 py-3.5">
-                      <span className="text-[13px] font-medium text-[#555]">{daysAgo(u.createdAt)}</span>
+                      <span className="text-[13px] font-medium text-fg-4">{daysAgo(u.createdAt)}</span>
                     </td>
                   </tr>
                 );
@@ -380,8 +376,8 @@ export default function UsersTab({
 function EmptyState({ search }: { search: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-6">
-      <div className="w-14 h-14 rounded-2xl bg-[#0a0a0a] border border-[#141414] flex items-center justify-center">
-        <svg width="22" height="22" fill="none" stroke="#2a2a2a" strokeWidth="1.5" viewBox="0 0 24 24">
+      <div className="w-14 h-14 rounded-xl bg-surface border border-line-soft flex items-center justify-center">
+        <svg className="text-fg-5" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
           <circle cx="9" cy="7" r="4"/>
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
@@ -389,8 +385,8 @@ function EmptyState({ search }: { search: string }) {
         </svg>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-[14px] font-semibold text-[#444]">No users found</span>
-        {search && <span className="text-[13px] text-[#2a2a2a]">No results for &ldquo;{search}&rdquo;</span>}
+        <span className="text-[14px] font-semibold text-fg-3">No users found</span>
+        {search && <span className="text-[13px] text-fg-4">No results for &ldquo;{search}&rdquo;</span>}
       </div>
     </div>
   );
@@ -539,46 +535,41 @@ function UserDetail({
   // ── Sidebar ──
 
   const Sidebar = (
-    <div className="w-1/3 shrink-0 border-r border-[#141414] flex flex-col bg-[#050505] overflow-y-auto">
+    <div className="w-1/3 shrink-0 border-r border-line-soft flex flex-col bg-subtle overflow-y-auto">
 
       {/* Accent bar */}
-      <div className="h-[2px] shrink-0" style={{ background: `linear-gradient(90deg, ${pc.accent} 0%, transparent 70%)` }} />
+      <div className="h-[2px] shrink-0" style={{ background: pc.accent }} />
 
       {/* Back + label */}
-      <div className="flex items-center gap-2.5 px-4 h-12 border-b border-[#0f0f0f] shrink-0">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 text-[#444] hover:text-[#ededed] transition-colors cursor-pointer border-none bg-transparent p-0"
-          style={{ fontFamily: "inherit" }}
-        >
-          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <div className="flex items-center gap-2.5 px-2 h-12 border-b border-line-soft shrink-0">
+        <button onClick={onClose} className="btn btn-sm btn-ghost">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M15 18l-6-6 6-6"/>
           </svg>
-          <span className="text-[13px] font-medium">All users</span>
+          All users
         </button>
       </div>
 
       {/* Identity */}
-      <div className="px-5 py-6 flex flex-col items-center text-center gap-4 border-b border-[#0f0f0f]">
+      <div className="px-5 py-6 flex flex-col items-center text-center gap-4 border-b border-line-soft">
         <div className="relative">
           <Avatar name={user.name} size={72} />
           {user.isAdmin && (
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#f5a623] flex items-center justify-center ring-2 ring-[#050505]" title="Admin">
-              <svg width="8" height="8" fill="white" viewBox="0 0 24 24">
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-warning flex items-center justify-center ring-2 ring-subtle" title="Admin">
+              <svg className="text-white" width="8" height="8" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
               </svg>
             </div>
           )}
         </div>
         <div className="w-full">
-          <div className="text-[15px] font-semibold text-[#ededed] leading-snug">{user.name ?? "Unknown"}</div>
-          <div className="text-[13px] text-[#555] mt-1 break-all">{user.email}</div>
+          <div className="text-[15px] font-semibold text-fg leading-snug">{user.name ?? "Unknown"}</div>
+          <div className="text-[13px] text-fg-4 mt-1 break-all">{user.email}</div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap justify-center">
-          <Chip
-            label={(user.subscription?.plan ?? "free").charAt(0).toUpperCase() + (user.subscription?.plan ?? "free").slice(1)}
-            className={`border text-[12px] font-semibold ${pc.tw}`}
-          />
+          <span className={`badge ${pc.tw}`}>
+            {(user.subscription?.plan ?? "free").charAt(0).toUpperCase() + (user.subscription?.plan ?? "free").slice(1)}
+          </span>
           {user.subscription?.status && (
             <div className="flex items-center gap-1.5">
               <StatusDot color={sc.dot} />
@@ -586,34 +577,34 @@ function UserDetail({
             </div>
           )}
           {user.subscription?.stripeCustomerId && (
-            <Chip label="Stripe" className="bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border border-[rgba(62,207,142,0.15)] text-[12px] font-medium" />
+            <span className="badge badge-success">Stripe</span>
           )}
           {user.isAdmin && (
-            <Chip label="Admin" className="bg-[rgba(245,166,35,0.08)] text-[#f5a623] border border-[rgba(245,166,35,0.2)] text-[12px] font-medium" />
+            <span className="badge badge-warning">Admin</span>
           )}
           <StudentChip student={user.student} />
         </div>
       </div>
 
       {/* Stat cards */}
-      <div className="px-4 py-4 grid grid-cols-2 gap-2 border-b border-[#0f0f0f]">
+      <div className="px-4 py-4 grid grid-cols-2 gap-2 border-b border-line-soft">
         {[
           { label: "Joined",      value: daysAgo(user.createdAt) },
           { label: "Last active", value: daysAgo(user.lastLogin ?? user.updatedAt) },
           { label: "Provider",    value: user.provider ?? "email" },
           { label: "Uses this period", value: String(totalUsage) },
         ].map(({ label, value }) => (
-          <div key={label} className="bg-[#0a0a0a] border border-[#141414] rounded-lg px-3 py-2.5">
-            <div className="text-[11px] font-semibold text-[#2a2a2a] uppercase tracking-wider mb-1">{label}</div>
-            <div className="text-[13px] font-semibold text-[#bbb] capitalize truncate">{value || <span className="text-[#222]">—</span>}</div>
+          <div key={label} className="bg-surface border border-line-soft rounded-lg px-3 py-2.5">
+            <div className="label mb-1">{label}</div>
+            <div className="text-[13px] font-semibold text-fg-2 capitalize truncate">{value || <span className="text-fg-5">—</span>}</div>
           </div>
         ))}
       </div>
 
       {/* Subscription summary */}
-      <div className="px-4 py-4 border-b border-[#0f0f0f]">
-        <div className="text-[11px] font-semibold text-[#2a2a2a] uppercase tracking-wider mb-2.5">Subscription</div>
-        <div className="bg-[#0a0a0a] border border-[#141414] rounded-lg overflow-hidden divide-y divide-[#141414]">
+      <div className="px-4 py-4 border-b border-line-soft">
+        <div className="label mb-2.5">Subscription</div>
+        <div className="bg-surface border border-line-soft rounded-lg overflow-hidden divide-y divide-line-soft">
           {[
             { label: "Plan",       value: (user.subscription?.plan ?? "free").charAt(0).toUpperCase() + (user.subscription?.plan ?? "free").slice(1) },
             { label: "Status",     value: user.subscription?.status ?? "—" },
@@ -622,8 +613,8 @@ function UserDetail({
             { label: "Pack credits", value: user.packs?.totalCredits ? String(user.packs.totalCredits) : "—" },
           ].map(({ label, value }) => (
             <div key={label} className="flex items-center justify-between px-3 py-2">
-              <span className="text-[11px] font-semibold text-[#333] uppercase tracking-wide">{label}</span>
-              <span className="text-[12px] font-medium text-[#aaa] truncate max-w-[60%] text-right">{value}</span>
+              <span className="label">{label}</span>
+              <span className="text-[12px] font-medium text-fg-3 truncate max-w-[60%] text-right">{value}</span>
             </div>
           ))}
         </div>
@@ -631,18 +622,18 @@ function UserDetail({
 
       {/* Stripe IDs */}
       {(user.subscription?.stripeCustomerId || user.subscription?.stripeSubscriptionId) && (
-        <div className="px-4 py-4 border-b border-[#0f0f0f]">
-          <div className="text-[11px] font-semibold text-[#2a2a2a] uppercase tracking-wider mb-2.5">Stripe</div>
-          <div className="bg-[#0a0a0a] border border-[#141414] rounded-lg overflow-hidden divide-y divide-[#141414]">
+        <div className="px-4 py-4 border-b border-line-soft">
+          <div className="label mb-2.5">Stripe</div>
+          <div className="bg-surface border border-line-soft rounded-lg overflow-hidden divide-y divide-line-soft">
             {[["cus", user.subscription.stripeCustomerId], ["sub", user.subscription.stripeSubscriptionId]]
               .filter(([, v]) => v)
               .map(([prefix, val]) => (
                 <div key={prefix} className="flex items-center gap-2.5 px-3 py-2.5">
-                  <span className="text-[11px] font-bold text-[#333] uppercase w-5 shrink-0">{prefix}</span>
-                  <code className="font-mono text-[11px] text-[#0070f3] truncate flex-1">{val}</code>
+                  <span className="label w-6 shrink-0">{prefix}</span>
+                  <code className="font-mono text-[11px] text-brand-fg truncate flex-1">{val}</code>
                   <button
                     onClick={() => navigator.clipboard?.writeText(val as string)}
-                    className="text-[12px] font-medium text-[#333] hover:text-[#777] cursor-pointer border-none bg-transparent transition-colors shrink-0"
+                    className="link text-[12px] shrink-0"
                   >
                     copy
                   </button>
@@ -654,12 +645,12 @@ function UserDetail({
 
       {/* UID */}
       <div className="px-4 py-4">
-        <div className="text-[11px] font-semibold text-[#2a2a2a] uppercase tracking-wider mb-2">User ID</div>
-        <div className="flex items-center gap-2 bg-[#0a0a0a] border border-[#141414] rounded-lg px-3 py-2">
-          <code className="font-mono text-[11px] text-[#2a2a2a] tracking-wide truncate flex-1">{user.id}</code>
+        <div className="label mb-2">User ID</div>
+        <div className="flex items-center gap-2 bg-surface border border-line-soft rounded-lg px-3 py-2">
+          <code className="font-mono text-[11px] text-fg-4 tracking-wide truncate flex-1">{user.id}</code>
           <button
             onClick={() => navigator.clipboard?.writeText(user.id)}
-            className="text-[12px] font-medium text-[#333] hover:text-[#777] cursor-pointer border-none bg-transparent transition-colors shrink-0"
+            className="link text-[12px] shrink-0"
           >
             copy
           </button>
@@ -675,36 +666,27 @@ function UserDetail({
 
       {/* Mobile header */}
       {isMobile && (
-        <div className="flex items-center gap-3 px-4 h-12 border-b border-[#141414] shrink-0 bg-black">
-          <button
-            onClick={onClose}
-            className="flex items-center gap-1.5 text-[#444] hover:text-[#ededed] transition-colors cursor-pointer border-none bg-transparent p-0"
-            style={{ fontFamily: "inherit" }}
-          >
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <div className="flex items-center gap-3 px-4 h-12 border-b border-line-soft shrink-0 bg-canvas">
+          <button onClick={onClose} className="btn btn-sm btn-ghost -ml-2.5">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M15 18l-6-6 6-6"/>
             </svg>
-            <span className="text-[13px] font-medium">All users</span>
+            All users
           </button>
-          <div className="w-px h-4 bg-[#1a1a1a] mx-1" />
-          <span className="text-[13px] font-semibold text-[#ededed] truncate">{user.name ?? "Unknown"}</span>
+          <div className="w-px h-4 bg-line mx-1" />
+          <span className="text-[13px] font-semibold text-fg truncate">{user.name ?? "Unknown"}</span>
         </div>
       )}
 
       {/* Tab bar + actions */}
-      <div className="flex items-center px-3 md:px-5 border-b border-[#141414] h-12 shrink-0 bg-black gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="tabs items-center px-3 md:px-5 shrink-0 bg-canvas">
         {DETAIL_TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 h-8 rounded-md text-[13px] font-medium transition-all cursor-pointer border-none whitespace-nowrap shrink-0 ${
-              tab === t.id
-                ? "bg-[#111] text-[#e0e0e0]"
-                : "bg-transparent text-[#444] hover:text-[#777] hover:bg-[#080808]"
-            }`}
-            style={{ fontFamily: "inherit" }}
+            className={`tab shrink-0 ${tab === t.id ? "tab-active" : ""}`}
           >
-            <span className={`transition-colors ${tab === t.id ? "text-[#777]" : "text-[#2a2a2a]"}`}>{t.icon}</span>
+            <span className={tab === t.id ? "text-fg-3" : "text-fg-5"}>{t.icon}</span>
             {t.label}
           </button>
         ))}
@@ -712,24 +694,17 @@ function UserDetail({
         {isEditableTab && (
           <div className="ml-auto flex items-center gap-2.5 shrink-0">
             {msg && (
-              <span className={`text-[13px] font-medium ${msg.startsWith("✓") ? "text-[#3ecf8e]" : "text-[#f55]"}`}>
+              <span className={`text-[13px] font-medium ${msg.startsWith("✓") ? "text-success-fg" : "text-danger-fg"}`}>
                 {msg}
               </span>
             )}
-            <button
-              onClick={handleDiscard}
-              className="h-8 px-3.5 rounded-md border border-[#1a1a1a] bg-transparent text-[13px] font-medium text-[#444] cursor-pointer hover:text-[#888] hover:border-[#2a2a2a] transition-all"
-              style={{ fontFamily: "inherit" }}
-            >
+            <button onClick={handleDiscard} className="btn btn-sm btn-secondary">
               Discard
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className={`h-8 px-4 rounded-md text-[13px] font-semibold border-none cursor-pointer transition-colors ${
-                saving ? "bg-[#141414] text-[#444]" : "bg-[#ededed] text-black hover:bg-white"
-              }`}
-              style={{ fontFamily: "inherit" }}
+              className="btn btn-sm btn-primary"
             >
               {saving ? "Saving…" : "Save changes"}
             </button>
@@ -739,7 +714,7 @@ function UserDetail({
 
       {/* Content area */}
       <div className="flex-1 overflow-auto">
-        <div className="p-6 md:p-8 flex flex-col gap-7 w-full">
+        <div className="p-4 md:p-6 flex flex-col gap-5 w-full">
 
           {/* ── Overview / Job search / Activity / Support (UserInsights.tsx) ── */}
           {tab === "overview"  && <OverviewPanel  {...panelProps} />}
@@ -769,7 +744,7 @@ function UserDetail({
                         />
                         <button
                           onClick={() => navigator.clipboard?.writeText(String(edit.email ?? ""))}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-medium text-[#444] hover:text-[#888] border-none bg-transparent cursor-pointer transition-colors"
+                          className="link text-[12px] absolute right-3 top-1/2 -translate-y-1/2"
                         >
                           Copy
                         </button>
@@ -790,7 +765,7 @@ function UserDetail({
                       </Select>
                     </FormField>
                     <FormField label="Auth provider">
-                      <div className={`${inputCls} text-[#555] cursor-default capitalize select-none`}>{user.provider ?? "email"}</div>
+                      <div className={`${inputCls} text-fg-4 cursor-default capitalize select-none`}>{user.provider ?? "email"}</div>
                     </FormField>
                   </div>
                 </FormCard>
@@ -804,15 +779,15 @@ function UserDetail({
                     { label: "Last login", value: fmtFull(user.lastLogin) },
                     { label: "User ID",    value: user.id, mono: true },
                   ].map(({ label, value, mono }) => (
-                    <div key={label} className="bg-[#070707] border border-[#0f0f0f] rounded-xl px-4 py-3">
-                      <div className="text-[11px] font-bold text-[#2a2a2a] uppercase tracking-wider mb-1.5">{label}</div>
-                      <div className={`truncate font-medium ${mono ? "font-mono text-[#0070f3] text-[11px]" : "text-[13px] text-[#ccc]"}`}>
-                        {value || <span className="text-[#1e1e1e]">—</span>}
+                    <div key={label} className="card px-4 py-3">
+                      <div className="label mb-1.5">{label}</div>
+                      <div className={`truncate font-medium ${mono ? "font-mono text-brand-fg text-[11px]" : "text-[13px] text-fg-2"}`}>
+                        {value || <span className="text-fg-5">—</span>}
                       </div>
                       {label === "User ID" && value && (
                         <button
                           onClick={() => navigator.clipboard?.writeText(value)}
-                          className="mt-1 text-[11px] font-medium text-[#2a2a2a] hover:text-[#666] cursor-pointer border-none bg-transparent transition-colors"
+                          className="link mt-1 text-[11px]"
                         >
                           copy
                         </button>
@@ -881,7 +856,7 @@ function UserDetail({
               <Card>
                 <CardTitle>Apply Coupon</CardTitle>
                 {couponMsg && (
-                  <div className={`mb-3 px-3 py-2 rounded-lg text-[12px] font-medium ${couponMsg.startsWith("✗") ? "bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] text-[#f55]" : "bg-[rgba(62,207,142,0.06)] border border-[rgba(62,207,142,0.2)] text-[#3ecf8e]"}`}>
+                  <div className={`mb-3 px-3 py-2 rounded-lg text-[12px] font-medium ${couponMsg.startsWith("✗") ? "bg-danger-soft border border-danger-line text-danger-fg" : "bg-success-soft border border-success-line text-success-fg"}`}>
                     {couponMsg}
                   </div>
                 )}
@@ -900,8 +875,8 @@ function UserDetail({
               {/* Read-only subscription details */}
               <Card>
                 <CardTitle>Subscription Details</CardTitle>
-                <FRow label="Plan"         badgeLabel={user.subscription?.plan ?? "free"} badgeClassName={`border font-bold ${planColor(user.subscription?.plan).tw}`} />
-                <FRow label="Status"       badgeLabel={user.subscription?.status ?? ""} badgeClassName="text-[13px] font-semibold" />
+                <FRow label="Plan"         badgeLabel={user.subscription?.plan ?? "free"} badgeClassName={`border capitalize ${planColor(user.subscription?.plan).tw}`} />
+                <FRow label="Status"       badgeLabel={user.subscription?.status ?? ""} badgeClassName="badge-neutral border-line" />
                 <FRow label="Customer ID"  value={user.subscription?.stripeCustomerId} mono copyable />
                 <FRow label="Sub ID"       value={user.subscription?.stripeSubscriptionId} mono copyable />
                 <FRow label="Period Start" value={fmtFull(user.subscription?.currentPeriodStart)} />
@@ -952,7 +927,7 @@ function UserDetail({
                     )}
                   </>
                 ) : (
-                  <div className="text-[13px] text-[#555]">Hasn&apos;t verified a student email.</div>
+                  <div className="text-[13px] text-fg-4">Hasn&apos;t verified a student email.</div>
                 )}
               </Card>
             </>
@@ -972,13 +947,13 @@ function UserDetail({
                       lastReset: new Date().toISOString(),
                     },
                   }))}
-                  className="px-3 py-1.5 rounded-md bg-[rgba(62,207,142,0.06)] border border-[rgba(62,207,142,0.15)] text-[#3ecf8e] text-[13px] font-medium cursor-pointer hover:bg-[rgba(62,207,142,0.1)] transition-colors"
+                  className="btn btn-sm btn-success"
                 >
                   Reset all
                 </button>
               }
             >
-              <div className="bg-[#070707] border border-[#0f0f0f] rounded-xl overflow-hidden divide-y divide-[#0d0d0d]">
+              <div className="card overflow-hidden divide-y divide-line-soft">
                 {USAGE_FIELDS.map(({ key, label, color }) => {
                   const val  = (edit.usage?.[key] as number) ?? 0;
                   const plan = edit.subscription?.plan ?? "free";
@@ -989,17 +964,16 @@ function UserDetail({
                   return (
                     <div key={key as string} className="flex items-center gap-4 px-4 py-3.5">
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                      <span className="text-[14px] text-[#ccc] font-medium w-32 shrink-0">{label}</span>
-                      <HBar pct={pct} color={over ? "#f55" : color} />
+                      <span className="text-[13px] text-fg-2 font-medium w-32 shrink-0">{label}</span>
+                      <HBar pct={pct} color={over ? "#ef4444" : color} />
                       <input
                         type="number"
                         min={0}
                         value={val}
                         onChange={e => setEdit(p => ({ ...p, usage: { ...p.usage, [key]: Number(e.target.value) } }))}
-                        className="w-14 border border-[#141414] rounded-md px-2 py-1.5 text-[13px] font-bold text-[#ededed] text-center bg-[#080808] focus:outline-none focus:border-[#2a2a2a] transition-colors"
-                        style={{ fontFamily: "inherit" }}
+                        className="field field-sm w-16 px-2 text-center font-semibold num"
                       />
-                      <span className="text-[12px] font-medium text-[#2a2a2a] w-6 text-right shrink-0">{inf ? "∞" : lim}</span>
+                      <span className="text-[12px] font-medium text-fg-5 w-6 text-right shrink-0">{inf ? "∞" : lim}</span>
                     </div>
                   );
                 })}
@@ -1017,17 +991,17 @@ function UserDetail({
           {/* ── Raw ── */}
           {tab === "raw" && (
             <Section
-              title={<><code className="font-mono text-[#0070f3] text-[12px] normal-case">profiles/{user.id}</code><CodeRef k="erpData" /></>}
+              title={<><code className="font-mono text-brand-fg text-[12px] normal-case">profiles/{user.id}</code><CodeRef k="erpData" /></>}
               action={
                 <button
                   onClick={() => navigator.clipboard?.writeText(JSON.stringify(user, null, 2))}
-                  className="px-3 py-1.5 rounded-md border border-[#141414] bg-[#080808] text-[13px] font-medium cursor-pointer text-[#555] hover:text-[#e0e0e0] hover:border-[#2a2a2a] transition-all"
+                  className="btn btn-sm btn-secondary"
                 >
                   Copy JSON
                 </button>
               }
             >
-              <pre className="bg-[#050505] border border-[#0f0f0f] text-[#666] rounded-xl p-5 text-[12px] leading-relaxed overflow-auto font-mono">
+              <pre className="bg-subtle border border-line text-fg-3 rounded-xl p-5 text-[12px] leading-relaxed overflow-auto font-mono">
                 {JSON.stringify(user, null, 2)}
               </pre>
             </Section>
@@ -1039,7 +1013,7 @@ function UserDetail({
   );
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-black">
+    <div className="flex-1 flex overflow-hidden bg-canvas">
       {!isMobile && Sidebar}
       {Content}
     </div>
@@ -1054,7 +1028,7 @@ function Section({ title, children, action }: {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3 min-h-7">
-        <div className="flex items-center gap-2 text-[12px] font-semibold text-[#3a3a3a] uppercase tracking-widest">
+        <div className="flex items-center gap-2 section-title">
           {title}
         </div>
         {action}
@@ -1068,7 +1042,7 @@ function Section({ title, children, action }: {
 
 function FormCard({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-[#070707] border border-[#0f0f0f] rounded-xl p-5">
+    <div className="card card-pad">
       {children}
     </div>
   );
@@ -1079,7 +1053,7 @@ function FormCard({ children }: { children: ReactNode }) {
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-[12px] font-semibold text-[#3a3a3a] uppercase tracking-wider">{label}</label>
+      <label className="field-label mb-0">{label}</label>
       {children}
     </div>
   );

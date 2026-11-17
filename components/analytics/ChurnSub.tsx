@@ -98,7 +98,7 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
             label="Total at-risk %"
             value={risk.length > 0 ? `${Math.round((highCount + medCount) / risk.length * 100)}%` : "—"}
             sub={`of ${risk.length} paying users`}
-            color="#6366F1"
+            color="#5b6cff"
           />
         </div>
       </section>
@@ -109,10 +109,10 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Churn risk leaderboard</CardTitle>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+            <div className="seg">
               {(["high", "med", "low", "all"] as const).map(b => (
                 <button key={b} onClick={() => setBandFilter(b)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border-none cursor-pointer ${bandFilter === b ? "bg-white text-gray-900 shadow-sm" : "bg-transparent text-gray-500"}`}>
+                  className={`seg-item capitalize ${bandFilter === b ? "seg-item-active" : ""}`}>
                   {b}
                 </button>
               ))}
@@ -120,7 +120,7 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
           </div>
 
           {filtered.length === 0 ? (
-            <div className="text-xs text-gray-400 py-12 text-center">
+            <div className="text-xs text-fg-4 py-12 text-center">
               No users in the <strong>{bandFilter}</strong> band — nice work.
             </div>
           ) : (
@@ -128,42 +128,42 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
               {filtered.slice(0, 50).map(r => {
                 const pc = planColor(r.user.subscription?.plan);
                 const bandColor = r.band === "high" ? "#EF4444" : r.band === "med" ? "#F59E0B" : "#10B981";
-                const bandBg = r.band === "high" ? "bg-rose-50" : r.band === "med" ? "bg-amber-50" : "bg-emerald-50";
+                const bandBg = r.band === "high" ? "bg-danger-soft" : r.band === "med" ? "bg-warning-soft" : "bg-success-soft";
                 return (
-                  <div key={r.user.id} className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
+                  <div key={r.user.id} className="flex items-start gap-3 py-3 border-b border-line-soft last:border-0">
                     <Avatar name={r.user.name} size={36} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] font-semibold text-gray-900 truncate">{r.user.name ?? "Unknown"}</span>
-                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${pc.tw}`}>
+                        <span className="text-[13px] font-semibold text-fg truncate">{r.user.name ?? "Unknown"}</span>
+                        <span className={`badge uppercase ${pc.tw}`}>
                           {r.user.subscription?.plan ?? "free"}
                         </span>
                         {r.user.subscription?.status && (
-                          <span className="text-[10px] text-gray-500">· {r.user.subscription.status}</span>
+                          <span className="text-[11px] text-fg-3">· {r.user.subscription.status}</span>
                         )}
                       </div>
-                      <div className="text-[11px] text-gray-500 mt-0.5 truncate">{r.user.email}</div>
+                      <div className="text-[11px] text-fg-3 mt-0.5 truncate">{r.user.email}</div>
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {r.factors.slice(0, 3).map((f, i) => (
-                          <span key={i} className={`text-[10px] ${bandBg} text-gray-700 px-1.5 py-0.5 rounded`}>{f}</span>
+                          <span key={i} className={`text-[11px] ${bandBg} text-fg-2 px-1.5 py-0.5 rounded`}>{f}</span>
                         ))}
                       </div>
-                      <div className="text-[10px] text-gray-400 mt-1.5">
+                      <div className="text-[11px] text-fg-4 mt-1.5">
                         Last activity: {r.lastActivity ? daysAgo(r.lastActivity.toISOString()) : "never"}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-12 h-1.5 bg-raised-2 rounded-full overflow-hidden">
                           <div className="h-full" style={{ width: `${r.score}%`, background: bandColor }} />
                         </div>
-                        <span className="text-sm font-extrabold w-7 text-right" style={{ color: bandColor }}>{r.score}</span>
+                        <span className="text-sm font-semibold w-7 text-right" style={{ color: bandColor }}>{r.score}</span>
                       </div>
                       {!isMobile && r.user.email && (
                         <button
                           onClick={() => contactUser(r)}
                           disabled={contacting === r.user.id}
-                          className="text-[10px] font-bold px-2.5 py-1 rounded-md border border-gray-200 bg-white text-gray-700 cursor-pointer hover:bg-gray-50 disabled:opacity-50 transition-all"
+                          className="btn btn-sm btn-secondary"
                         >
                           {contacting === r.user.id ? "Sending…" : "Reach out"}
                         </button>
@@ -173,7 +173,7 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
                 );
               })}
               {filtered.length > 50 && (
-                <div className="text-[11px] text-gray-400 text-center pt-3">
+                <div className="text-[11px] text-fg-4 text-center pt-3">
                   Showing 50 of {filtered.length} users.
                 </div>
               )}
@@ -188,10 +188,10 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Pre-churn engagement pattern</CardTitle>
-            <span className="text-[10px] text-gray-400">Avg weekly activity in the 60 days before cancellation</span>
+            <span className="text-[11px] text-fg-4">Avg weekly activity in the 60 days before cancellation</span>
           </div>
           {decay.length === 0 ? (
-            <div className="text-xs text-gray-400 py-8 text-center">Not enough churn history to compute decay pattern yet.</div>
+            <div className="text-xs text-fg-4 py-8 text-center">Not enough churn history to compute decay pattern yet.</div>
           ) : (
             <>
               <LineChart
@@ -203,7 +203,7 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
                   { label: "Retained users", data: decay.map(p => p.retainedAvg), color: "#10B981", dashed: true },
                 ]}
               />
-              <p className="text-[11px] text-gray-500 mt-3">
+              <p className="text-[11px] text-fg-3 mt-3">
                 The further the red line drops below the green line — and the earlier — the earlier you should intervene.
                 Use the gap as a leading indicator: when an active user&apos;s weekly activity drops below the retained-user average,
                 add them to the contact queue regardless of their current risk score.
@@ -215,7 +215,7 @@ export default function ChurnSub({ users, data, token, isMobile }: SubProps) {
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg shadow-lg z-50 ${toast.ok ? "bg-emerald-600" : "bg-rose-600"} text-white text-xs font-semibold`}>
+        <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg shadow-lg z-50 ${toast.ok ? "bg-success" : "bg-danger"} text-white text-xs font-semibold`}>
           {toast.msg}
         </div>
       )}

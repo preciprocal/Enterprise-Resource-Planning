@@ -80,11 +80,11 @@ function fullDate(iso: string) {
 type TicketStatus   = "open" | "in-progress" | "resolved" | "closed";
 type TicketPriority = "urgent" | "high" | "medium" | "low";
 
-const STATUS_META: Record<TicketStatus, { label: string; color: string; bg: string; border: string }> = {
-  open:          { label: "Open",        color: "#3ecf8e", bg: "rgba(62,207,142,0.08)",  border: "rgba(62,207,142,0.2)"  },
-  "in-progress": { label: "In Progress", color: "#f5a623", bg: "rgba(245,166,35,0.08)",  border: "rgba(245,166,35,0.2)"  },
-  resolved:      { label: "Resolved",    color: "#0070f3", bg: "rgba(0,112,243,0.08)",   border: "rgba(0,112,243,0.2)"   },
-  closed:        { label: "Closed",      color: "#555",    bg: "rgba(85,85,85,0.08)",    border: "rgba(85,85,85,0.2)"    },
+const STATUS_META: Record<TicketStatus, { label: string; badge: string }> = {
+  open:          { label: "Open",        badge: "badge-success" },
+  "in-progress": { label: "In Progress", badge: "badge-warning" },
+  resolved:      { label: "Resolved",    badge: "badge-brand"   },
+  closed:        { label: "Closed",      badge: "badge-neutral" },
 };
 
 // Refetch whenever the given table changes. Realtime needs the admin SELECT
@@ -103,28 +103,19 @@ function useLiveRefetch(table: string, filter: string | undefined, refetch: () =
 }
 
 const PRIORITY_META: Record<TicketPriority, { label: string; color: string }> = {
-  urgent: { label: "Urgent", color: "#f44" },
-  high:   { label: "High",   color: "#f5a623" },
-  medium: { label: "Medium", color: "#0070f3" },
-  low:    { label: "Low",    color: "#888" },
+  urgent: { label: "Urgent", color: "var(--danger-fg)" },
+  high:   { label: "High",   color: "var(--warning-fg)" },
+  medium: { label: "Medium", color: "var(--brand-fg)" },
+  low:    { label: "Low",    color: "var(--fg-3)" },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const m = STATUS_META[status as TicketStatus] ?? {
-    label: status, color: "#888", bg: "rgba(136,136,136,0.08)", border: "rgba(136,136,136,0.2)",
-  };
-  return (
-    <span
-      className="inline-flex items-center px-2 py-0.5 rounded text-[12px] font-medium border shrink-0"
-      style={{ color: m.color, background: m.bg, borderColor: m.border }}
-    >
-      {m.label}
-    </span>
-  );
+  const m = STATUS_META[status as TicketStatus] ?? { label: status, badge: "badge-neutral" };
+  return <span className={`badge ${m.badge} shrink-0`}>{m.label}</span>;
 }
 
 function PriorityDot({ priority }: { priority: string }) {
-  const m = PRIORITY_META[priority as TicketPriority] ?? { label: priority, color: "#888" };
+  const m = PRIORITY_META[priority as TicketPriority] ?? { label: priority, color: "var(--fg-3)" };
   return (
     <span className="flex items-center gap-1.5 text-[12px]" style={{ color: m.color }}>
       <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: m.color }} />
@@ -141,17 +132,13 @@ export default function SupportTab({ token: tokenProp }: { token?: string }) {
   const [activeView, setActiveView] = useState<"tickets" | "feedback" | "surveys">("tickets");
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-black min-h-0 overflow-hidden">
-      <div className="flex items-center gap-1 px-5 py-3 border-b border-[#1a1a1a] shrink-0">
+    <div className="flex-1 flex flex-col h-full bg-canvas min-h-0 overflow-hidden">
+      <div className="tabs px-3 md:px-4 shrink-0">
         {(["tickets", "feedback", "surveys"] as const).map(v => (
           <button
             key={v}
             onClick={() => setActiveView(v)}
-            className={`px-3 py-1.5 rounded text-[14px] font-medium transition-colors ${
-              activeView === v
-                ? "bg-[#ededed] text-black"
-                : "text-[#888] hover:text-[#ededed] hover:bg-[#111]"
-            }`}
+            className={`tab ${activeView === v ? "tab-active" : ""}`}
           >
             {v === "tickets" ? "Tickets" : v === "feedback" ? "Feedback" : "Surveys"}
           </button>
@@ -225,24 +212,23 @@ function TicketsView({ token }: { token?: string }) {
   return (
     <div className="flex h-full min-h-0">
       {/* List panel — full width on phones, hidden while a ticket is open there */}
-      <div className={`${selected ? "hidden md:flex" : "flex"} w-full md:w-80 shrink-0 flex-col md:border-r border-[#1a1a1a] min-h-0`}>
-        <div className="p-3 space-y-2 border-b border-[#1a1a1a] shrink-0">
+      <div className={`${selected ? "hidden md:flex" : "flex"} w-full md:w-80 shrink-0 flex-col md:border-r border-line min-h-0`}>
+        <div className="p-3 space-y-2 border-b border-line shrink-0">
           <div className="relative">
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#555]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search tickets..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded text-[14px] text-[#ededed] placeholder-[#555] outline-none focus:border-[#444]"
+              className="field pl-9"
             />
           </div>
           <div className="flex gap-2">
             <Select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="text-[13px]"
               wrapperClassName="flex-1"
             >
               <option value="all">All Status</option>
@@ -254,7 +240,6 @@ function TicketsView({ token }: { token?: string }) {
             <Select
               value={priorityFilter}
               onChange={e => setPriorityFilter(e.target.value)}
-              className="text-[13px]"
               wrapperClassName="flex-1"
             >
               <option value="all">All Priority</option>
@@ -270,36 +255,36 @@ function TicketsView({ token }: { token?: string }) {
           {loading ? (
             <div className="p-4 space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-16 skeleton rounded" />
+                <div key={i} className="h-16 skeleton rounded-lg" />
               ))}
             </div>
           ) : error ? (
-            <div className="p-4 text-[#f44] text-[14px]">{error}</div>
+            <div className="p-4 text-danger-fg text-[13px]">{error}</div>
           ) : filtered.length === 0 ? (
-            <div className="p-8 text-center text-[#555] text-[14px]">No tickets found</div>
+            <div className="empty">No tickets found</div>
           ) : (
             filtered.map(t => (
               <button
                 key={t.id}
                 onClick={() => setSelected(selected?.id === t.id ? null : t)}
-                className={`w-full text-left px-3 py-3 border-b border-[#1a1a1a] transition-colors ${
-                  selected?.id === t.id ? "bg-[#111]" : "hover:bg-[#0a0a0a]"
+                className={`w-full text-left px-3 py-3 border-b border-line-soft transition-colors ${
+                  selected?.id === t.id ? "bg-active" : "hover:bg-hover"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="text-[14px] text-[#ededed] font-medium leading-tight line-clamp-1 flex-1">
+                  <span className="text-[13px] text-fg font-medium leading-tight line-clamp-1 flex-1">
                     {t.title ?? t.subject ?? "Untitled"}
                   </span>
                   <StatusBadge status={t.status} />
                 </div>
                 <div className="flex items-center justify-between">
                   <PriorityDot priority={t.priority} />
-                  <span className="text-[12px] text-[#555]">
+                  <span className="text-[12px] text-fg-4">
                     {t.createdAt ? relTime(t.createdAt) : ""}
                   </span>
                 </div>
                 {t.userEmail && (
-                  <div className="mt-1 text-[12px] text-[#555] truncate">{t.userEmail}</div>
+                  <div className="mt-1 text-[12px] text-fg-4 truncate">{t.userEmail}</div>
                 )}
               </button>
             ))
@@ -307,7 +292,7 @@ function TicketsView({ token }: { token?: string }) {
         </div>
 
         {!loading && !error && (
-          <div className="px-3 py-2 border-t border-[#1a1a1a] text-[12px] text-[#555] shrink-0">
+          <div className="px-3 py-2 border-t border-line text-[12px] text-fg-4 shrink-0">
             {filtered.length} ticket{filtered.length !== 1 ? "s" : ""}
           </div>
         )}
@@ -328,11 +313,11 @@ function TicketsView({ token }: { token?: string }) {
             }}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-[#555]">
+          <div className="flex flex-col items-center justify-center h-full text-fg-4">
             <svg className="w-8 h-8 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
             </svg>
-            <span className="text-[14px]">Select a ticket to view details</span>
+            <span className="text-[13px]">Select a ticket to view details</span>
           </div>
         )}
       </div>
@@ -459,26 +444,20 @@ function TicketDetail({
     notes !== (ticket.notes ?? "");
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-black relative">
-      {/* Top border accent */}
-      <div
-        className="absolute top-0 left-0 right-0 h-0.5 z-10"
-        style={{ background: "linear-gradient(90deg, #0070f3, #3ecf8e)" }}
-      />
-
+    <div className="flex flex-col h-full min-h-0 bg-canvas relative">
       {/* Header */}
-      <div className="px-4 md:px-5 pt-5 pb-4 border-b border-[#1a1a1a] shrink-0 bg-[#0a0a0a]">
+      <div className="px-4 md:px-5 pt-5 pb-4 border-b border-line shrink-0 bg-surface">
         {onBack && (
           <button onClick={onBack}
-            className="md:hidden flex items-center gap-1.5 text-[13px] text-[#888] hover:text-[#ededed] bg-transparent border-none p-0 mb-2 cursor-pointer">
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+            className="btn btn-ghost btn-sm md:hidden -ml-2.5 mb-2">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
             All tickets
           </button>
         )}
-        <h2 className="text-[15px] font-semibold text-[#ededed] mb-1 leading-tight">
+        <h2 className="section-title mb-1">
           {ticket.title ?? ticket.subject ?? "Untitled Ticket"}
         </h2>
-        <div className="flex items-center gap-3 text-[13px] text-[#555] flex-wrap">
+        <div className="flex items-center gap-3 text-[12px] text-fg-4 flex-wrap">
           <span className="font-mono">#{ticket.id.slice(-8)}</span>
           {ticket.userEmail && <span>{ticket.userEmail}</span>}
           {ticket.userName && <span>· {ticket.userName}</span>}
@@ -491,9 +470,9 @@ function TicketDetail({
         {/* Thread area */}
         <div className="flex-1 flex flex-col min-h-[60vh] md:min-h-0">
           {(ticket.description ?? ticket.message) && (
-            <div className="px-5 py-4 border-b border-[#111] shrink-0">
-              <div className="text-[11px] text-[#555] uppercase tracking-wide mb-2">Original Message</div>
-              <p className="text-[14px] text-[#aaa] leading-relaxed whitespace-pre-wrap">
+            <div className="px-5 py-4 border-b border-line-soft shrink-0">
+              <div className="label mb-2">Original Message</div>
+              <p className="text-body whitespace-pre-wrap">
                 {ticket.description ?? ticket.message}
               </p>
             </div>
@@ -502,10 +481,10 @@ function TicketDetail({
           <div ref={threadRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
             {loadingReplies ? (
               <div className="space-y-3">
-                {[1, 2].map(i => <div key={i} className="h-16 skeleton rounded" />)}
+                {[1, 2].map(i => <div key={i} className="h-16 skeleton rounded-lg" />)}
               </div>
             ) : replies.length === 0 ? (
-              <div className="text-center text-[#555] text-[13px] py-8">No replies yet</div>
+              <div className="text-center text-fg-4 text-[13px] py-8">No replies yet</div>
             ) : (
               replies.map(r => (
                 <div
@@ -515,22 +494,19 @@ function TicketDetail({
                   <div
                     className={`max-w-[75%] px-3 py-2.5 rounded-lg ${
                       r.isStaff
-                        ? "bg-[rgba(0,112,243,0.1)] border border-[rgba(0,112,243,0.15)]"
-                        : "bg-[#111] border border-[#1a1a1a]"
+                        ? "bg-brand-soft border border-brand-line"
+                        : "bg-raised border border-line"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className="text-[12px] font-medium"
-                        style={{ color: r.isStaff ? "#0070f3" : "#888" }}
-                      >
+                      <span className={`text-[12px] font-medium ${r.isStaff ? "text-brand-fg" : "text-fg-3"}`}>
                         {r.isStaff ? "Support" : r.fromEmail}
                       </span>
-                      <span className="text-[11px] text-[#444]">
+                      <span className="text-[11px] text-fg-5">
                         {r.createdAt ? relTime(r.createdAt) : ""}
                       </span>
                     </div>
-                    <p className="text-[14px] text-[#ededed] leading-relaxed whitespace-pre-wrap">
+                    <p className="text-[13px] text-fg leading-relaxed whitespace-pre-wrap">
                       {r.message}
                     </p>
                   </div>
@@ -539,7 +515,7 @@ function TicketDetail({
             )}
           </div>
 
-          <div className="px-4 py-3 border-t border-[#1a1a1a] shrink-0">
+          <div className="px-4 py-3 border-t border-line-soft shrink-0">
             <div className="flex gap-2">
               <textarea
                 value={replyText}
@@ -547,12 +523,12 @@ function TicketDetail({
                 onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) sendReply(); }}
                 placeholder="Type a reply… (Ctrl+Enter to send)"
                 rows={2}
-                className="flex-1 px-3 py-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded text-[14px] text-[#ededed] placeholder-[#555] outline-none focus:border-[#444] resize-none"
+                className="field flex-1 min-h-0 resize-none"
               />
               <button
                 onClick={sendReply}
                 disabled={sending || !replyText.trim()}
-                className="px-4 py-2 bg-[#ededed] text-black rounded text-[13px] font-medium disabled:opacity-40 hover:bg-white transition-colors self-end"
+                className="btn btn-primary self-end"
               >
                 {sending ? "…" : "Send"}
               </button>
@@ -561,13 +537,12 @@ function TicketDetail({
         </div>
 
         {/* Right sidebar */}
-        <div className="w-full md:w-52 border-t md:border-t-0 md:border-l border-[#1a1a1a] p-4 space-y-4 shrink-0 md:overflow-y-auto bg-[#0a0a0a]">
+        <div className="w-full md:w-52 border-t md:border-t-0 md:border-l border-line p-4 space-y-4 shrink-0 md:overflow-y-auto bg-surface">
           <div>
-            <label className="block text-[11px] text-[#555] uppercase tracking-wide mb-1.5">Status</label>
+            <label className="label block mb-1.5">Status</label>
             <Select
               value={status}
               onChange={e => setStatus(e.target.value as TicketStatus)}
-              className="text-[13px]"
             >
               <option value="open">Open</option>
               <option value="in-progress">In Progress</option>
@@ -577,11 +552,10 @@ function TicketDetail({
           </div>
 
           <div>
-            <label className="block text-[11px] text-[#555] uppercase tracking-wide mb-1.5">Priority</label>
+            <label className="label block mb-1.5">Priority</label>
             <Select
               value={priority}
               onChange={e => setPriority(e.target.value as TicketPriority)}
-              className="text-[13px]"
             >
               <option value="urgent">Urgent</option>
               <option value="high">High</option>
@@ -591,13 +565,13 @@ function TicketDetail({
           </div>
 
           <div>
-            <label className="block text-[11px] text-[#555] uppercase tracking-wide mb-1.5">Internal Notes</label>
+            <label className="label block mb-1.5">Internal Notes</label>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={4}
               placeholder="Admin notes…"
-              className="w-full px-2 py-1.5 bg-black border border-[#2a2a2a] rounded text-[13px] text-[#ededed] placeholder-[#444] outline-none focus:border-[#444] resize-none"
+              className="field resize-none"
             />
           </div>
 
@@ -606,15 +580,12 @@ function TicketDetail({
               <button
                 onClick={saveChanges}
                 disabled={saving}
-                className="w-full py-1.5 bg-[#ededed] text-black rounded text-[13px] font-medium hover:bg-white transition-colors disabled:opacity-50"
+                className="btn btn-primary w-full"
               >
                 {saving ? "Saving…" : "Save Changes"}
               </button>
               {saveMsg && (
-                <p
-                  className="text-[12px] text-center"
-                  style={{ color: saveMsg === "Saved" ? "#3ecf8e" : "#f44" }}
-                >
+                <p className={`text-[12px] text-center ${saveMsg === "Saved" ? "text-success-fg" : "text-danger-fg"}`}>
                   {saveMsg}
                 </p>
               )}
@@ -623,13 +594,10 @@ function TicketDetail({
 
           {(ticket.tags ?? []).length > 0 && (
             <div>
-              <label className="block text-[11px] text-[#555] uppercase tracking-wide mb-1.5">Tags</label>
+              <label className="label block mb-1.5">Tags</label>
               <div className="flex flex-wrap gap-1">
                 {ticket.tags!.map(tag => (
-                  <span
-                    key={tag}
-                    className="px-1.5 py-0.5 bg-[#111] border border-[#1a1a1a] rounded text-[11px] text-[#888]"
-                  >
+                  <span key={tag} className="badge badge-neutral">
                     {tag}
                   </span>
                 ))}
@@ -639,8 +607,8 @@ function TicketDetail({
 
           {ticket.updatedAt && (
             <div>
-              <div className="text-[11px] text-[#555] uppercase tracking-wide mb-0.5">Last Updated</div>
-              <div className="text-[12px] text-[#555]">{relTime(ticket.updatedAt)}</div>
+              <div className="label mb-0.5">Last Updated</div>
+              <div className="text-[12px] text-fg-4">{relTime(ticket.updatedAt)}</div>
             </div>
           )}
         </div>
@@ -655,9 +623,9 @@ const FB_KNOWN_KEYS = new Set(["id", "type", "userId", "userEmail", "userName", 
 const FB_TEXT_KEYS  = ["comment", "message", "text", "feedback", "notes", "details", "content", "description", "response", "answer", "summary"];
 
 function fbTypeStyle(type?: string) {
-  if (type === "interview-assessment") return { color: "#0070f3", bg: "rgba(0,112,243,0.08)",  border: "rgba(0,112,243,0.2)",  label: "Assessment"    };
-  if (type === "feature-rating")       return { color: "#3ecf8e", bg: "rgba(62,207,142,0.08)", border: "rgba(62,207,142,0.2)", label: "Feature Rating" };
-  return                                      { color: "#888",    bg: "rgba(136,136,136,0.08)",border: "rgba(136,136,136,0.2)",label: type ?? "Other"  };
+  if (type === "interview-assessment") return { badge: "badge-brand",   label: "Assessment"     };
+  if (type === "feature-rating")       return { badge: "badge-success", label: "Feature Rating" };
+  return                                      { badge: "badge-neutral", label: type ?? "Other"  };
 }
 
 function fbInitials(item: FeedbackItem): string {
@@ -679,7 +647,7 @@ function FbStars({ rating, max = 5 }: { rating: number; max?: number }) {
   return (
     <div className="flex items-center gap-0.5">
       {Array.from({ length: max }).map((_, i) => (
-        <svg key={i} className={`w-3 h-3 ${i < full ? "text-[#f5a623]" : "text-[#2a2a2a]"}`} fill="currentColor" viewBox="0 0 20 20">
+        <svg key={i} className={`w-3 h-3 ${i < full ? "text-warning-fg" : "text-fg-5"}`} fill="currentColor" viewBox="0 0 20 20">
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
         </svg>
       ))}
@@ -688,14 +656,14 @@ function FbStars({ rating, max = 5 }: { rating: number; max?: number }) {
 }
 
 function FbExtraValue({ value }: { value: unknown }) {
-  if (value === null || value === undefined) return <span className="text-[#444]">—</span>;
+  if (value === null || value === undefined) return <span className="text-fg-5">—</span>;
   if (typeof value === "boolean")  return <span>{value ? "Yes" : "No"}</span>;
   if (typeof value === "number" || typeof value === "string") return <span>{String(value)}</span>;
   if (Array.isArray(value)) {
     return (
       <div className="flex flex-wrap gap-1 mt-1">
         {value.map((v, i) => (
-          <span key={i} className="px-1.5 py-0.5 bg-[#111] border border-[#1a1a1a] rounded text-[11px] text-[#888]">
+          <span key={i} className="badge badge-neutral">
             {typeof v === "object" ? JSON.stringify(v) : String(v)}
           </span>
         ))}
@@ -707,8 +675,8 @@ function FbExtraValue({ value }: { value: unknown }) {
       <div className="mt-1 space-y-1">
         {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
           <div key={k} className="flex items-start justify-between gap-2">
-            <span className="text-[11px] text-[#555] capitalize shrink-0">{humanKey(k)}</span>
-            <span className="text-[12px] text-[#888] text-right">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
+            <span className="text-[11px] text-fg-4 capitalize shrink-0">{humanKey(k)}</span>
+            <span className="text-[12px] text-fg-3 text-right">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
           </div>
         ))}
       </div>
@@ -768,25 +736,25 @@ function FeedbackView({ token }: { token?: string }) {
       {/* Left: list */}
       <div className="flex-1 flex flex-col min-h-0">
         {/* Toolbar */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-[#1a1a1a] shrink-0 flex-wrap">
-          <span className="text-[13px] font-medium text-[#555]">User Reviews</span>
+        <div className="toolbar shrink-0">
+          <span className="text-[13px] font-medium text-fg-4">User Reviews</span>
           <input
             value={serviceKey}
             onChange={e => setServiceKey(e.target.value)}
             onBlur={() => load()}
             onKeyDown={e => { if (e.key === "Enter") load(); }}
             placeholder="Filter by service key…"
-            className="px-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded text-[13px] text-[#ededed] placeholder-[#555] outline-none focus:border-[#444] w-48"
+            className="field field-sm w-48"
           />
           <div className="relative ml-auto">
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#555]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search…"
-              className="pl-8 pr-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded text-[13px] text-[#ededed] placeholder-[#555] outline-none focus:border-[#444] w-40"
+              className="field field-sm pl-9 w-40"
             />
           </div>
         </div>
@@ -796,13 +764,13 @@ function FeedbackView({ token }: { token?: string }) {
           {loading ? (
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-24 bg-[#0a0a0a] rounded-xl animate-pulse" />
+                <div key={i} className="h-24 skeleton rounded-xl" />
               ))}
             </div>
           ) : error ? (
-            <div className="p-5 text-[#f44] text-[14px]">{error}</div>
+            <div className="p-5 text-danger-fg text-[13px]">{error}</div>
           ) : filtered.length === 0 ? (
-            <div className="p-10 text-center text-[#555] text-[14px]">No feedback found</div>
+            <div className="empty">No feedback found</div>
           ) : (
             <div className="space-y-2">
               {filtered.map(item => {
@@ -817,15 +785,13 @@ function FeedbackView({ token }: { token?: string }) {
                   <div
                     key={item.id}
                     onClick={() => setSelected(isSel ? null : item)}
-                    className={`rounded-xl border cursor-pointer transition-all ${
-                      isSel
-                        ? "bg-[#0f0f0f] border-[#2a2a2a]"
-                        : "bg-[#0a0a0a] border-[#1a1a1a] hover:border-[#2a2a2a] hover:bg-[#0c0c0c]"
+                    className={`card cursor-pointer transition-colors ${
+                      isSel ? "border-brand-line bg-raised" : "hover:border-line-hover"
                     }`}
                   >
                     <div className="flex items-start gap-3 p-4">
                       {/* Avatar */}
-                      <div className="w-9 h-9 rounded-full bg-[#1a1a1a] border border-[#222] flex items-center justify-center text-[12px] font-semibold text-[#666] shrink-0 uppercase">
+                      <div className="w-9 h-9 rounded-full bg-raised-2 border border-line flex items-center justify-center text-[12px] font-semibold text-fg-4 shrink-0 uppercase">
                         {initials}
                       </div>
 
@@ -835,33 +801,28 @@ function FeedbackView({ token }: { token?: string }) {
                           <div className="min-w-0">
                             {item.userName ? (
                               <>
-                                <div className="text-[13px] font-semibold text-[#ededed] truncate">{item.userName}</div>
-                                <div className="text-[12px] text-[#555] truncate">{item.userEmail ?? item.userId ?? ""}</div>
+                                <div className="text-[13px] font-semibold text-fg truncate">{item.userName}</div>
+                                <div className="text-[12px] text-fg-4 truncate">{item.userEmail ?? item.userId ?? ""}</div>
                               </>
                             ) : (
-                              <div className="text-[13px] text-[#888] truncate">{item.userEmail ?? item.userId ?? item.id}</div>
+                              <div className="text-[13px] text-fg-3 truncate">{item.userEmail ?? item.userId ?? item.id}</div>
                             )}
                           </div>
                           <div className="flex flex-col items-end gap-1 shrink-0">
                             {isScale5 ? (
                               <FbStars rating={item.rating!} />
                             ) : isNum ? (
-                              <span className="text-[13px] font-semibold text-[#ededed]">{item.rating}</span>
+                              <span className="text-[13px] font-semibold text-fg">{item.rating}</span>
                             ) : null}
-                            <span className="text-[11px] text-[#3a3a3a]">{item.createdAt ? relTime(item.createdAt) : "—"}</span>
+                            <span className="text-[11px] text-fg-5">{item.createdAt ? relTime(item.createdAt) : "—"}</span>
                           </div>
                         </div>
 
                         {/* Badges row */}
                         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                          <span
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border"
-                            style={{ color: ts.color, background: ts.bg, borderColor: ts.border }}
-                          >
-                            {ts.label}
-                          </span>
+                          <span className={`badge ${ts.badge}`}>{ts.label}</span>
                           {item.serviceKey && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-[#0f0f0f] border border-[#1a1a1a] text-[#555]">
+                            <span className="badge badge-neutral">
                               {item.serviceKey}
                             </span>
                           )}
@@ -869,7 +830,7 @@ function FeedbackView({ token }: { token?: string }) {
 
                         {/* Preview */}
                         {preview && (
-                          <p className="mt-2 text-[12px] text-[#555] line-clamp-2 leading-relaxed">
+                          <p className="mt-2 text-[12px] text-fg-4 line-clamp-2 leading-relaxed">
                             {preview}
                           </p>
                         )}
@@ -883,7 +844,7 @@ function FeedbackView({ token }: { token?: string }) {
         </div>
 
         {!loading && !error && (
-          <div className="px-5 py-2 border-t border-[#1a1a1a] text-[12px] text-[#555] shrink-0">
+          <div className="px-5 py-2 border-t border-line text-[12px] text-fg-4 shrink-0">
             {filtered.length} result{filtered.length !== 1 ? "s" : ""}
           </div>
         )}
@@ -891,26 +852,26 @@ function FeedbackView({ token }: { token?: string }) {
 
       {/* Right: detail panel */}
       {selected && (
-        <div className="fixed inset-x-0 top-0 bottom-14 sm:bottom-0 z-40 w-full md:static md:inset-auto md:z-auto md:w-96 md:border-l border-[#1a1a1a] flex flex-col min-h-0 bg-[#050505]">
+        <div className="fixed inset-x-0 top-0 bottom-14 sm:bottom-0 z-40 w-full md:static md:inset-auto md:z-auto md:w-96 md:border-l border-line flex flex-col min-h-0 bg-surface">
           {/* Panel header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a] shrink-0">
-            <span className="text-[14px] font-semibold text-[#ededed]">Feedback Detail</span>
-            <button onClick={() => setSelected(null)} className="text-[#555] hover:text-[#888] text-xl leading-none">×</button>
+          <div className="card-header shrink-0">
+            <span className="section-title">Feedback Detail</span>
+            <button onClick={() => setSelected(null)} aria-label="Close" className="btn btn-ghost btn-sm btn-icon"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
           </div>
 
           <div className="flex-1 overflow-y-auto min-h-0">
             {/* User block */}
-            <div className="flex items-center gap-3 p-4 border-b border-[#111]">
-              <div className="w-11 h-11 rounded-full bg-[#1a1a1a] border border-[#222] flex items-center justify-center text-[14px] font-semibold text-[#666] uppercase shrink-0">
+            <div className="flex items-center gap-3 p-4 border-b border-line-soft">
+              <div className="w-11 h-11 rounded-full bg-raised-2 border border-line flex items-center justify-center text-[14px] font-semibold text-fg-4 uppercase shrink-0">
                 {fbInitials(selected)}
               </div>
               <div className="min-w-0">
                 {selected.userName && (
-                  <div className="text-[14px] font-semibold text-[#ededed] truncate">{selected.userName}</div>
+                  <div className="text-[14px] font-semibold text-fg truncate">{selected.userName}</div>
                 )}
-                <div className="text-[12px] text-[#555] truncate">{selected.userEmail ?? selected.userId ?? "—"}</div>
+                <div className="text-[12px] text-fg-4 truncate">{selected.userEmail ?? selected.userId ?? "—"}</div>
                 {selected.userId && selected.userEmail && (
-                  <div className="text-[11px] text-[#2a2a2a] font-mono truncate mt-0.5">{selected.userId}</div>
+                  <div className="text-[11px] text-fg-5 font-mono truncate mt-0.5">{selected.userId}</div>
                 )}
               </div>
             </div>
@@ -920,31 +881,24 @@ function FeedbackView({ token }: { token?: string }) {
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {/* Type */}
                 <div>
-                  <div className="text-[11px] text-[#444] uppercase tracking-wide mb-1">Type</div>
+                  <div className="label mb-1">Type</div>
                   {(() => {
                     const ts = fbTypeStyle(selected.type);
-                    return (
-                      <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border"
-                        style={{ color: ts.color, background: ts.bg, borderColor: ts.border }}
-                      >
-                        {ts.label}
-                      </span>
-                    );
+                    return <span className={`badge ${ts.badge}`}>{ts.label}</span>;
                   })()}
                 </div>
 
                 {/* Rating */}
                 {selected.rating !== undefined && selected.rating !== null && (
                   <div>
-                    <div className="text-[11px] text-[#444] uppercase tracking-wide mb-1">Rating</div>
+                    <div className="label mb-1">Rating</div>
                     {typeof selected.rating === "number" && selected.rating >= 1 && selected.rating <= 5 ? (
                       <div className="flex items-center gap-1.5">
                         <FbStars rating={selected.rating} />
-                        <span className="text-[12px] text-[#555]">{selected.rating}/5</span>
+                        <span className="text-[12px] text-fg-4">{selected.rating}/5</span>
                       </div>
                     ) : (
-                      <span className="text-[13px] font-semibold text-[#ededed]">{String(selected.rating)}</span>
+                      <span className="text-[13px] font-semibold text-fg">{String(selected.rating)}</span>
                     )}
                   </div>
                 )}
@@ -952,15 +906,15 @@ function FeedbackView({ token }: { token?: string }) {
                 {/* Service */}
                 {selected.serviceKey && (
                   <div>
-                    <div className="text-[11px] text-[#444] uppercase tracking-wide mb-1">Service</div>
-                    <span className="text-[12px] text-[#888] font-mono">{selected.serviceKey}</span>
+                    <div className="label mb-1">Service</div>
+                    <span className="text-[12px] text-fg-3 font-mono">{selected.serviceKey}</span>
                   </div>
                 )}
 
                 {/* Date */}
                 <div>
-                  <div className="text-[11px] text-[#444] uppercase tracking-wide mb-1">Submitted</div>
-                  <div className="text-[12px] text-[#666]">{selected.createdAt ? fullDate(selected.createdAt) : "—"}</div>
+                  <div className="label mb-1">Submitted</div>
+                  <div className="text-[12px] text-fg-4">{selected.createdAt ? fullDate(selected.createdAt) : "—"}</div>
                 </div>
               </div>
 
@@ -970,10 +924,10 @@ function FeedbackView({ token }: { token?: string }) {
                 if (typeof v !== "string" || !v.trim()) return null;
                 return (
                   <div key={k}>
-                    <div className="text-[11px] text-[#444] uppercase tracking-wide mb-1.5">
+                    <div className="label mb-1.5">
                       {humanKey(k)}
                     </div>
-                    <div className="text-[13px] text-[#aaa] leading-relaxed bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-3">
+                    <div className="text-body bg-subtle border border-line-soft rounded-lg p-3">
                       {v}
                     </div>
                   </div>
@@ -988,14 +942,14 @@ function FeedbackView({ token }: { token?: string }) {
                 if (extras.length === 0) return null;
                 return (
                   <div>
-                    <div className="text-[11px] text-[#444] uppercase tracking-wide mb-2">Additional</div>
-                    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden divide-y divide-[#111]">
+                    <div className="label mb-2">Additional</div>
+                    <div className="bg-subtle border border-line-soft rounded-lg overflow-hidden divide-y divide-line-soft">
                       {extras.map(([k, v]) => (
                         <div key={k} className="px-3 py-2.5">
-                          <div className="text-[11px] text-[#444] uppercase tracking-wide mb-0.5">
+                          <div className="label mb-0.5">
                             {humanKey(k)}
                           </div>
-                          <div className="text-[12px] text-[#888]">
+                          <div className="text-[12px] text-fg-3">
                             <FbExtraValue value={v} />
                           </div>
                         </div>
@@ -1057,16 +1011,16 @@ function SurveysView({ token }: { token?: string }) {
     <div className="flex h-full min-h-0">
       <div className="flex-1 flex flex-col min-h-0">
         {/* Toolbar */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-[#1a1a1a] shrink-0">
+        <div className="toolbar shrink-0">
           <div className="relative">
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#555]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search surveys…"
-              className="pl-8 pr-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded text-[13px] text-[#ededed] placeholder-[#555] outline-none focus:border-[#444] w-52"
+              className="field field-sm pl-9 w-52"
             />
           </div>
           <input
@@ -1074,11 +1028,11 @@ function SurveysView({ token }: { token?: string }) {
             onChange={e => setUserFilter(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") load(); }}
             placeholder="Filter by user ID…"
-            className="px-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded text-[13px] text-[#ededed] placeholder-[#555] outline-none focus:border-[#444] w-44"
+            className="field field-sm w-44"
           />
           <button
             onClick={load}
-            className="px-3 py-1.5 bg-[#0a0a0a] border border-[#2a2a2a] rounded text-[13px] text-[#888] hover:text-[#ededed] transition-colors"
+            className="btn btn-sm btn-secondary"
           >
             Apply
           </button>
@@ -1089,13 +1043,13 @@ function SurveysView({ token }: { token?: string }) {
           {loading ? (
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-28 skeleton rounded" />
+                <div key={i} className="h-28 skeleton rounded-xl" />
               ))}
             </div>
           ) : error ? (
-            <div className="text-[#f44] text-[14px]">{error}</div>
+            <div className="text-danger-fg text-[13px]">{error}</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center text-[#555] text-[14px] py-16">No surveys found</div>
+            <div className="empty">No surveys found</div>
           ) : (
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map(s => {
@@ -1106,29 +1060,27 @@ function SurveysView({ token }: { token?: string }) {
                   <button
                     key={s.id}
                     onClick={() => setSelected(selected?.id === s.id ? null : s)}
-                    className={`text-left p-4 rounded border transition-colors ${
-                      selected?.id === s.id
-                        ? "bg-[#111] border-[#2a2a2a]"
-                        : "bg-[#0a0a0a] border-[#1a1a1a] hover:bg-[#111] hover:border-[#2a2a2a]"
+                    className={`card card-pad text-left transition-colors ${
+                      selected?.id === s.id ? "border-brand-line bg-raised" : "hover:border-line-hover"
                     }`}
                   >
                     <div className="flex items-start justify-between mb-2">
-                      <span className="text-[13px] font-medium text-[#ededed] truncate flex-1">
+                      <span className="text-[13px] font-medium text-fg truncate flex-1">
                         {s.userEmail ?? s.userId ?? s.id.slice(-8)}
                       </span>
-                      <span className="text-[11px] text-[#555] shrink-0 ml-2">
+                      <span className="text-[11px] text-fg-4 shrink-0 ml-2">
                         {s.createdAt ? relTime(s.createdAt) : ""}
                       </span>
                     </div>
-                    <div className="text-[12px] text-[#555]">
+                    <div className="text-[12px] text-fg-4">
                       {dataKeys.length} field{dataKeys.length !== 1 ? "s" : ""}
                       {dataKeys.length > 0 && (
-                        <span className="ml-1 text-[#333]">
+                        <span className="ml-1 text-fg-5">
                           · {dataKeys.slice(0, 3).join(", ")}{dataKeys.length > 3 ? "…" : ""}
                         </span>
                       )}
                     </div>
-                    <div className="mt-2 text-[11px] text-[#333] font-mono truncate">{s.id}</div>
+                    <div className="mt-2 text-[11px] text-fg-5 font-mono truncate">{s.id}</div>
                   </button>
                 );
               })}
@@ -1137,7 +1089,7 @@ function SurveysView({ token }: { token?: string }) {
         </div>
 
         {!loading && !error && (
-          <div className="px-5 py-2 border-t border-[#1a1a1a] text-[12px] text-[#555] shrink-0">
+          <div className="px-5 py-2 border-t border-line text-[12px] text-fg-4 shrink-0">
             {filtered.length} response{filtered.length !== 1 ? "s" : ""}
           </div>
         )}
@@ -1145,10 +1097,10 @@ function SurveysView({ token }: { token?: string }) {
 
       {/* Detail */}
       {selected && (
-        <div className="fixed inset-x-0 top-0 bottom-14 sm:bottom-0 z-40 w-full md:static md:inset-auto md:z-auto md:w-96 md:border-l border-[#1a1a1a] flex flex-col min-h-0 bg-[#0a0a0a]">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a] shrink-0">
-            <span className="text-[14px] font-medium text-[#ededed]">Survey Response</span>
-            <button onClick={() => setSelected(null)} className="text-[#555] hover:text-[#888] text-xl leading-none">×</button>
+        <div className="fixed inset-x-0 top-0 bottom-14 sm:bottom-0 z-40 w-full md:static md:inset-auto md:z-auto md:w-96 md:border-l border-line flex flex-col min-h-0 bg-surface">
+          <div className="card-header shrink-0">
+            <span className="section-title">Survey Response</span>
+            <button onClick={() => setSelected(null)} aria-label="Close" className="btn btn-ghost btn-sm btn-icon"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
             {[
@@ -1157,18 +1109,18 @@ function SurveysView({ token }: { token?: string }) {
               { label: "Created", value: selected.createdAt ? fullDate(selected.createdAt) : undefined },
             ].filter(f => f.value).map(f => (
               <div key={f.label}>
-                <div className="text-[11px] text-[#555] uppercase tracking-wide mb-0.5">{f.label}</div>
-                <div className="text-[14px] text-[#ededed]">{f.value}</div>
+                <div className="label mb-0.5">{f.label}</div>
+                <div className="text-[13px] text-fg">{f.value}</div>
               </div>
             ))}
             {Object.entries(selected)
               .filter(([k]) => !["id", "userId", "userEmail", "createdAt"].includes(k))
               .map(([k, v]) => (
                 <div key={k}>
-                  <div className="text-[11px] text-[#555] uppercase tracking-wide mb-0.5">{humanKey(k)}</div>
-                  <div className="text-[13px] text-[#ededed]">
+                  <div className="label mb-0.5">{humanKey(k)}</div>
+                  <div className="text-[13px] text-fg">
                     {typeof v === "object" ? (
-                      <pre className="text-[12px] text-[#888] bg-[#050505] border border-[#1a1a1a] rounded p-2 overflow-auto whitespace-pre-wrap break-all">
+                      <pre className="text-[12px] text-fg-3 bg-subtle border border-line-soft rounded-lg p-2 overflow-auto whitespace-pre-wrap break-all">
                         {JSON.stringify(v, null, 2)}
                       </pre>
                     ) : (

@@ -7,7 +7,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { SL, Card, CardTitle, MetricCard } from "../admin/admin-shared";
+import { SL, Card, CardTitle, MetricCard, tint } from "../admin/admin-shared";
 import { SubProps } from "./analytics-types";
 import {
   computeAnomalies, computeSignupVelocity, computeMRRMovement,
@@ -40,19 +40,19 @@ export default function OverviewSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3">
             <CardTitle>This week vs last week</CardTitle>
-            <span className="text-[10px] text-gray-400">Top 5 movers by % change</span>
+            <span className="text-[11px] text-fg-4">Top 5 movers by % change</span>
           </div>
           <div className="flex flex-col">
             {anomalies.length === 0 && (
-              <div className="text-xs text-gray-400 py-6 text-center">Not enough data yet for week-over-week comparison.</div>
+              <div className="text-xs text-fg-4 py-6 text-center">Not enough data yet for week-over-week comparison.</div>
             )}
             {anomalies.map(a => (
-              <div key={a.metric} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
+              <div key={a.metric} className="flex items-center gap-3 py-2.5 border-b border-line-soft last:border-0">
                 <div className={`w-1 h-8 rounded shrink-0`} style={{ background: a.good ? "#10B981" : "#EF4444" }} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-gray-900 truncate">{a.metric}</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">
-                    <span className="font-semibold text-gray-700">{a.current.toLocaleString()}</span>
+                  <div className="text-[13px] font-semibold text-fg truncate">{a.metric}</div>
+                  <div className="text-[11px] text-fg-4 mt-0.5">
+                    <span className="font-semibold text-fg-2">{a.current.toLocaleString()}</span>
                     <span className="mx-1.5">vs</span>
                     {a.prior.toLocaleString()} last week
                   </div>
@@ -63,7 +63,7 @@ export default function OverviewSub({ users, data, isMobile }: SubProps) {
                   </div>
                 )}
                 <div className="shrink-0 text-right">
-                  <div className="text-base font-extrabold leading-none" style={{ color: a.good ? "#10B981" : "#EF4444" }}>
+                  <div className="text-base font-semibold leading-none" style={{ color: a.good ? "#10B981" : "#EF4444" }}>
                     {a.deltaPct > 0 ? "+" : ""}{a.deltaPct}%
                   </div>
                 </div>
@@ -110,15 +110,15 @@ export default function OverviewSub({ users, data, isMobile }: SubProps) {
         <Card>
           <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
             <CardTitle>Signups over time</CardTitle>
-            <span className="text-[10px] text-gray-400">Daily + 7-day & 28-day moving averages</span>
+            <span className="text-[11px] text-fg-4">Daily + 7-day & 28-day moving averages</span>
           </div>
           <LineChart
             labels={velocity.map(v => v.date.slice(5))}
             height={isMobile ? 200 : 260}
             showLegend
             series={[
-              { label: "Daily",   data: velocity.map(v => v.signups), color: "#E5E7EB" },
-              { label: "7-day MA", data: velocity.map(v => v.ma7),     color: "#6366F1" },
+              { label: "Daily",   data: velocity.map(v => v.signups), color: "#9aa3b2" },
+              { label: "7-day MA", data: velocity.map(v => v.ma7),     color: "#5b6cff" },
               { label: "28-day MA", data: velocity.map(v => v.ma28),   color: "#8B5CF6", dashed: true },
             ]}
           />
@@ -139,26 +139,26 @@ export default function OverviewSub({ users, data, isMobile }: SubProps) {
               return (
                 <div key={s.label}>
                   <div className="flex items-center gap-3">
-                    <div className="text-[11px] text-gray-500 font-medium w-44 truncate shrink-0">{s.label}</div>
-                    <div className="flex-1 bg-gray-50 rounded h-7 relative overflow-hidden">
+                    <div className="text-[11px] text-fg-3 font-medium w-44 truncate shrink-0">{s.label}</div>
+                    <div className="flex-1 bg-subtle rounded h-7 relative overflow-hidden">
                       <div
                         className="h-full rounded transition-all flex items-center pl-3"
-                        style={{ width: `${Math.max(widthPct, 3)}%`, background: i === 0 ? "#6366F1" : "#A5B4FC" }}
+                        style={{ width: `${Math.max(widthPct, 3)}%`, background: i === 0 ? "#5b6cff" : tint("#5b6cff", 0.55) }}
                       >
-                        <span className="text-[10px] font-bold text-white">{s.count.toLocaleString()}</span>
+                        <span className="text-[11px] font-bold text-white">{s.count.toLocaleString()}</span>
                       </div>
                     </div>
-                    <div className="w-12 text-right text-[11px] font-bold text-gray-700 shrink-0">{s.pctOfStart.toFixed(0)}%</div>
+                    <div className="w-12 text-right text-[11px] font-bold text-fg-2 shrink-0">{s.pctOfStart.toFixed(0)}%</div>
                   </div>
                   {i < funnel.length - 1 && (
-                    <div className="ml-44 pl-3 mt-0.5 text-[10px] flex items-center gap-2 text-gray-400">
+                    <div className="ml-44 pl-3 mt-0.5 text-[11px] flex items-center gap-2 text-fg-4">
                       <span>↓</span>
-                      <span className={isBigDrop ? "text-rose-500 font-semibold" : ""}>
+                      <span className={isBigDrop ? "text-danger-fg font-semibold" : ""}>
                         {dropPct.toFixed(0)}% drop
                         {isBigDrop && " ⚠ biggest leak"}
                       </span>
                       {funnel[i + 1].medianHoursFromPrev > 0 && (
-                        <span className="text-gray-400">· median {funnel[i + 1].medianHoursFromPrev.toFixed(1)}h</span>
+                        <span className="text-fg-4">· median {funnel[i + 1].medianHoursFromPrev.toFixed(1)}h</span>
                       )}
                     </div>
                   )}

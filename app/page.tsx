@@ -126,8 +126,8 @@ export default function Home() {
 
 function Spinner() {
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="w-6 h-6 rounded-full border-2 border-[#1a1a1a] border-t-[#ededed] animate-spin" />
+    <div className="min-h-screen bg-canvas flex items-center justify-center">
+      <div className="w-6 h-6 rounded-full border-2 border-line border-t-brand animate-spin" />
     </div>
   );
 }
@@ -135,21 +135,21 @@ function Spinner() {
 // ─── LoginGate ─────────────────────────────────────────────────────────────────
 
 // Shared by the sign-in, forgot-password and set-new-password screens.
-const inputCls = "w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3.5 py-2.5 text-[14px] text-[#ededed] outline-none focus:border-[#555] transition-colors placeholder:text-[#333] font-[inherit]";
-const labelCls = "block text-[11px] font-bold text-[#555] uppercase tracking-widest mb-1.5";
-const primaryBtnCls = "w-full py-2.5 rounded-lg text-[14px] font-bold bg-[#ededed] text-black border-none cursor-pointer hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors mt-1";
+const inputCls = "field h-10! text-[14px]!";
+const labelCls = "field-label mb-1.5";
+const primaryBtnCls = "btn btn-primary btn-lg w-full h-10! mt-1";
 
 function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-canvas flex flex-col items-center justify-center p-4 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,var(--brand-soft),transparent)]">
       <div className="w-full max-w-[360px]">
         <div className="flex flex-col items-center mb-8">
-          <Image src="/logo.png" alt="Preciprocal" className="w-10 h-10 object-contain mb-3" width={40} height={40} />
-          <div className="text-[18px] font-bold text-[#ededed] tracking-tight">Preciprocal</div>
-          <div className="text-[11px] font-medium text-[#555] uppercase tracking-[0.14em] mt-0.5">Enterprise Resource Planning</div>
+          <Image src="/logo.png" alt="Preciprocal" className="w-11 h-11 object-contain mb-3 rounded-[11px]" width={40} height={40} />
+          <div className="text-[18px] font-bold text-fg tracking-tight">Preciprocal</div>
+          <div className="text-[11px] font-medium text-fg-4 uppercase tracking-[0.14em] mt-0.5">Enterprise Resource Planning</div>
         </div>
-        <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-6">{children}</div>
-        <p className="text-center text-[11px] text-[#333] mt-5">Preciprocal ERP · Internal use only</p>
+        <div className="card p-6 shadow-[var(--shadow-pop)]">{children}</div>
+        <p className="text-center text-[11px] text-fg-5 mt-5">Preciprocal ERP · Internal use only</p>
       </div>
     </div>
   );
@@ -159,14 +159,14 @@ function Notice({ tone, children }: { tone: "error" | "ok"; children: React.Reac
   const err = tone === "error";
   return (
     <div className={`flex items-start gap-2 px-3 py-2.5 rounded-lg border ${err
-      ? "bg-[rgba(255,68,68,0.06)] border-[rgba(255,68,68,0.2)]"
-      : "bg-[rgba(62,207,142,0.06)] border-[rgba(62,207,142,0.2)]"}`}>
-      <svg width="13" height="13" fill="none" stroke={err ? "#f44" : "#3ecf8e"} strokeWidth="2" viewBox="0 0 24 24" className="shrink-0 mt-0.5">
+      ? "bg-danger-soft border-danger-line"
+      : "bg-success-soft border-success-line"}`}>
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className={`shrink-0 mt-0.5 ${err ? "text-danger-fg" : "text-success-fg"}`}>
         {err
           ? <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>
           : <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>}
       </svg>
-      <span className={`text-[12px] font-medium leading-relaxed ${err ? "text-[#f44]" : "text-[#3ecf8e]"}`}>{children}</span>
+      <span className={`text-[12px] font-medium leading-relaxed ${err ? "text-danger-fg" : "text-success-fg"}`}>{children}</span>
     </div>
   );
 }
@@ -174,7 +174,7 @@ function Notice({ tone, children }: { tone: "error" | "ok"; children: React.Reac
 function EyeToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   return (
     <button type="button" onClick={onToggle} aria-label={shown ? "Hide password" : "Show password"}
-      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer p-0 transition-colors">
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-4 hover:text-fg-3 border-none bg-transparent cursor-pointer p-0 transition-colors">
       {shown
         ? <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
         : <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
@@ -215,8 +215,8 @@ function LoginGate({ deniedMsg }: { deniedMsg?: string }) {
   if (mode === "forgot") return (
     <AuthShell>
       <div className="mb-5">
-        <h1 className="text-[17px] font-bold text-[#ededed] tracking-tight">Reset password</h1>
-        <p className="text-[13px] text-[#555] mt-1 leading-relaxed">We&apos;ll email you a link to set a new password. It&apos;s the same password as your Preciprocal app account.</p>
+        <h1 className="page-title">Reset password</h1>
+        <p className="text-[13px] text-fg-4 mt-1 leading-relaxed">We&apos;ll email you a link to set a new password. It&apos;s the same password as your Preciprocal app account.</p>
       </div>
       <form onSubmit={sendReset} className="flex flex-col gap-3">
         <div>
@@ -229,12 +229,12 @@ function LoginGate({ deniedMsg }: { deniedMsg?: string }) {
         {sentMsg && <Notice tone="ok">{sentMsg}</Notice>}
         <button type="submit" disabled={loading || !email.trim()} className={primaryBtnCls}>
           {loading
-            ? <><div className="w-4 h-4 rounded-full border-2 border-black/20 border-t-black animate-spin" />Sending…</>
+            ? <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Sending…</>
             : sentMsg ? "Send again" : "Send reset link"}
         </button>
       </form>
       <button type="button" onClick={() => { setMode("signin"); clear(); setSentMsg(""); }}
-        className="mt-4 w-full text-center text-[12px] text-[#666] hover:text-[#ededed] bg-transparent border-none cursor-pointer transition-colors">
+        className="link mt-4 w-full justify-center text-[12px]">
         ← Back to sign in
       </button>
     </AuthShell>
@@ -272,8 +272,8 @@ function LoginGate({ deniedMsg }: { deniedMsg?: string }) {
   return (
     <AuthShell>
           <div className="mb-5">
-            <h1 className="text-[17px] font-bold text-[#ededed] tracking-tight">Sign in</h1>
-            <p className="text-[13px] text-[#555] mt-1">Restricted to authorised admins only.</p>
+            <h1 className="page-title">Sign in</h1>
+            <p className="text-[13px] text-fg-4 mt-1">Restricted to authorised admins only.</p>
           </div>
 
           <form onSubmit={signInEmail} className="flex flex-col gap-3">
@@ -288,7 +288,7 @@ function LoginGate({ deniedMsg }: { deniedMsg?: string }) {
               <div className="flex items-center justify-between mb-1.5">
                 <label htmlFor="adm-pw" className={labelCls.replace(" mb-1.5", "")}>Password</label>
                 <button type="button" onClick={() => { setMode("forgot"); clear(); }}
-                  className="text-[12px] text-[#666] hover:text-[#ededed] bg-transparent border-none p-0 cursor-pointer transition-colors">
+                  className="link text-[12px]">
                   Forgot password?
                 </button>
               </div>
@@ -305,7 +305,7 @@ function LoginGate({ deniedMsg }: { deniedMsg?: string }) {
 
             <button type="submit" disabled={busy || !email.trim() || !password.trim()} className={primaryBtnCls}>
               {loading
-                ? <><div className="w-4 h-4 rounded-full border-2 border-black/20 border-t-black animate-spin" />Signing in…</>
+                ? <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Signing in…</>
                 : <>
                     <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                       <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
@@ -355,8 +355,8 @@ function SetPasswordGate({ onDone, onCancel }: { onDone: () => void | Promise<vo
   return (
     <AuthShell>
       <div className="mb-5">
-        <h1 className="text-[17px] font-bold text-[#ededed] tracking-tight">Set a new password</h1>
-        <p className="text-[13px] text-[#555] mt-1 leading-relaxed">This also changes the password for your Preciprocal app account.</p>
+        <h1 className="page-title">Set a new password</h1>
+        <p className="text-[13px] text-fg-4 mt-1 leading-relaxed">This also changes the password for your Preciprocal app account.</p>
       </div>
       <form onSubmit={save} className="flex flex-col gap-3">
         <div>
@@ -367,24 +367,24 @@ function SetPasswordGate({ onDone, onCancel }: { onDone: () => void | Promise<vo
               placeholder="At least 8 characters" className={`${inputCls} pr-10`} />
             <EyeToggle shown={showPw} onToggle={() => setShowPw(v => !v)} />
           </div>
-          {tooShort && <p className="text-[11px] text-[#f5a623] mt-1">At least 8 characters</p>}
+          {tooShort && <p className="text-[11px] text-warning-fg mt-1">At least 8 characters</p>}
         </div>
         <div>
           <label htmlFor="adm-new-pw2" className={labelCls}>Confirm password</label>
           <input id="adm-new-pw2" type={showPw ? "text" : "password"} value={pw2} autoComplete="new-password"
             onChange={e => { setPw2(e.target.value); setError(""); }}
             placeholder="Type it again" className={inputCls} />
-          {mismatch && <p className="text-[11px] text-[#f5a623] mt-1">Passwords don&apos;t match</p>}
+          {mismatch && <p className="text-[11px] text-warning-fg mt-1">Passwords don&apos;t match</p>}
         </div>
         {error && <Notice tone="error">{error}</Notice>}
         <button type="submit" disabled={saving || pw.length < 8 || pw !== pw2} className={primaryBtnCls}>
           {saving
-            ? <><div className="w-4 h-4 rounded-full border-2 border-black/20 border-t-black animate-spin" />Saving…</>
+            ? <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Saving…</>
             : "Save password and sign in"}
         </button>
       </form>
       <button type="button" onClick={onCancel}
-        className="mt-4 w-full text-center text-[12px] text-[#666] hover:text-[#ededed] bg-transparent border-none cursor-pointer transition-colors">
+        className="link mt-4 w-full justify-center text-[12px]">
         ← Back to sign in
       </button>
     </AuthShell>

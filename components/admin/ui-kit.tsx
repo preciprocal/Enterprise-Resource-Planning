@@ -10,26 +10,26 @@ export function Block({ title, count, action, children }: { title: string; count
   return (
     <section className="flex flex-col gap-2.5 min-w-0">
       <div className="flex items-center justify-between gap-3 min-h-7">
-        <h3 className="text-[13px] font-semibold text-[#ccc] tracking-tight">
-          {title}{count !== undefined && <span className="ml-2 text-[12px] font-normal text-[#555] tabular-nums">{count}</span>}
+        <h3 className="section-title">
+          {title}{count !== undefined && <span className="ml-2 text-[12px] font-normal text-fg-4 num">{count}</span>}
         </h3>
         {action}
       </div>
-      <div className="bg-[#0a0a0a] border border-[#141414] rounded-xl overflow-hidden min-w-0">{children}</div>
+      <div className="card overflow-hidden">{children}</div>
     </section>
   );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="px-4 py-6 text-center text-[13px] text-[#555]">{children}</div>;
+  return <div className="empty">{children}</div>;
 }
 
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: string }) {
   return (
-    <div className="bg-[#0a0a0a] border border-[#141414] rounded-xl px-4 py-3 min-w-0">
-      <div className="text-[11px] font-medium text-[#555] uppercase tracking-wider truncate">{label}</div>
-      <div className="text-[20px] font-semibold leading-tight mt-1 tabular-nums truncate text-[#ededed]" style={tone ? { color: tone } : undefined}>{value}</div>
-      {sub && <div className="text-[12px] text-[#555] mt-0.5 truncate">{sub}</div>}
+    <div className="card px-4 py-3.5">
+      <div className="label truncate">{label}</div>
+      <div className="text-[20px] font-semibold leading-tight mt-1.5 num truncate text-fg tracking-tight" style={tone ? { color: tone } : undefined}>{value}</div>
+      {sub && <div className="text-caption mt-0.5 truncate">{sub}</div>}
     </div>
   );
 }
@@ -44,24 +44,24 @@ export function Table<T>({ rows, cols, empty, rowKey, limit = 8 }: { rows: T[]; 
   const shown = all ? rows : rows.slice(0, limit);
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left">
+      <table className="data-table">
         <thead>
-          <tr className="border-b border-[#141414]">
-            {cols.map(c => <th key={c.label} className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#444] whitespace-nowrap ${c.hide ? HIDE[c.hide] : ""}`}>{c.label}</th>)}
+          <tr>
+            {cols.map(c => <th key={c.label} className={c.hide ? HIDE[c.hide] : ""}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {shown.map((r, i) => (
-            <tr key={rowKey(r, i)} className="border-b border-[#0f0f0f] last:border-0 hover:bg-[#0d0d0d] transition-colors">
+            <tr key={rowKey(r, i)}>
               {/* First column holds the (truncating) title; the rest are short values that must not wrap */}
-              {cols.map((c, ci) => <td key={c.label} className={`px-4 py-2.5 text-[13px] text-[#999] align-top ${ci > 0 ? "whitespace-nowrap" : ""} ${c.hide ? HIDE[c.hide] : ""} ${c.className ?? ""}`}>{c.cell(r)}</td>)}
+              {cols.map((c, ci) => <td key={c.label} className={`text-fg-3! align-top ${ci > 0 ? "whitespace-nowrap" : ""} ${c.hide ? HIDE[c.hide] : ""} ${c.className ?? ""}`}>{c.cell(r)}</td>)}
             </tr>
           ))}
         </tbody>
       </table>
       {rows.length > limit && (
         <button onClick={() => setAll(v => !v)}
-          className="w-full px-4 py-2.5 text-[12px] font-medium text-[#666] hover:text-[#ededed] bg-transparent border-0 border-t border-[#0f0f0f] cursor-pointer transition-colors text-left">
+          className="w-full px-4 py-2.5 text-[12px] font-medium text-brand-fg hover:text-fg hover:bg-hover bg-transparent border-0 border-t border-line-soft cursor-pointer transition-colors text-left">
           {all ? "Show less" : `Show all ${rows.length}`}
         </button>
       )}
@@ -72,27 +72,29 @@ export function Table<T>({ rows, cols, empty, rowKey, limit = 8 }: { rows: T[]; 
 // "chrome_extension" → "Chrome extension"
 export const human = (s?: string | null) => s ? s.replace(/[-_]+/g, " ").replace(/^\w/, c => c.toUpperCase()) : null;
 
-const PILL: Record<string, string> = {
+type Tone = "success" | "warning" | "brand" | "danger" | "neutral";
+const PILL: Record<string, Tone> = {
   // positive
-  completed: "#3ecf8e", offer: "#3ecf8e", accepted: "#3ecf8e", resolved: "#3ecf8e", approved: "#3ecf8e", active: "#3ecf8e", delivered: "#3ecf8e",
+  completed: "success", offer: "success", accepted: "success", resolved: "success", approved: "success", active: "success", delivered: "success",
   // in motion
-  "in-progress": "#f5a623", interviewing: "#f5a623", interview: "#f5a623", screening: "#f5a623", pending: "#f5a623", reviewing: "#f5a623", started: "#f5a623",
-  applied: "#0070f3", open: "#0070f3",
+  "in-progress": "warning", interviewing: "warning", interview: "warning", screening: "warning", pending: "warning", reviewing: "warning", started: "warning",
+  applied: "brand", open: "brand",
   // negative
-  rejected: "#f55", abandoned: "#f55", denied: "#f55", declined: "#f55", withdrawn: "#888", closed: "#666", dismissed: "#666", revoked: "#666",
+  rejected: "danger", abandoned: "danger", denied: "danger", declined: "danger", withdrawn: "neutral", closed: "neutral", dismissed: "neutral", revoked: "neutral",
 };
+const DOT: Record<Tone, string> = { success: "bg-success", warning: "bg-warning", brand: "bg-brand", danger: "bg-danger", neutral: "bg-fg-4" };
 export function Pill({ status }: { status?: string | null }) {
   const s = (status ?? "—").toLowerCase();
-  const c = PILL[s] ?? "#888";
+  const t = PILL[s] ?? "neutral";
   return (
-    <span className="inline-flex items-center gap-1.5 text-[12px] font-medium whitespace-nowrap capitalize" style={{ color: c }}>
-      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c }} />{s.replace(/[-_]/g, " ")}
+    <span className={`badge badge-${t} capitalize`}>
+      <span className={`dot ${DOT[t]}`} />{s.replace(/[-_]/g, " ")}
     </span>
   );
 }
 
-export const Muted = ({ children }: { children: ReactNode }) => <span className="text-[#444]">{children}</span>;
+export const Muted = ({ children }: { children: ReactNode }) => <span className="text-fg-5">{children}</span>;
 export const dash = <Muted>—</Muted>;
 export const Primary = ({ children, sub }: { children: ReactNode; sub?: ReactNode }) => (
-  <div className="min-w-0"><div className="text-[13px] text-[#ddd] truncate max-w-[340px]">{children}</div>{sub && <div className="text-[12px] text-[#555] truncate max-w-[340px] mt-0.5">{sub}</div>}</div>
+  <div className="min-w-0"><div className="text-[13px] text-fg-2 truncate max-w-[340px]">{children}</div>{sub && <div className="text-[12px] text-fg-4 truncate max-w-[340px] mt-0.5">{sub}</div>}</div>
 );

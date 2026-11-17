@@ -1,8 +1,8 @@
 "use client";
 // components/admin/UsageTab.tsx
 
-import { useState, useEffect, useCallback, useMemo, useRef, useContext } from "react";
-import { Card, SL, useIsMobile, AdminTokenContext } from "./admin-shared";
+import { useState, useEffect, useCallback, useMemo, useContext } from "react";
+import { Card, SL, useIsMobile, AdminTokenContext, tint, MetricCard, SkeletonMetricCard, Select } from "./admin-shared";
 import { BalancesPanel } from "./BalancesPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -95,9 +95,19 @@ const DEFAULT_MONTH = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padSt
 // Inline so it can't break — Wikimedia blocks hotlinking the OpenAI SVG (ERR_BLOCKED_BY_ORB)
 function OpenAIIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="#ededed" role="img" aria-label="OpenAI">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--fg)" role="img" aria-label="OpenAI">
       <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" />
     </svg>
+  );
+}
+
+// Resend's logo is monochrome; draw it as a mask filled with the text colour so
+// it stays visible in both themes.
+function ResendIcon() {
+  const url = "url(https://cdn.simpleicons.org/resend)";
+  return (
+    <span role="img" aria-label="Resend" className="inline-block w-5 h-5 bg-fg"
+      style={{ WebkitMaskImage: url, maskImage: url, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
   );
 }
 
@@ -150,11 +160,11 @@ function CardSkeleton({ name, icon, color }: { name: string; icon: React.ReactNo
     <Card>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-[#111] border border-[#2a2a2a]">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-subtle border border-line-soft">
             {icon}
           </div>
           <div className="flex flex-col gap-1.5">
-            <div className="text-[14px] font-bold text-[#ededed]">{name}</div>
+            <div className="section-title">{name}</div>
             <div className="flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full skeleton" />
               <SkeletonLine w={70} h={8} />
@@ -162,20 +172,20 @@ function CardSkeleton({ name, icon, color }: { name: string; icon: React.ReactNo
           </div>
         </div>
         <div
-          className="w-4 h-4 rounded-full border-2 border-[#2a2a2a] animate-spin shrink-0"
+          className="w-4 h-4 rounded-full border-2 border-line animate-spin shrink-0"
           style={{ borderTopColor: color }}
         />
       </div>
       <div className="grid grid-cols-2 gap-2 mb-4">
         {[0, 1].map(i => (
-          <div key={i} className="bg-[#111] rounded-lg p-2.5 flex flex-col items-center gap-1.5">
+          <div key={i} className="bg-subtle border border-line-soft rounded-lg px-3 py-2.5 flex flex-col gap-1.5">
             <SkeletonLine w="60%" h={20} />
             <SkeletonLine w="50%" h={8} />
           </div>
         ))}
       </div>
       {[0, 1, 2].map(i => (
-        <div key={i} className="flex items-center justify-between py-1.5 border-b border-[#111] last:border-0">
+        <div key={i} className="flex items-center justify-between py-1.5 border-b border-line-soft last:border-0">
           <SkeletonLine w="35%" h={9} />
           <SkeletonLine w="25%" h={9} />
         </div>
@@ -189,7 +199,7 @@ function CardSkeleton({ name, icon, color }: { name: string; icon: React.ReactNo
               className="flex-1 rounded-t-sm skeleton"
               style={{
                 height: `${SKELETON_BAR_HEIGHTS[i % SKELETON_BAR_HEIGHTS.length]}px`,
-                background: color + "30",
+                background: tint(color, "30"),
               }}
             />
           ))}
@@ -203,13 +213,13 @@ function CardSkeleton({ name, icon, color }: { name: string; icon: React.ReactNo
 
 function StatusPill({ status }: { status: "connected" | "error" | "unconfigured" }) {
   const map = {
-    connected:    { cls: "bg-[rgba(62,207,142,0.08)] text-[#3ecf8e] border-[rgba(62,207,142,0.2)]",  dot: "bg-[#3ecf8e]",  label: "Connected"      },
-    error:        { cls: "bg-[rgba(255,68,68,0.08)] text-[#f44] border-[rgba(255,68,68,0.2)]",        dot: "bg-[#f44]",     label: "Error"          },
-    unconfigured: { cls: "bg-[#111] text-[#555] border-[#2a2a2a]",                                    dot: "bg-[#333]",     label: "Not configured" },
+    connected:    { cls: "badge-success", dot: "bg-success", label: "Connected"      },
+    error:        { cls: "badge-danger",  dot: "bg-danger",  label: "Error"          },
+    unconfigured: { cls: "badge-neutral", dot: "bg-strong",  label: "Not configured" },
   }[status];
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${map.cls}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${map.dot}`} />
+    <span className={`badge ${map.cls} mt-1`}>
+      <span className={`dot ${map.dot}`} />
       {map.label}
     </span>
   );
@@ -217,11 +227,11 @@ function StatusPill({ status }: { status: "connected" | "error" | "unconfigured"
 
 function StatRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-[#111] last:border-0">
-      <span className="text-[12px] text-[#888]">{label}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-line-soft last:border-0">
+      <span className="text-[12px] text-fg-3">{label}</span>
       <div className="text-right">
-        <span className="text-[13px] font-bold text-[#ededed]">{value}</span>
-        {sub && <div className="text-[11px] text-[#555]">{sub}</div>}
+        <span className="text-[13px] font-semibold text-fg num">{value}</span>
+        {sub && <div className="text-[11px] text-fg-4">{sub}</div>}
       </div>
     </div>
   );
@@ -231,9 +241,9 @@ function BigStats({ items }: { items: { label: string; value: string; color: str
   return (
     <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
       {items.map(s => (
-        <div key={s.label} className="bg-[#111] border border-[#1a1a1a] rounded-lg p-2.5 text-center">
-          <div className="text-[18px] font-extrabold leading-tight" style={{ color: s.color }}>{s.value}</div>
-          <div className="text-[11px] text-[#888] leading-tight mt-0.5">{s.label}</div>
+        <div key={s.label} className="bg-subtle border border-line-soft rounded-lg px-3 py-2.5 min-w-0">
+          <div className="label truncate">{s.label}</div>
+          <div className="text-[20px] font-semibold leading-tight tracking-tight num mt-1 truncate" style={{ color: s.color }}>{s.value}</div>
         </div>
       ))}
     </div>
@@ -256,8 +266,8 @@ function MiniBarChart({ data, color, valueKey = "tokens" }: {
           return (
             <div key={d.date} className="flex-1 flex flex-col items-center group relative" style={{ height: 64 }}>
               <div className="absolute bottom-0 w-full rounded-t-sm"
-                style={{ height: `${h}px`, background: isLast ? color : color + "70" }} />
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a1a] border border-[#2a2a2a] text-[#ededed] text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-20">
+                style={{ height: `${h}px`, background: isLast ? color : tint(color, "70") }} />
+              <div className="popover rounded-md! absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-fg text-[11px] num px-1.5 py-0.5 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-20">
                 {fmtDate(d.date)}: {fmt(vals[i])}
               </div>
             </div>
@@ -266,9 +276,9 @@ function MiniBarChart({ data, color, valueKey = "tokens" }: {
       </div>
       {data.length >= 3 && (
         <div className="flex justify-between mt-0.5">
-          <span className="text-[11px] text-[#333]">{fmtDate(data[0].date)}</span>
-          <span className="text-[11px] text-[#333]">{fmtDate(data[Math.floor(data.length / 2)].date)}</span>
-          <span className="text-[11px] text-[#333]">{fmtDate(data[data.length - 1].date)}</span>
+          <span className="text-[11px] text-fg-5">{fmtDate(data[0].date)}</span>
+          <span className="text-[11px] text-fg-5">{fmtDate(data[Math.floor(data.length / 2)].date)}</span>
+          <span className="text-[11px] text-fg-5">{fmtDate(data[data.length - 1].date)}</span>
         </div>
       )}
     </div>
@@ -282,14 +292,14 @@ function ModelBar({ model, tokens, totalTokens, cost, requests, color }: {
   return (
     <div className="mb-1.5 last:mb-0">
       <div className="flex justify-between text-[11px] mb-0.5">
-        <span className="text-[#888] font-mono truncate max-w-[160px]" title={model}>{model}</span>
-        <div className="flex gap-2 shrink-0 text-[#555]">
+        <span className="text-fg-3 font-mono truncate max-w-[160px]" title={model}>{model}</span>
+        <div className="flex gap-2 shrink-0 text-fg-4">
           <span>{fmtNum(requests)} req</span>
           <span>{fmtCost(cost)}</span>
-          <span className="font-bold text-[#ededed]">{fmtNum(tokens)}</span>
+          <span className="font-semibold text-fg num">{fmtNum(tokens)}</span>
         </div>
       </div>
-      <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
+      <div className="h-1 bg-raised-2 rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
@@ -299,7 +309,7 @@ function ModelBar({ model, tokens, totalTokens, cost, requests, color }: {
 function CardLoadingDot({ color }: { color: string }) {
   return (
     <div
-      className="w-3.5 h-3.5 rounded-full border-2 border-[#2a2a2a] animate-spin shrink-0"
+      className="w-3.5 h-3.5 rounded-full border-2 border-line animate-spin shrink-0"
       style={{ borderTopColor: color }}
     />
   );
@@ -317,16 +327,16 @@ function APICard({
     <Card>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-[#111] border border-[#2a2a2a]">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-subtle border border-line-soft">
             {icon}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <div className="text-[14px] font-bold text-[#ededed]">{name}</div>
+              <div className="section-title">{name}</div>
               {loading && <CardLoadingDot color={color} />}
             </div>
             {!loading && <StatusPill status={status} />}
-            {loading  && <div className="text-[11px] text-[#555] mt-0.5">Loading…</div>}
+            {loading  && <div className="text-[11px] text-fg-4 mt-0.5">Loading…</div>}
           </div>
         </div>
         {headerExtra && <div className="shrink-0">{headerExtra}</div>}
@@ -336,7 +346,7 @@ function APICard({
         <div className="space-y-2 py-2">
           <div className="grid grid-cols-2 gap-2 mb-1">
             {[0, 1].map(i => (
-              <div key={i} className="bg-[#111] rounded-lg p-2.5 flex flex-col items-center gap-1.5">
+              <div key={i} className="bg-subtle border border-line-soft rounded-lg px-3 py-2.5 flex flex-col gap-1.5">
                 <SkeletonLine w="60%" h={18} />
                 <SkeletonLine w="50%" h={8} />
               </div>
@@ -350,9 +360,9 @@ function APICard({
           ))}
         </div>
       ) : status === "unconfigured" ? (
-        <div className="text-[13px] text-[#555] py-3 text-center">API key not set in environment</div>
+        <div className="empty py-4">API key not set in environment</div>
       ) : status === "error" ? (
-        <div className="text-[13px] text-[#f44] py-2 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.15)] rounded-lg px-3 break-all">{error}</div>
+        <div className="text-[13px] text-danger-fg py-2 bg-danger-soft border border-danger-line rounded-lg px-3 break-all">{error}</div>
       ) : children}
     </Card>
   );
@@ -361,8 +371,8 @@ function APICard({
 function ExpandToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   return (
     <button onClick={onToggle}
-      className="mt-2 w-full flex items-center justify-center gap-1 text-[11px] text-[#555] hover:text-[#888] border-none bg-transparent cursor-pointer py-1 transition-colors">
-      <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+      className="btn btn-ghost btn-sm w-full mt-2">
+      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
         style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
         <polyline points="6 9 12 15 18 9" />
       </svg>
@@ -378,45 +388,11 @@ function CustomSelect({ value, onChange, options, className = "", prefix }: {
   options: { value: string; label: string }[];
   className?: string; prefix?: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const selected = options.find(o => o.value === value);
-
   return (
-    <div ref={ref} className={`relative shrink-0 ${className}`}>
-      <button onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-[#888] bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg cursor-pointer hover:border-[#555] hover:text-[#ededed] transition-colors w-full text-left font-[inherit] whitespace-nowrap">
-        {prefix && <span className="shrink-0">{prefix}</span>}
-        <span className="flex-1 truncate">{selected?.label ?? value}</span>
-        <svg width="9" height="9" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
-          style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.12s" }}>
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute top-[calc(100%+4px)] left-0 min-w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg overflow-hidden z-50"
-          style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-          {options.map(o => (
-            <button key={o.value} onClick={() => { onChange(o.value); setOpen(false); }}
-              className={`w-full text-left px-3 py-2 text-[12px] cursor-pointer transition-colors border-none font-[inherit] block whitespace-nowrap ${
-                o.value === value ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#888] hover:bg-[#111] hover:text-[#ededed]"
-              }`}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <Select value={value} onChange={e => onChange(e.target.value)} leading={prefix}
+      className="h-8 text-[12px]" wrapperClassName={`shrink-0 ${className}`}>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </Select>
   );
 }
 
@@ -467,33 +443,33 @@ function ClaudeCard({ data, error, loading }: {
         <>
           <BigStats items={[
             { label: "Total tokens", value: fmtNum(dispTok),                                    color: "#D97706" },
-            { label: "Billed",       value: data.cost_usd === null ? "—" : fmtCost(dispCost),   color: "#f5a623" },
+            { label: "Billed",       value: data.cost_usd === null ? "—" : fmtCost(dispCost),   color: "#f59e0b" },
           ]} />
           {data.cost_usd === null && (
-            <div className="mb-2 px-3 py-2 bg-[#111] border border-[#2a2a2a] rounded-lg">
-              <div className="text-[12px] font-bold text-[#888] mb-0.5">Cost unavailable</div>
-              <div className="text-[11px] text-[#555] leading-relaxed">
-                Add <code className="bg-[#1a1a1a] px-1 rounded font-mono">ANTHROPIC_ADMIN_KEY=sk-ant-admin...</code> to your <code className="bg-[#1a1a1a] px-1 rounded font-mono">.env</code> to see real billed costs from the Anthropic billing API.
+            <div className="mb-2 px-3 py-2 bg-subtle border border-line-soft rounded-lg">
+              <div className="text-[12px] font-semibold text-fg-3 mb-0.5">Cost unavailable</div>
+              <div className="text-[11px] text-fg-4 leading-relaxed">
+                Add <code className="bg-raised-2 px-1 rounded font-mono">ANTHROPIC_ADMIN_KEY=sk-ant-admin...</code> to your <code className="bg-raised-2 px-1 rounded font-mono">.env</code> to see real billed costs from the Anthropic billing API.
               </div>
             </div>
           )}
 
           {data.credit_balance !== null && selectedModel === "all" && (
-            <div className="flex items-center justify-between py-1.5 mb-1 bg-[rgba(245,166,35,0.06)] border border-[rgba(245,166,35,0.15)] rounded-lg px-2.5">
-              <span className="text-[12px] text-[#f5a623] font-medium">Credit balance</span>
-              <span className="text-[14px] font-bold text-[#f5a623]">${(data.credit_balance ?? 0).toFixed(2)}</span>
+            <div className="flex items-center justify-between py-1.5 mb-1 bg-warning-soft border border-warning-line rounded-lg px-2.5">
+              <span className="text-[12px] text-warning-fg font-medium">Credit balance</span>
+              <span className="text-[14px] font-semibold text-warning-fg num">${(data.credit_balance ?? 0).toFixed(2)}</span>
             </div>
           )}
 
           {spendPct !== null && data.spend_limit != null && selectedModel === "all" && (
             <div className="mb-2">
-              <div className="flex justify-between text-[11px] text-[#555] mb-1">
+              <div className="flex justify-between text-[11px] text-fg-4 mb-1">
                 <span>Limit ${data.spend_limit.toFixed(0)}/mo</span>
                 <span>{spendPct}% used</span>
               </div>
-              <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+              <div className="h-1.5 bg-raised-2 rounded-full overflow-hidden">
                 <div className="h-full rounded-full"
-                  style={{ width: `${spendPct}%`, background: spendPct > 80 ? "#f44" : spendPct > 50 ? "#f5a623" : "#3ecf8e" }} />
+                  style={{ width: `${spendPct}%`, background: spendPct > 80 ? "#ef4444" : spendPct > 50 ? "#f59e0b" : "#10b981" }} />
               </div>
             </div>
           )}
@@ -505,7 +481,7 @@ function ClaudeCard({ data, error, loading }: {
 
           {daily.length > 0 && hasTokens && (
             <>
-              <div className="text-[11px] text-[#555] mt-3 mb-1">
+              <div className="text-[11px] text-fg-4 mt-3 mb-1">
                 Daily tokens · {selectedModel !== "all" ? selectedModel.replace("claude-", "").replace(/-\d{8}$/, "") : "all models"} · {daily.length}d
               </div>
               <MiniBarChart data={daily} color="#D97706" valueKey="tokens" />
@@ -514,16 +490,16 @@ function ClaudeCard({ data, error, loading }: {
 
           <ExpandToggle expanded={expanded} onToggle={() => setExpanded(e => !e)} />
           {expanded && (
-            <div className="mt-2 pt-2 border-t border-[#111]">
+            <div className="mt-2 pt-2 border-t border-line-soft">
               {daily.length > 0 && daily.some(d => d.cost > 0) && (
                 <>
-                  <div className="text-[11px] text-[#555] mb-1">Daily cost</div>
-                  <MiniBarChart data={daily} color="#f5a623" valueKey="cost" />
+                  <div className="text-[11px] text-fg-4 mb-1">Daily cost</div>
+                  <MiniBarChart data={daily} color="#f59e0b" valueKey="cost" />
                 </>
               )}
               {selectedModel === "all" && realModels.length > 0 && hasTokens && (
                 <div className="mt-3">
-                  <div className="text-[11px] text-[#555] mb-1.5">By model</div>
+                  <div className="text-[11px] text-fg-4 mb-1.5">By model</div>
                   {realModels.slice(0, 6).map(m => (
                     <ModelBar key={m.model}
                       model={m.model.replace("claude-", "").replace(/-20\d{6}$/, "")}
@@ -540,10 +516,10 @@ function ClaudeCard({ data, error, loading }: {
                 {daily.length > 0 && <StatRow label="Peak day"    value={fmtNum(Math.max(...daily.map(d => d.tokens)))} />}
               </div>
               {!data.has_tracking && data.data_source !== "admin_api" && (
-                <div className="mt-3 px-3 py-2.5 bg-[rgba(0,112,243,0.06)] border border-[rgba(0,112,243,0.15)] rounded-lg">
-                  <div className="text-[12px] font-bold text-[#0070f3] mb-1">API key valid ✓ - add usage tracking</div>
-                  <div className="text-[12px] text-[#0070f3]/80 leading-relaxed">
-                    Call <code className="bg-[rgba(0,112,243,0.1)] px-1 rounded font-mono">trackClaudeUsage()</code> in your app - see <code className="bg-[rgba(0,112,243,0.1)] px-1 rounded font-mono">lib/trackClaudeUsage.ts</code>
+                <div className="mt-3 px-3 py-2.5 bg-brand-soft border border-brand-line rounded-lg">
+                  <div className="text-[12px] font-semibold text-brand-fg mb-1">API key valid ✓ - add usage tracking</div>
+                  <div className="text-[12px] text-brand-fg/80 leading-relaxed">
+                    Call <code className="bg-brand-soft px-1 rounded font-mono">trackClaudeUsage()</code> in your app - see <code className="bg-brand-soft px-1 rounded font-mono">lib/trackClaudeUsage.ts</code>
                   </div>
                 </div>
               )}
@@ -599,7 +575,7 @@ function OpenAICard({ data, error, loading }: {
         <>
           <BigStats items={[
             { label: "Total tokens", value: fmtNum(dispTok),   color: "#10A37F" },
-            { label: "Billed",       value: fmtCost(dispCost), color: "#3ecf8e" },
+            { label: "Billed",       value: fmtCost(dispCost), color: "#10b981" },
           ]} />
 
           <StatRow label="Requests"          value={fmtNum(dispReq)}  sub={data.period} />
@@ -609,23 +585,23 @@ function OpenAICard({ data, error, loading }: {
 
           {daily.length > 0 && hasTokens && (
             <>
-              <div className="text-[11px] text-[#555] mt-3 mb-1">Daily tokens · {daily.length}d</div>
+              <div className="text-[11px] text-fg-4 mt-3 mb-1">Daily tokens · {daily.length}d</div>
               <MiniBarChart data={daily} color="#10A37F" valueKey="tokens" />
             </>
           )}
 
           <ExpandToggle expanded={expanded} onToggle={() => setExpanded(e => !e)} />
           {expanded && (
-            <div className="mt-2 pt-2 border-t border-[#111]">
+            <div className="mt-2 pt-2 border-t border-line-soft">
               {daily.length > 0 && daily.some(d => d.cost > 0) && (
                 <>
-                  <div className="text-[11px] text-[#555] mb-1">Daily cost</div>
-                  <MiniBarChart data={daily} color="#3ecf8e" valueKey="cost" />
+                  <div className="text-[11px] text-fg-4 mb-1">Daily cost</div>
+                  <MiniBarChart data={daily} color="#10b981" valueKey="cost" />
                 </>
               )}
               {selectedModel === "all" && realModels.length > 0 && hasTokens && (
                 <div className="mt-3">
-                  <div className="text-[11px] text-[#555] mb-1.5">By model</div>
+                  <div className="text-[11px] text-fg-4 mb-1.5">By model</div>
                   {realModels.slice(0, 6).map(m => (
                     <ModelBar key={m.model}
                       model={m.model.replace(/^gpt-/, "").replace(/-\d{4}-\d{2}-\d{2}$/, "")}
@@ -657,21 +633,21 @@ function GoogleAICard({ data, error, loading }: { data?: GoogleAIUsage | null; e
         <>
           <BigStats items={[
             { label: "Requests", value: fmtNum(data.total_requests), color: "#4285F4" },
-            { label: "Billed",   value: fmtCost(data.cost_usd),      color: "#0070f3" },
+            { label: "Billed",   value: fmtCost(data.cost_usd),      color: "#5b6cff" },
           ]} />
           <StatRow label="Input tokens"  value={fmtNum(data.input_tokens)}  sub={data.period} />
           <StatRow label="Output tokens" value={fmtNum(data.output_tokens)} />
-          <div className="mt-2 p-2.5 bg-[rgba(0,112,243,0.06)] border border-[rgba(0,112,243,0.12)] rounded-lg">
-            <div className="text-[11px] font-bold text-[#0070f3] mb-1">No usage API available</div>
-            <div className="text-[11px] text-[#0070f3]/70 leading-relaxed">Google AI Studio doesn&apos;t expose a public usage API. Key validated ✓</div>
+          <div className="mt-2 p-2.5 bg-brand-soft border border-brand-line rounded-lg">
+            <div className="text-[11px] font-semibold text-brand-fg mb-1">No usage API available</div>
+            <div className="text-[11px] text-brand-fg/70 leading-relaxed">Google AI Studio doesn&apos;t expose a public usage API. Key validated ✓</div>
           </div>
           {data.models.length > 0 && (
             <div className="mt-2">
-              <div className="text-[11px] text-[#555] mb-1">Available models</div>
+              <div className="text-[11px] text-fg-4 mb-1">Available models</div>
               {data.models.slice(0, 4).map(m => (
-                <div key={m.model} className="flex items-center justify-between py-1 border-b border-[#111] last:border-0">
-                  <span className="text-[11px] text-[#888] font-mono truncate max-w-[180px]">{m.model.replace("models/", "")}</span>
-                  <span className="text-[11px] text-[#3ecf8e] font-bold">✓</span>
+                <div key={m.model} className="flex items-center justify-between py-1 border-b border-line-soft last:border-0">
+                  <span className="text-[11px] text-fg-3 font-mono truncate max-w-[180px]">{m.model.replace("models/", "")}</span>
+                  <span className="text-[11px] text-success-fg font-semibold">✓</span>
                 </div>
               ))}
             </div>
@@ -693,7 +669,7 @@ function StripeCard({ data, error, loading }: { data?: StripeUsage | null; error
         <>
           <BigStats items={[
             { label: "MRR",    value: `$${data.mrr.toFixed(2)}`,                  color: "#635BFF" },
-            { label: "Volume", value: `$${(data.total_volume / 100).toFixed(2)}`, color: "#0070f3" },
+            { label: "Volume", value: `$${(data.total_volume / 100).toFixed(2)}`, color: "#5b6cff" },
           ]} />
           <StatRow label="Active subscriptions" value={String(data.active_subscriptions)} />
           {data.pack_purchases !== undefined && (
@@ -705,18 +681,18 @@ function StripeCard({ data, error, loading }: { data?: StripeUsage | null; error
 
           <ExpandToggle expanded={expanded} onToggle={() => setExpanded(e => !e)} />
           {expanded && (
-            <div className="mt-2 pt-2 border-t border-[#111]">
+            <div className="mt-2 pt-2 border-t border-line-soft">
               <StatRow label="Success rate"    value={`${successRate}%`} />
               <StatRow label="Total charges"   value={String(data.total_charges)} />
               <StatRow label="Net revenue"     value={`$${((data.total_volume - data.refunded) / 100).toFixed(2)}`} />
               <StatRow label="Annual run rate" value={`$${(data.mrr * 12).toFixed(2)}`} />
               <div className="mt-2">
-                <div className="text-[11px] text-[#555] mb-1">Charge success rate</div>
-                <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden flex">
-                  <div className="h-full bg-[#3ecf8e] rounded-l-full" style={{ width: `${successRate}%` }} />
-                  <div className="h-full bg-[rgba(255,68,68,0.3)] flex-1" />
+                <div className="text-[11px] text-fg-4 mb-1">Charge success rate</div>
+                <div className="h-2 bg-raised-2 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-success rounded-l-full" style={{ width: `${successRate}%` }} />
+                  <div className="h-full bg-danger-line flex-1" />
                 </div>
-                <div className="flex justify-between text-[11px] mt-0.5 text-[#555]">
+                <div className="flex justify-between text-[11px] mt-0.5 text-fg-4">
                   <span>Success ({successRate}%)</span>
                   <span>Failed ({100 - successRate}%)</span>
                 </div>
@@ -735,13 +711,13 @@ function ResendCard({ data, error, loading }: { data?: ResendUsage | null; error
   const bounceRate = data ? Math.round((data.emails_bounced  / Math.max(data.emails_sent, 1)) * 100) : 0;
   const status = !data && !error ? "unconfigured" : error ? "error" : "connected";
   return (
-    <APICard name="Resend" color="#ededed" status={status} error={error} loading={loading}
-      icon={<img src="https://cdn.simpleicons.org/resend/ededed" width="20" height="20" alt="Resend" />}>
+    <APICard name="Resend" color="var(--fg)" status={status} error={error} loading={loading}
+      icon={<ResendIcon />}>
       {data && (
         <>
           <BigStats items={[
-            { label: "Sent",     value: fmtNum(data.emails_sent), color: "#ededed" },
-            { label: "Delivery", value: `${rate}%`,               color: rate > 95 ? "#3ecf8e" : rate > 80 ? "#f5a623" : "#f44" },
+            { label: "Sent",     value: fmtNum(data.emails_sent), color: "var(--fg)" },
+            { label: "Delivery", value: `${rate}%`,               color: rate > 95 ? "#10b981" : rate > 80 ? "#f59e0b" : "#ef4444" },
           ]} />
           <StatRow label="Delivered"       value={fmtNum(data.emails_delivered)} sub={`${rate}% rate · ${data.period}`} />
           <StatRow label="Bounced"         value={String(data.emails_bounced)}   sub={`${bounceRate}% bounce`} />
@@ -749,22 +725,22 @@ function ResendCard({ data, error, loading }: { data?: ResendUsage | null; error
 
           <ExpandToggle expanded={expanded} onToggle={() => setExpanded(e => !e)} />
           {expanded && (
-            <div className="mt-2 pt-2 border-t border-[#111]">
+            <div className="mt-2 pt-2 border-t border-line-soft">
               <StatRow label="Unaccounted" value={String(data.emails_sent - data.emails_delivered - data.emails_bounced - data.emails_complained)} />
               <div className="mt-2">
-                <div className="text-[11px] text-[#555] mb-1.5">Email funnel</div>
+                <div className="text-[11px] text-fg-4 mb-1.5">Email funnel</div>
                 {[
-                  { label: "Sent",       val: data.emails_sent,       pct: 100,        color: "#ededed" },
-                  { label: "Delivered",  val: data.emails_delivered,   pct: rate,       color: "#3ecf8e" },
-                  { label: "Bounced",    val: data.emails_bounced,     pct: bounceRate, color: "#f44"    },
-                  { label: "Complained", val: data.emails_complained,  pct: Math.round(data.emails_complained / Math.max(data.emails_sent, 1) * 100), color: "#f5a623" },
+                  { label: "Sent",       val: data.emails_sent,       pct: 100,        color: "var(--fg)" },
+                  { label: "Delivered",  val: data.emails_delivered,   pct: rate,       color: "#10b981" },
+                  { label: "Bounced",    val: data.emails_bounced,     pct: bounceRate, color: "#ef4444"    },
+                  { label: "Complained", val: data.emails_complained,  pct: Math.round(data.emails_complained / Math.max(data.emails_sent, 1) * 100), color: "#f59e0b" },
                 ].map(row => (
                   <div key={row.label} className="mb-1.5 last:mb-0">
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="text-[#888]">{row.label}</span>
-                      <span className="font-bold text-[#ededed]">{row.val} <span className="text-[#555] font-normal">({row.pct}%)</span></span>
+                      <span className="text-fg-3">{row.label}</span>
+                      <span className="font-semibold text-fg num">{row.val} <span className="text-fg-4 font-normal">({row.pct}%)</span></span>
                     </div>
-                    <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
+                    <div className="h-1 bg-raised-2 rounded-full overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: row.color }} />
                     </div>
                   </div>
@@ -789,7 +765,7 @@ function CloudflareCard({ data, error, loading }: { data?: CloudflareUsage | nul
         <>
           <BigStats items={[
             { label: "Requests",   value: fmtNum(data.requests), color: "#F6821F" },
-            { label: "Cache rate", value: `${cacheRate}%`,       color: cacheRate > 70 ? "#3ecf8e" : "#f5a623" },
+            { label: "Cache rate", value: `${cacheRate}%`,       color: cacheRate > 70 ? "#10b981" : "#f59e0b" },
           ]} />
           <StatRow label="Bandwidth"       value={fmtBytes(data.bandwidth_bytes)} sub={data.period} />
           <StatRow label="Cached requests" value={fmtNum(data.cached_requests)} />
@@ -797,16 +773,16 @@ function CloudflareCard({ data, error, loading }: { data?: CloudflareUsage | nul
 
           <ExpandToggle expanded={expanded} onToggle={() => setExpanded(e => !e)} />
           {expanded && (
-            <div className="mt-2 pt-2 border-t border-[#111]">
+            <div className="mt-2 pt-2 border-t border-line-soft">
               <StatRow label="Uncached requests" value={fmtNum(data.requests - data.cached_requests)} />
               <StatRow label="Bandwidth saved"   value={fmtBytes(Math.round(data.bandwidth_bytes * (cacheRate / 100)))} />
               <div className="mt-2">
-                <div className="text-[11px] text-[#555] mb-1">Cache hit / miss split</div>
-                <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden flex">
-                  <div className="h-full bg-[#3ecf8e] rounded-l-full" style={{ width: `${cacheRate}%` }} />
-                  <div className="h-full bg-[rgba(245,166,35,0.3)] flex-1" />
+                <div className="text-[11px] text-fg-4 mb-1">Cache hit / miss split</div>
+                <div className="h-2 bg-raised-2 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-success rounded-l-full" style={{ width: `${cacheRate}%` }} />
+                  <div className="h-full bg-warning-line flex-1" />
                 </div>
-                <div className="flex justify-between text-[11px] mt-0.5 text-[#555]">
+                <div className="flex justify-between text-[11px] mt-0.5 text-fg-4">
                   <span>Cached ({cacheRate}%)</span>
                   <span>Uncached ({100 - cacheRate}%)</span>
                 </div>
@@ -824,13 +800,13 @@ function SupabaseCard({ data, error, loading }: { data?: SupabaseUsage | null; e
   const status = !data && !error ? "unconfigured" : error ? "error" : "connected";
   const cols = Object.entries(data?.tables ?? {}).filter(([, v]) => v > 0).sort(([, a], [, b]) => b - a);
   return (
-    <APICard name="Supabase" color="#3ECF8E" status={status} error={error} loading={loading}
+    <APICard name="Supabase" color="#10b981" status={status} error={error} loading={loading}
       icon={<img src="https://cdn.simpleicons.org/supabase/3ECF8E" width="20" height="20" alt="Supabase" />}>
       {data && (
         <>
           <BigStats items={[
-            { label: "Users",      value: fmtNum(data.active_users), color: "#3ecf8e" },
-            { label: "Total rows", value: fmtNum(data.total_rows),   color: "#ededed" },
+            { label: "Users",      value: fmtNum(data.active_users), color: "#10b981" },
+            { label: "Total rows", value: fmtNum(data.total_rows),   color: "var(--fg)" },
           ]} />
 
           <StatRow label="Project" value={data.project_ref || "—"} />
@@ -840,27 +816,27 @@ function SupabaseCard({ data, error, loading }: { data?: SupabaseUsage | null; e
 
           <ExpandToggle expanded={expanded} onToggle={() => setExpanded(e => !e)} />
           {expanded && (
-            <div className="mt-2 pt-2 border-t border-[#111]">
+            <div className="mt-2 pt-2 border-t border-line-soft">
               {cols.length > 0 && (
                 <div className="mt-1">
-                  <div className="text-[11px] text-[#555] mb-1.5">Tables</div>
+                  <div className="text-[11px] text-fg-4 mb-1.5">Tables</div>
                   {cols.slice(0, 11).map(([name, count]) => {
                     const pct = data.total_rows > 0 ? Math.round((count / data.total_rows) * 100) : 0;
                     return (
                       <div key={name} className="mb-1.5 last:mb-0">
                         <div className="flex justify-between text-[11px] mb-0.5">
-                          <span className="text-[#888] font-mono">{name}</span>
-                          <span className="font-bold text-[#ededed]">{fmtNum(count)} <span className="text-[#555] font-normal">({pct}%)</span></span>
+                          <span className="text-fg-3 font-mono">{name}</span>
+                          <span className="font-semibold text-fg num">{fmtNum(count)} <span className="text-fg-4 font-normal">({pct}%)</span></span>
                         </div>
-                        <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-[#3ecf8e]" style={{ width: `${pct}%` }} />
+                        <div className="h-1 bg-raised-2 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-              <div className="mt-3 text-[11px] text-[#555] bg-[#111] border border-[#1a1a1a] rounded-lg px-2.5 py-2 leading-relaxed">
+              <div className="mt-3 text-[11px] text-fg-4 bg-subtle border border-line-soft rounded-lg px-2.5 py-2 leading-relaxed">
                 {data.billing_note}
               </div>
             </div>
@@ -880,16 +856,11 @@ function SummaryBar({ usage }: { usage: AllUsage }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
       {[
-        { label: "Services connected",  value: `${connected} / 7`,                    color: "#0070f3" },
-        { label: "Total AI cost (mo.)", value: fmtCost(aiCost),                        color: "#3ecf8e" },
-        { label: "Emails sent",         value: fmtNum(usage.resend?.emails_sent ?? 0), color: "#f5a623" },
-        { label: "Config errors",       value: String(errors), color: errors > 0 ? "#f44" : "#3ecf8e" },
-      ].map(s => (
-        <div key={s.label} className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-4">
-          <div className="text-[11px] font-bold text-[#555] uppercase tracking-widest mb-1">{s.label}</div>
-          <div className="text-2xl font-extrabold" style={{ color: s.color }}>{s.value}</div>
-        </div>
-      ))}
+        { label: "Services connected",  value: `${connected} / 7`,                    color: "#5b6cff" },
+        { label: "Total AI cost (mo.)", value: fmtCost(aiCost),                        color: "#10b981" },
+        { label: "Emails sent",         value: fmtNum(usage.resend?.emails_sent ?? 0), color: "#f59e0b" },
+        { label: "Config errors",       value: String(errors), color: errors > 0 ? "#ef4444" : "#10b981" },
+      ].map(s => <MetricCard key={s.label} label={s.label} value={s.value} color={s.color} />)}
     </div>
   );
 }
@@ -897,12 +868,7 @@ function SummaryBar({ usage }: { usage: AllUsage }) {
 function SummaryBarSkeleton() {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-      {[0, 1, 2, 3].map(i => (
-        <div key={i} className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-4 space-y-2">
-          <SkeletonLine w="55%" h={8} />
-          <SkeletonLine w="40%" h={24} />
-        </div>
-      ))}
+      {[0, 1, 2, 3].map(i => <SkeletonMetricCard key={i} />)}
     </div>
   );
 }
@@ -920,9 +886,9 @@ const SERVICES: ServiceMeta[] = [
   { key: "openai",     name: "OpenAI",     category: "ai",       color: "#10A37F", icon: <OpenAIIcon /> },
   { key: "googleai",   name: "Gemini",     category: "ai",       color: "#4285F4", icon: <img src="https://cdn.simpleicons.org/googlegemini/4285F4" width="20" height="20" alt="" /> },
   { key: "stripe",     name: "Stripe",     category: "payments", color: "#635BFF", icon: <img src="https://cdn.simpleicons.org/stripe/635BFF"      width="20" height="20" alt="" /> },
-  { key: "resend",     name: "Resend",     category: "payments", color: "#ededed", icon: <img src="https://cdn.simpleicons.org/resend/ededed"      width="20" height="20" alt="" /> },
+  { key: "resend",     name: "Resend",     category: "payments", color: "var(--fg)", icon: <ResendIcon /> },
   { key: "cloudflare", name: "Cloudflare", category: "infra",    color: "#F6821F", icon: <img src="https://cdn.simpleicons.org/cloudflare/F6821F"  width="20" height="20" alt="" /> },
-  { key: "supabase",   name: "Supabase",   category: "infra",    color: "#3ECF8E", icon: <img src="https://cdn.simpleicons.org/supabase/3ECF8E"    width="20" height="20" alt="" /> },
+  { key: "supabase",   name: "Supabase",   category: "infra",    color: "#10b981", icon: <img src="https://cdn.simpleicons.org/supabase/3ECF8E"    width="20" height="20" alt="" /> },
 ];
 
 function getStatus(usage: AllUsage | null, key: ServiceKey): "connected" | "error" | "unconfigured" {
@@ -1046,7 +1012,7 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
   const isRefreshing  = loading && !!usage;
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-black">
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-canvas">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -1054,19 +1020,19 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
           <SL>API Usage · All Services</SL>
           <div className="flex items-center gap-2 mt-0.5">
             {lastRefreshed && (
-              <span className="text-[12px] text-[#888]">
+              <span className="text-[12px] text-fg-3">
                 {fromCache ? "Cached" : "Fetched"} {lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
             )}
             {fromCache && (
-              <span className="text-[11px] bg-[#1a1a1a] text-[#888] px-1.5 py-0.5 rounded-full font-medium">from cache</span>
+              <span className="badge badge-neutral">from cache</span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => { load(true); loadOpenAI(true); }} disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#888] border border-[#2a2a2a] rounded-lg hover:text-[#ededed] hover:border-[#555] cursor-pointer bg-transparent disabled:opacity-50 transition-colors">
-            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+            className="btn btn-sm btn-secondary">
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
               style={{ animation: isRefreshing ? "spin .7s linear infinite" : "none" }}>
               <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
             </svg>
@@ -1076,7 +1042,7 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-[rgba(255,68,68,0.06)] border border-[rgba(255,68,68,0.2)] rounded-xl text-[14px] text-[#f44]">{error}</div>
+        <div className="mb-4 p-3 bg-danger-soft border border-danger-line rounded-lg text-[13px] text-danger-fg">{error}</div>
       )}
 
       {isInitialLoad ? <SummaryBarSkeleton /> : usage && <SummaryBar usage={usage} />}
@@ -1085,24 +1051,22 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <div className="flex items-center gap-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-1.5 flex-1 min-w-40">
-          <svg width="12" height="12" fill="none" stroke="#555" strokeWidth="2" viewBox="0 0 24 24">
+        <div className="relative flex-1 min-w-40">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-4 pointer-events-none" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search service…"
-            className="text-[13px] bg-transparent border-none outline-none text-[#ededed] placeholder:text-[#444] flex-1 min-w-0 font-[inherit]" />
+            className="field h-8 pl-8 pr-8" />
           {search && (
-            <button onClick={() => setSearch("")} className="text-[#333] hover:text-[#888] border-none bg-transparent cursor-pointer text-[13px] transition-colors">✕</button>
+            <button onClick={() => setSearch("")} aria-label="Clear search" className="btn btn-ghost btn-sm btn-icon w-6! h-6! absolute right-1 top-1/2 -translate-y-1/2">✕</button>
           )}
         </div>
-        <div className="flex gap-1 bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-0.5">
+        <div className="seg">
           {(["all", "ai", "payments", "infra"] as Category[]).map(c => (
             <button key={c} onClick={() => setCategory(c)}
-              className={`px-2.5 py-1 rounded text-[12px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap capitalize ${
-                category === c ? "bg-[#1a1a1a] text-[#ededed]" : "bg-transparent text-[#555] hover:text-[#888]"
-              }`}>
-              {c === "ai" ? "🤖 AI" : c === "payments" ? "💳 Payments" : c === "infra" ? "🛠 Infra" : "All"}
+              className={`seg-item ${category === c ? "seg-item-active" : ""}`}>
+              {c === "ai" ? "AI" : c === "payments" ? "Payments" : c === "infra" ? "Infra" : "All"}
             </button>
           ))}
         </div>
@@ -1119,12 +1083,12 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
           value={month}
           onChange={setMonth}
           options={MONTH_OPTIONS}
-          prefix={<svg width="11" height="11" fill="none" stroke="#555" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+          prefix={<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
         />
       </div>
 
       {!isInitialLoad && (
-        <div className="text-[12px] text-[#555] mb-3">
+        <div className="text-[12px] text-fg-4 mb-3">
           Showing {visibleServices.length} of {SERVICES.length} services
           {search && ` · matching "${search}"`}
         </div>
@@ -1132,11 +1096,11 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
 
       {/* Cards grid */}
       {visibleServices.length === 0 && !isInitialLoad ? (
-        <div className="text-center py-16 text-[#555]">
-          <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mx-auto mb-2 opacity-30">
+        <div className="empty py-16">
+          <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-1 opacity-30">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <p className="text-[14px]">No services match your filters</p>
+          <p>No services match your filters</p>
         </div>
       ) : (
         <div className={`grid gap-4 items-stretch ${isMobile ? "grid-cols-1" : "grid-cols-2 xl:grid-cols-3"}`}>
@@ -1163,7 +1127,6 @@ export default function UsageTab({ token: tokenProp }: { token?: string }) {
         </div>
       )}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

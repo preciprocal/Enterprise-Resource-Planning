@@ -20,7 +20,7 @@
 import { confirmDialog, alertDialog } from "@/components/ui/dialog-host";
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { getAdminToken } from "@/lib/supabase/client";
-import { Select } from "./admin-shared";
+import { Select, Checkbox, tint } from "./admin-shared";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 function getMsToken()   { return typeof window==="undefined"?null:localStorage.getItem("ms_access_token"); }
@@ -87,28 +87,30 @@ interface SprintDay { date:string; completed:number; }
 
 // ─── Employee ─────────────────────────────────────────────────────────────────
 interface Employee { id:string; name:string; role:string; color:string; email:string }
-const FALLBACK_ME:Employee={ id:"",name:"Admin",role:"Admin",color:"#4F6FF0",email:"" };
+const FALLBACK_ME:Employee={ id:"",name:"Admin",role:"Admin",color:"#5b6cff",email:"" };
 const empById=(list:Employee[],id?:string)=>list.find(e=>e.id===id);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const PRIORITY_META:Record<Priority,{label:string;color:string;bg:string}>={
-  critical:{label:"Critical",color:"#DC2626",bg:"#FEF2F2"},
-  high:    {label:"High",    color:"#EA580C",bg:"#FFF7ED"},
-  medium:  {label:"Medium",  color:"#D97706",bg:"#FFFBEB"},
-  low:     {label:"Low",     color:"#059669",bg:"#F0FDF4"},
+// badge = chip on a card tile; on = selected state of the picker button in the card modal
+const PRIORITY_META:Record<Priority,{label:string;badge:string;on:string}>={
+  critical:{label:"Critical",badge:"badge-danger", on:"border-danger-line bg-danger-soft text-danger-fg"},
+  high:    {label:"High",    badge:"badge-warning",on:"border-warning-line bg-warning-soft text-warning-fg"},
+  medium:  {label:"Medium",  badge:"badge-info",   on:"border-info-line bg-info-soft text-info-fg"},
+  low:     {label:"Low",     badge:"badge-success",on:"border-success-line bg-success-soft text-success-fg"},
 };
-const LABEL_META:Record<LabelKey,{label:string;color:string;bg:string}>={
-  bug:     {label:"Bug",     color:"#DC2626",bg:"#FEF2F2"},
-  feature: {label:"Feature", color:"#4F6FF0",bg:"#EEF2FF"},
-  design:  {label:"Design",  color:"#7C3AED",bg:"#F5F3FF"},
-  infra:   {label:"Infra",   color:"#0891B2",bg:"#ECFEFF"},
-  docs:    {label:"Docs",    color:"#059669",bg:"#F0FDF4"},
-  research:{label:"Research",color:"#9333EA",bg:"#FAF5FF"},
+const LABEL_META:Record<LabelKey,{label:string;badge:string;on:string}>={
+  bug:     {label:"Bug",     badge:"badge-danger", on:"border-danger-line bg-danger-soft text-danger-fg"},
+  feature: {label:"Feature", badge:"badge-brand",  on:"border-brand-line bg-brand-soft text-brand-fg"},
+  design:  {label:"Design",  badge:"badge-violet", on:"border-violet-line bg-violet-soft text-violet-fg"},
+  infra:   {label:"Infra",   badge:"badge-info",   on:"border-info-line bg-info-soft text-info-fg"},
+  docs:    {label:"Docs",    badge:"badge-success",on:"border-success-line bg-success-soft text-success-fg"},
+  research:{label:"Research",badge:"badge-violet", on:"border-violet-line bg-violet-soft text-violet-fg"},
 };
+// Meeting platform brand colours (data); bg is a translucent tint so it works in both themes
 const PLATFORM_META:Record<MeetPlatform,{label:string;color:string;bg:string;btnBg:string}>={
-  teams:{label:"Teams",      color:"#5558AF",bg:"#EEEEFF",btnBg:"#5558AF"},
-  meet: {label:"Google Meet",color:"#1B5E20",bg:"#E8F5E9",btnBg:"#34A853"},
-  zoom: {label:"Zoom",       color:"#0D47A1",bg:"#E3F2FD",btnBg:"#2D8CFF"},
+  teams:{label:"Teams",      color:"#5558AF",bg:tint("#5558AF","1f"),btnBg:"#5558AF"},
+  meet: {label:"Google Meet",color:"#34A853",bg:tint("#34A853","1f"),btnBg:"#34A853"},
+  zoom: {label:"Zoom",       color:"#2D8CFF",bg:tint("#2D8CFF","1f"),btnBg:"#2D8CFF"},
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -128,33 +130,56 @@ function buildBurndown(columns:KanbanColumn[]):SprintDay[]{ const done=columns.f
 // ─── Seed data ────────────────────────────────────────────────────────────────
 
 const DEFAULT_COLUMNS:KanbanColumn[]=[
-  {id:"todo",title:"To Do",color:"#6366F1",desc:"Ready to be picked up",cards:[
-    {id:"k1",title:"CSV export for analytics tabs",priority:"medium",labels:["feature"],story:"As an admin, I want to export data for offline analysis.",assigneeId:"emp-yash",dueDate:mkDate(12),effortScore:3,valueScore:7,blockedBy:null,subtasks:[{done:false,label:"API endpoint"},{done:false,label:"UI button"},{done:false,label:"Tests"}],commentList:[{id:"c1",author:"Maya Patel",authorColor:"#7C4FE0",text:"Should we support XLSX?",createdAt:"Jun 3 · 10:12 AM"},{id:"c2",author:"Yash D.",authorColor:"#4F6FF0",text:"Good call, adding to scope.",createdAt:"Jun 3 · 11:05 AM"}],links:[{id:"l1",label:"Figma mockup",url:"https://figma.com"}]},
+  {id:"todo",title:"To Do",color:"#5b6cff",desc:"Ready to be picked up",cards:[
+    {id:"k1",title:"CSV export for analytics tabs",priority:"medium",labels:["feature"],story:"As an admin, I want to export data for offline analysis.",assigneeId:"emp-yash",dueDate:mkDate(12),effortScore:3,valueScore:7,blockedBy:null,subtasks:[{done:false,label:"API endpoint"},{done:false,label:"UI button"},{done:false,label:"Tests"}],commentList:[{id:"c1",author:"Maya Patel",authorColor:"#5b6cff",text:"Should we support XLSX?",createdAt:"Jun 3 · 10:12 AM"},{id:"c2",author:"Yash D.",authorColor:"#5b6cff",text:"Good call, adding to scope.",createdAt:"Jun 3 · 11:05 AM"}],links:[{id:"l1",label:"Figma mockup",url:"https://figma.com"}]},
     {id:"k2",title:"Stripe webhook retry logic",priority:"high",labels:["infra","feature"],assigneeId:"emp-alex",dueDate:mkDate(4),effortScore:5,valueScore:8,blockedBy:null,subtasks:[{done:false,label:"Exponential backoff"},{done:false,label:"Dead-letter queue"}],commentList:[],links:[{id:"l2",label:"Stripe docs",url:"https://stripe.com/docs/webhooks"}]},
   ]},
-  {id:"inprogress",title:"In Progress",color:"#F59E0B",limit:4,desc:"WIP - actively being worked on",cards:[
-    {id:"k4",title:"OpenAI usage pagination fix",priority:"critical",labels:["bug","infra"],story:"As an admin, I want accurate usage data so billing is correct.",assigneeId:"emp-yash",dueDate:NOW_ISO,effortScore:3,valueScore:10,blockedBy:null,inProgressAt:new Date(Date.now()-172800000).toISOString(),subtasks:[{done:true,label:"Debug root cause"},{done:true,label:"Implement fix"},{done:false,label:"Verify in prod"}],commentList:[{id:"c3",author:"Sam Lee",authorColor:"#0891B2",text:"Verified on staging.",createdAt:"Jun 5 · 2:45 PM"}],links:[{id:"l3",label:"OpenAI API docs",url:"https://platform.openai.com/docs/api-reference"}]},
+  {id:"inprogress",title:"In Progress",color:"#f59e0b",limit:4,desc:"WIP - actively being worked on",cards:[
+    {id:"k4",title:"OpenAI usage pagination fix",priority:"critical",labels:["bug","infra"],story:"As an admin, I want accurate usage data so billing is correct.",assigneeId:"emp-yash",dueDate:NOW_ISO,effortScore:3,valueScore:10,blockedBy:null,inProgressAt:new Date(Date.now()-172800000).toISOString(),subtasks:[{done:true,label:"Debug root cause"},{done:true,label:"Implement fix"},{done:false,label:"Verify in prod"}],commentList:[{id:"c3",author:"Sam Lee",authorColor:"#3b82f6",text:"Verified on staging.",createdAt:"Jun 5 · 2:45 PM"}],links:[{id:"l3",label:"OpenAI API docs",url:"https://platform.openai.com/docs/api-reference"}]},
     {id:"k5",title:"Cloudflare analytics stream",priority:"high",labels:["infra"],assigneeId:"emp-jordan",dueDate:mkDate(-2),effortScore:7,valueScore:8,blockedBy:"Waiting for Cloudflare Enterprise plan",inProgressAt:new Date(Date.now()-259200000).toISOString(),subtasks:[{done:true,label:"Schema research"},{done:false,label:"Stream integration"}],commentList:[],links:[]},
   ]},
-  {id:"review",title:"In Review",color:"#7C4FE0",limit:5,desc:"PR open / QA in progress",cards:[
-    {id:"k6",title:"Claude token pricing — cache reads at 10%",priority:"critical",labels:["bug"],assigneeId:"emp-yash",dueDate:NOW_ISO,effortScore:2,valueScore:10,blockedBy:null,inProgressAt:new Date(Date.now()-86400000).toISOString(),subtasks:[{done:true,label:"Fix pricing logic"},{done:true,label:"Unit tests"},{done:false,label:"PR review"}],commentList:[{id:"c6",author:"Priya Singh",authorColor:"#9333EA",text:"Left 2 inline comments.",createdAt:"Jun 6 · 10:00 AM"}],links:[{id:"l4",label:"PR #247",url:"https://github.com"}]},
+  {id:"review",title:"In Review",color:"#5b6cff",limit:5,desc:"PR open / QA in progress",cards:[
+    {id:"k6",title:"Claude token pricing — cache reads at 10%",priority:"critical",labels:["bug"],assigneeId:"emp-yash",dueDate:NOW_ISO,effortScore:2,valueScore:10,blockedBy:null,inProgressAt:new Date(Date.now()-86400000).toISOString(),subtasks:[{done:true,label:"Fix pricing logic"},{done:true,label:"Unit tests"},{done:false,label:"PR review"}],commentList:[{id:"c6",author:"Priya Singh",authorColor:"#a855f7",text:"Left 2 inline comments.",createdAt:"Jun 6 · 10:00 AM"}],links:[{id:"l4",label:"PR #247",url:"https://github.com"}]},
   ]},
-  {id:"done",title:"Done",color:"#10B981",desc:"Completed & shipped",cards:[
-    {id:"k8",title:"Login page light mode redesign",priority:"medium",labels:["design"],assigneeId:"emp-yash",effortScore:3,valueScore:7,blockedBy:null,inProgressAt:new Date(Date.now()-604800000).toISOString(),completedAt:new Date(Date.now()-432000000).toISOString(),actualHours:18,subtasks:[{done:true,label:"Layout"},{done:true,label:"Branding"},{done:true,label:"Mobile"}],commentList:[{id:"c7",author:"Maya Patel",authorColor:"#7C4FE0",text:"Shipped to prod!",createdAt:"Jun 2 · 4:00 PM"}],links:[]},
+  {id:"done",title:"Done",color:"#10b981",desc:"Completed & shipped",cards:[
+    {id:"k8",title:"Login page light mode redesign",priority:"medium",labels:["design"],assigneeId:"emp-yash",effortScore:3,valueScore:7,blockedBy:null,inProgressAt:new Date(Date.now()-604800000).toISOString(),completedAt:new Date(Date.now()-432000000).toISOString(),actualHours:18,subtasks:[{done:true,label:"Layout"},{done:true,label:"Branding"},{done:true,label:"Mobile"}],commentList:[{id:"c7",author:"Maya Patel",authorColor:"#5b6cff",text:"Shipped to prod!",createdAt:"Jun 2 · 4:00 PM"}],links:[]},
     {id:"k9",title:"Firestore composite index fix",priority:"high",labels:["bug","infra"],assigneeId:"emp-yash",effortScore:2,valueScore:9,blockedBy:null,inProgressAt:new Date(Date.now()-518400000).toISOString(),completedAt:new Date(Date.now()-345600000).toISOString(),actualHours:6,subtasks:[],commentList:[],links:[]},
   ]},
 ];
 // A first-time board: the same columns, no sample cards.
 const EMPTY_COLUMNS:KanbanColumn[]=DEFAULT_COLUMNS.map(c=>({...c,cards:[]}));
 
+// ─── Icons ────────────────────────────────────────────────────────────────────
+const XIcon=()=>(<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>);
+const PlusIcon=()=>(<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>);
+const ChevronIcon=({dir}:{dir:"left"|"right"})=>(<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d={dir==="left"?"M15 18l-6-6 6-6":"M9 18l6-6-6-6"}/></svg>);
+const SearchIcon=()=>(<svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-4 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>);
+
+// Shared modal pieces
+const BACKDROP="fixed inset-0 bg-scrim backdrop-blur-[2px] flex items-center justify-center";
+// Pick-one / toggle chip used for attendees and assignees
+const pickCls=(active:boolean)=>`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${active?"border-brand-line bg-brand-soft":"border-line bg-raised hover:border-line-hover"}`;
+
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({name,color,size=22}:{name:string;color?:string;size?:number}){
-  return(<div style={{width:size,height:size,borderRadius:"50%",background:color??"#4F6FF0",color:"#fff",fontSize:size*0.36,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,userSelect:"none",border:"1px solid #1a1a1a"}}>{initials(name)}</div>);
+  return(
+    <div className="rounded-full text-white font-semibold flex items-center justify-center shrink-0 select-none border border-line"
+      style={{width:size,height:size,fontSize:size*0.36,background:color??"var(--brand)"}}>
+      {initials(name)}
+    </div>
+  );
 }
 
 function AttendeeStack({ids,max=3,admins}:{ids:string[];max?:number;admins:Employee[]}){
   const shown=ids.slice(0,max),extra=ids.length-max;
-  return(<div style={{display:"flex",alignItems:"center"}}>{shown.map((id,i)=>{const e=empById(admins,id);if(!e)return null;return(<div key={id} style={{marginLeft:i>0?-6:0,zIndex:shown.length-i}}><Avatar name={e.name} color={e.color} size={20}/></div>);})}{extra>0&&<span style={{marginLeft:4,fontSize:9.5,fontWeight:700,color:"#94A3B8"}}>+{extra}</span>}</div>);
+  return(
+    <div className="flex items-center">
+      {shown.map((id,i)=>{const e=empById(admins,id);if(!e)return null;return(
+        <div key={id} style={{marginLeft:i>0?-6:0,zIndex:shown.length-i}}><Avatar name={e.name} color={e.color} size={20}/></div>
+      );})}
+      {extra>0&&<span className="ml-1 text-[11px] font-semibold text-fg-4">+{extra}</span>}
+    </div>
+  );
 }
 
 
@@ -162,20 +187,13 @@ function AttendeeStack({ids,max=3,admins}:{ids:string[];max?:number;admins:Emplo
 function Tooltip({text,children}:{text:string;children:React.ReactNode}){
   const [show,setShow]=useState(false);
   return(
-    // flexShrink:0 — otherwise wrapped toolbar controls squash and overlap instead of scrolling
-    <div style={{position:"relative",display:"inline-flex",flexShrink:0}}
+    // shrink-0 — otherwise wrapped toolbar controls squash and overlap instead of scrolling
+    <div className="relative inline-flex shrink-0"
       onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
       {children}
       {show&&(
-        <div style={{position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",
-          background:"#0F172A",color:"#F8FAFC",fontSize:11,fontWeight:500,lineHeight:1.4,
-          padding:"5px 9px",borderRadius:7,zIndex:9999,
-          boxShadow:"0 4px 12px rgba(0,0,0,0.25)",pointerEvents:"none",
-          maxWidth:220,textAlign:"center",whiteSpace:"normal" as "normal"}}>
+        <div className="popover absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-9999 pointer-events-none w-max max-w-55 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-fg-2 text-center whitespace-normal rounded-lg!">
           {text}
-          <div style={{position:"absolute",top:"100%",left:"50%",transform:"translateX(-50%)",
-            width:0,height:0,borderLeft:"5px solid transparent",borderRight:"5px solid transparent",
-            borderTop:"5px solid #0F172A"}}/>
         </div>
       )}
     </div>
@@ -195,7 +213,14 @@ function BurndownChart({data}:{data:SprintDay[]}){
   const W=180,H=40,P=4;
   const pts=data.map((d,i)=>({x:P+i*(W-P*2)/(data.length-1||1),y:H-P-(d.completed/max)*(H-P*2),n:d.completed}));
   const path=pts.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
-  return(<svg width={W} height={H} style={{overflow:"visible"}}><path d={path} fill="none" stroke="#4F6FF0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>{pts.map((p,i)=>p.n>0&&(<g key={i}><circle cx={p.x} cy={p.y} r={3} fill="#4F6FF0"/><text x={p.x} y={p.y-6} textAnchor="middle" fontSize={9} fill="#6B7280">{p.n}</text></g>))}</svg>);
+  return(
+    <svg width={W} height={H} className="overflow-visible">
+      <path d={path} fill="none" className="stroke-brand" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      {pts.map((p,i)=>p.n>0&&(
+        <g key={i}><circle cx={p.x} cy={p.y} r={3} className="fill-brand"/><text x={p.x} y={p.y-6} textAnchor="middle" fontSize={11} className="fill-fg-4">{p.n}</text></g>
+      ))}
+    </svg>
+  );
 }
 
 // ─── AI Assistant (OpenAI GPT-4o — server-side via /api/kanban/ai) ───────────
@@ -217,14 +242,17 @@ function AIAssistant({title,onResult,onClose}:{title:string;onResult:(d:{story:s
     }catch(e){setError("AI error: "+String(e));}
     setLoading(false);
   }
-  return(<div style={{background:"rgba(79,111,240,0.08)",border:"1.5px solid rgba(79,111,240,0.2)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:loading||error?8:0}}>
-      <span style={{fontSize:16}}>🤖</span><span style={{fontSize:12.5,fontWeight:700,color:"#4F6FF0"}}>AI Assistant</span>
-      <div style={{flex:1}}/><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#555",fontSize:14}}>✕</button>
+  return(
+    <div className="rounded-lg border border-brand-line bg-brand-soft px-3.5 py-3 mb-3.5">
+      <div className={`flex items-center gap-2 ${loading||error?"mb-2":""}`}>
+        <span className="text-[16px]">🤖</span><span className="text-[13px] font-semibold text-brand-fg">AI Assistant</span>
+        <div className="flex-1"/>
+        <button onClick={onClose} aria-label="Close" className="btn btn-ghost btn-sm btn-icon"><XIcon/></button>
+      </div>
+      {loading&&<div className="text-[12px] text-fg-4 flex items-center gap-1.5"><div className="w-3 h-3 rounded-full border-2 border-brand-line border-t-brand animate-spin"/>Analyzing card…</div>}
+      {error&&<div className="text-[12px] text-danger-fg">{error}</div>}
     </div>
-    {loading&&<div style={{fontSize:11.5,color:"#555",display:"flex",alignItems:"center",gap:6}}><div style={{width:12,height:12,border:"2px solid rgba(79,111,240,0.3)",borderTopColor:"#4F6FF0",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>Analyzing card…</div>}
-    {error&&<div style={{fontSize:11.5,color:"#f44"}}>{error}</div>}
-  </div>);
+  );
 }
 
 // ─── Standup Mode ─────────────────────────────────────────────────────────────
@@ -233,35 +261,42 @@ function StandupMode({columns,admins,me,onClose}:{columns:KanbanColumn[];admins:
   const inProgress=myCards.filter(c=>c.colId==="inprogress");
   const done=myCards.filter(c=>c.colId==="done");
   const blocked=myCards.filter(c=>c.blockedBy);
-  return(<div style={{position:"fixed",inset:0,background:"#0F172A",zIndex:2000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:40}}>
-    <div style={{maxWidth:700,width:"100%"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:40}}>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Daily Standup</div>
-          <div style={{fontSize:32,fontWeight:800,color:"#F8FAFC",letterSpacing:-1}}>{today.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <Avatar name={me.name} color={me.color} size={44}/>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,color:"#94A3B8",padding:"8px 16px",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600}}>Exit</button>
-        </div>
-      </div>
-      {([{emoji:"✅",label:"Done since last standup",cards:done,color:"#10B981"},{emoji:"🔨",label:"Working on today",cards:inProgress,color:"#F59E0B"},{emoji:"🚫",label:"Blocked",cards:blocked,color:"#EF4444"}]).map(({emoji,label,cards,color})=>(
-        <div key={label} style={{marginBottom:28}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <span style={{fontSize:20}}>{emoji}</span>
-            <span style={{fontSize:14,fontWeight:700,color:"#CBD5E1"}}>{label}</span>
-            <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
-            <span style={{fontSize:12,fontWeight:600,color,background:"rgba(255,255,255,0.06)",padding:"2px 8px",borderRadius:99}}>{cards.length}</span>
+  return(
+    <div className="fixed inset-0 bg-canvas z-2000 flex flex-col items-center justify-center p-10">
+      <div className="max-w-175 w-full">
+        <div className="flex items-center justify-between mb-10">
+          <div>
+            <div className="label mb-1.5">Daily Standup</div>
+            <div className="text-[32px] font-bold text-fg tracking-tight">{today.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
           </div>
-          {cards.length===0?<div style={{fontSize:13,color:"#475569",fontStyle:"italic",paddingLeft:30}}>Nothing to report</div>
-          :cards.map(c=><div key={c.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px 10px 30px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:8,marginBottom:6}}>
-            <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:600,color:"#F1F5F9"}}>{c.title}</div>{c.blockedBy&&<div style={{fontSize:11.5,color:"#EF4444",marginTop:3}}>🚫 {c.blockedBy}</div>}</div>
-            <span style={{fontSize:10,fontWeight:700,color,background:`${color}22`,padding:"2px 7px",borderRadius:99,flexShrink:0}}>{c.colTitle}</span>
-          </div>)}
+          <div className="flex items-center gap-3">
+            <Avatar name={me.name} color={me.color} size={44}/>
+            <button onClick={onClose} className="btn btn-secondary">Exit</button>
+          </div>
         </div>
-      ))}
+        {([{emoji:"✅",label:"Done since last standup",cards:done,color:"var(--success-fg)"},{emoji:"🔨",label:"Working on today",cards:inProgress,color:"var(--warning-fg)"},{emoji:"🚫",label:"Blocked",cards:blocked,color:"var(--danger-fg)"}]).map(({emoji,label,cards,color})=>(
+          <div key={label} className="mb-7">
+            <div className="flex items-center gap-2.5 mb-3">
+              <span className="text-[20px]">{emoji}</span>
+              <span className="section-title text-fg-2">{label}</span>
+              <div className="flex-1 h-px bg-line-soft"/>
+              <span className="badge badge-neutral" style={{color}}>{cards.length}</span>
+            </div>
+            {cards.length===0?<div className="text-[13px] text-fg-4 italic pl-7.5">Nothing to report</div>
+            :cards.map(c=>(
+              <div key={c.id} className="flex items-start gap-2.5 py-2.5 pr-3.5 pl-7.5 bg-surface border border-line rounded-lg mb-1.5">
+                <div className="flex-1">
+                  <div className="text-[14px] font-semibold text-fg">{c.title}</div>
+                  {c.blockedBy&&<div className="text-[12px] text-danger-fg mt-0.5">🚫 {c.blockedBy}</div>}
+                </div>
+                <span className="badge shrink-0" style={{color,background:tint(color,"22"),borderColor:tint(color,"40")}}>{c.colTitle}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
-  </div>);
+  );
 }
 
 // ─── Meeting Modal ────────────────────────────────────────────────────────────
@@ -297,53 +332,84 @@ function MeetingModal({meeting,defaultDate,integrations,admins,onClose,onSave,on
     }catch(e){setError(String(e));}
     setLoading(false);
   }
-  const fi:React.CSSProperties={display:"block",width:"100%",border:"1.5px solid #2a2a2a",borderRadius:8,padding:"7px 10px",fontSize:12.5,fontFamily:"inherit",outline:"none",color:"#ededed",background:"#0a0a0a"};
-  const fl:React.CSSProperties={fontSize:10,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.05em",display:"block",marginBottom:5};
-  if(created)return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{background:"#0a0a0a",border:"1px solid #1a1a1a",borderRadius:14,width:460,maxWidth:"94vw",padding:"28px 28px 24px",boxShadow:"0 24px 60px rgba(0,0,0,0.6)",textAlign:"center"}}>
-      <div style={{width:52,height:52,borderRadius:"50%",background:"rgba(62,207,142,0.1)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:26}}>+</div>
-      <div style={{fontSize:16,fontWeight:700,color:"#ededed",marginBottom:4}}>Meeting Created</div>
-      <div style={{fontSize:13,color:"#555",marginBottom:20}}>{created.title} - {created.startTime}-{created.endTime}</div>
-      <a href={created.joinUrl} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:8,padding:"10px 22px",borderRadius:9,background:pm.btnBg,color:"#fff",fontSize:13,fontWeight:700,textDecoration:"none",marginBottom:18}}><PlatformIcon p={created.platform} size={15}/>Join {pm.label} →</a>
-      <div style={{marginBottom:20}}><div style={{fontSize:10,fontWeight:700,color:"#444",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6}}>Join URL</div><div style={{fontSize:11,color:"#4F6FF0",wordBreak:"break-all",padding:"8px 12px",background:"rgba(79,111,240,0.08)",borderRadius:7,userSelect:"all"}}>{created.joinUrl}</div></div>
-      <button onClick={()=>onSave(created)} style={{padding:"8px 22px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Save to Calendar</button>
-    </div>
-  </div>);
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{background:"#0a0a0a",border:"1px solid #1a1a1a",borderRadius:14,width:540,maxWidth:"94vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.6)"}}>
-      <div style={{padding:"18px 22px 14px",borderBottom:"1px solid #1a1a1a",flexShrink:0}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{fontSize:14,fontWeight:700,color:"#ededed"}}>{isNew?"Schedule Meeting":"Edit Meeting"}</div><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#555",fontSize:18,lineHeight:1}}>x</button></div></div>
-      <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
-        <div style={{marginBottom:13}}><label style={fl}>Meeting Title *</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Sprint Planning" style={fi}/></div>
-        <div style={{marginBottom:13}}><label style={fl}>Platform</label>
-          <div style={{display:"flex",gap:8}}>{(["teams","meet","zoom"] as MeetPlatform[]).map(p=>{const meta=PLATFORM_META[p],active=platform===p,conn=p==="teams"?integrations.teams:p==="meet"?integrations.google:integrations.zoom;return(<button key={p} onClick={()=>setPlatform(p)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,padding:"10px 0",borderRadius:10,cursor:"pointer",border:active?`2px solid ${meta.color}`:"1.5px solid #2a2a2a",background:active?meta.bg:"#111",fontWeight:600,fontSize:11.5,color:active?meta.color:"#555"}}><PlatformIcon p={p} size={18}/>{meta.label}<span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:99,background:conn?"rgba(62,207,142,0.12)":"#1a1a1a",color:conn?"#3ecf8e":"#444"}}>{conn?"Connected":"Not connected"}</span></button>);})}
-          </div>
+  if(created)return(
+    <div className={`${BACKDROP} z-1100`} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="popover animate-pop-in w-115 max-w-[94vw] px-7 pt-7 pb-6 text-center">
+        <div className="w-13 h-13 rounded-full bg-success-soft text-success-fg flex items-center justify-center mx-auto mb-4 text-[26px]">+</div>
+        <div className="text-[16px] font-semibold text-fg mb-1">Meeting Created</div>
+        <div className="text-[13px] text-fg-4 mb-5">{created.title} - {created.startTime}-{created.endTime}</div>
+        <a href={created.joinUrl} target="_blank" rel="noreferrer" className="btn btn-lg text-white no-underline mb-4" style={{background:pm.btnBg}}><PlatformIcon p={created.platform} size={15}/>Join {pm.label} →</a>
+        <div className="mb-5">
+          <div className="label text-fg-5 mb-1.5">Join URL</div>
+          <div className="text-[12px] text-brand-fg break-all px-3 py-2 bg-brand-soft rounded-lg select-all">{created.joinUrl}</div>
         </div>
-        {!isConnected&&<div style={{background:"rgba(245,166,35,0.06)",border:"1.5px solid rgba(245,166,35,0.2)",borderRadius:10,padding:"14px 16px",marginBottom:13}}>
-          <div style={{fontSize:12.5,fontWeight:700,color:"#f5a623",marginBottom:8}}>Connect your {pm.label} account first</div>
-          <div style={{fontSize:11.5,color:"#f5a623",lineHeight:1.5,marginBottom:12}}>{platform==="teams"&&"Sign in via the Outlook tab first."}{platform==="meet"&&"Authorize Preciprocal to create Google Calendar events with Meet links."}{platform==="zoom"&&"Authorize Preciprocal to create Zoom meetings on your behalf."}</div>
-          {platform!=="teams"&&<button type="button" onClick={()=>void startConnect(platform as "meet"|"zoom")} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 18px",borderRadius:8,background:pm.btnBg,color:"#fff",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}><PlatformIcon p={platform} size={14}/>Connect {pm.label} →</button>}
-        </div>}
-        {isConnected&&<>
-          <div style={{display:"flex",gap:10,marginBottom:13}}>
-            <div style={{flex:2}}><label style={fl}>Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} style={fi}/></div>
-            <div style={{flex:1}}><label style={fl}>Start</label><input type="time" value={startTime} onChange={e=>setStartTime(e.target.value)} style={fi}/></div>
-            <div style={{flex:1}}><label style={fl}>End</label><input type="time" value={endTime} onChange={e=>setEndTime(e.target.value)} style={fi}/></div>
-          </div>
-          <div style={{marginBottom:13}}><label style={fl}>Description</label><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={2} placeholder="Agenda…" style={{...fi,resize:"vertical" as const}}/></div>
-          <div style={{marginBottom:13}}><label style={fl}>Invite Attendees</label>
-            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>{admins.map(emp=>{const active=attendees.includes(emp.id);return(<button key={emp.id} onClick={()=>toggleAttendee(emp.id)} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",borderRadius:8,border:active?"1.5px solid #4F6FF0":"1.5px solid #2a2a2a",background:active?"rgba(79,111,240,0.12)":"#111",cursor:"pointer"}}><Avatar name={emp.name} color={emp.color} size={22}/><div><div style={{fontSize:11.5,fontWeight:600,color:active?"#4F6FF0":"#888"}}>{emp.name}</div><div style={{fontSize:10,color:"#444"}}>{emp.role}</div></div>{active&&<span style={{fontSize:12,color:"#4F6FF0"}}>✓</span>}</button>);})}</div>
-          </div>
-          <div style={{background:pm.bg,border:`1.5px solid ${pm.color}33`,borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}><PlatformIcon p={platform} size={16}/><div style={{flex:1,fontSize:11.5,color:"#555"}}>{platform==="teams"&&"Meeting created via Microsoft Graph · Calendar invites sent"}{platform==="meet"&&"Event created in Google Calendar · Meet link auto-generated"}{platform==="zoom"&&"Zoom meeting created · Unique join URL generated"}</div>{platform!=="teams"&&<button type="button" onClick={()=>void startConnect(platform as "meet"|"zoom")} style={{fontSize:10,color:pm.color,background:"transparent",border:"none",padding:0,cursor:"pointer",fontWeight:600,flexShrink:0}}>Reconnect</button>}</div>
-          {error&&<div style={{marginTop:10,fontSize:11.5,color:"#f44",background:"rgba(255,68,68,0.06)",border:"1px solid rgba(255,68,68,0.2)",borderRadius:7,padding:"8px 10px",lineHeight:1.5}}>{error}</div>}
-        </>}
-      </div>
-      <div style={{padding:"12px 22px 16px",borderTop:"1px solid #1a1a1a",display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
-        {!isNew&&meeting&&<button onClick={()=>onDelete(meeting.id)} style={{padding:"7px 13px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid rgba(255,68,68,0.2)",background:"rgba(255,68,68,0.06)",color:"#f44",marginRight:"auto"}}>Delete</button>}
-        <button onClick={onClose} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid #2a2a2a",background:"#111",color:"#555"}}>Cancel</button>
-        {isConnected&&<button onClick={createMeeting} disabled={!title.trim()||loading} style={{padding:"7px 18px",borderRadius:8,fontSize:12,fontWeight:700,cursor:(!title.trim()||loading)?"not-allowed":"pointer",border:"none",background:(!title.trim()||loading)?"rgba(79,111,240,0.3)":"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",display:"flex",alignItems:"center",gap:7}}><PlatformIcon p={platform} size={13}/>{loading?"Creating...":"Create Meeting"}</button>}
+        <button onClick={()=>onSave(created)} className="btn btn-primary">Save to Calendar</button>
       </div>
     </div>
-  </div>);
+  );
+  return(
+    <div className={`${BACKDROP} z-1100`} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="popover animate-pop-in w-135 max-w-[94vw] max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-line-soft shrink-0">
+          <div className="section-title">{isNew?"Schedule Meeting":"Edit Meeting"}</div>
+          <button onClick={onClose} aria-label="Close" className="btn btn-ghost btn-sm btn-icon"><XIcon/></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="mb-3.5"><label className="field-label">Meeting Title *</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Sprint Planning" className="field"/></div>
+          <div className="mb-3.5"><label className="field-label">Platform</label>
+            <div className="flex gap-2">
+              {(["teams","meet","zoom"] as MeetPlatform[]).map(p=>{
+                const meta=PLATFORM_META[p],active=platform===p,conn=p==="teams"?integrations.teams:p==="meet"?integrations.google:integrations.zoom;
+                return(
+                  <button key={p} onClick={()=>setPlatform(p)}
+                    className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-lg border cursor-pointer text-[12px] font-semibold transition-colors ${active?"":"border-line bg-raised text-fg-4 hover:border-line-hover"}`}
+                    style={active?{borderColor:meta.color,background:meta.bg,color:meta.color}:undefined}>
+                    <PlatformIcon p={p} size={18}/>{meta.label}
+                    <span className={`badge ${conn?"badge-success":"badge-neutral"}`}>{conn?"Connected":"Not connected"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {!isConnected&&<div className="rounded-lg border border-warning-line bg-warning-soft px-4 py-3.5 mb-3.5">
+            <div className="text-[13px] font-semibold text-warning-fg mb-2">Connect your {pm.label} account first</div>
+            <div className="text-[12px] text-warning-fg leading-normal mb-3">{platform==="teams"&&"Sign in via the Outlook tab first."}{platform==="meet"&&"Authorize Preciprocal to create Google Calendar events with Meet links."}{platform==="zoom"&&"Authorize Preciprocal to create Zoom meetings on your behalf."}</div>
+            {platform!=="teams"&&<button type="button" onClick={()=>void startConnect(platform as "meet"|"zoom")} className="btn text-white" style={{background:pm.btnBg}}><PlatformIcon p={platform} size={14}/>Connect {pm.label} →</button>}
+          </div>}
+          {isConnected&&<>
+            <div className="flex gap-2.5 mb-3.5">
+              <div className="flex-2"><label className="field-label">Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} className="field"/></div>
+              <div className="flex-1"><label className="field-label">Start</label><input type="time" value={startTime} onChange={e=>setStartTime(e.target.value)} className="field"/></div>
+              <div className="flex-1"><label className="field-label">End</label><input type="time" value={endTime} onChange={e=>setEndTime(e.target.value)} className="field"/></div>
+            </div>
+            <div className="mb-3.5"><label className="field-label">Description</label><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={2} placeholder="Agenda…" className="field min-h-0"/></div>
+            <div className="mb-3.5"><label className="field-label">Invite Attendees</label>
+              <div className="flex flex-wrap gap-2">
+                {admins.map(emp=>{const active=attendees.includes(emp.id);return(
+                  <button key={emp.id} onClick={()=>toggleAttendee(emp.id)} className={pickCls(active)}>
+                    <Avatar name={emp.name} color={emp.color} size={22}/>
+                    <div className="text-left"><div className={`text-[12px] font-semibold ${active?"text-brand-fg":"text-fg-3"}`}>{emp.name}</div><div className="text-[11px] text-fg-5">{emp.role}</div></div>
+                    {active&&<span className="text-[12px] text-brand-fg">✓</span>}
+                  </button>
+                );})}
+              </div>
+            </div>
+            <div className="rounded-lg border px-3.5 py-2.5 flex items-center gap-2.5" style={{background:pm.bg,borderColor:tint(pm.color,"33")}}>
+              <PlatformIcon p={platform} size={16}/>
+              <div className="flex-1 text-[12px] text-fg-4">{platform==="teams"&&"Meeting created via Microsoft Graph · Calendar invites sent"}{platform==="meet"&&"Event created in Google Calendar · Meet link auto-generated"}{platform==="zoom"&&"Zoom meeting created · Unique join URL generated"}</div>
+              {platform!=="teams"&&<button type="button" onClick={()=>void startConnect(platform as "meet"|"zoom")} className="link text-[11px] shrink-0" style={{color:pm.color}}>Reconnect</button>}
+            </div>
+            {error&&<div className="mt-2.5 text-[12px] text-danger-fg bg-danger-soft border border-danger-line rounded-lg px-2.5 py-2 leading-normal">{error}</div>}
+          </>}
+        </div>
+        <div className="px-5 py-3 border-t border-line-soft flex gap-2 justify-end shrink-0">
+          {!isNew&&meeting&&<button onClick={()=>onDelete(meeting.id)} className="btn btn-danger mr-auto">Delete</button>}
+          <button onClick={onClose} className="btn btn-secondary">Cancel</button>
+          {isConnected&&<button onClick={createMeeting} disabled={!title.trim()||loading} className="btn btn-primary"><PlatformIcon p={platform} size={13}/>{loading?"Creating...":"Create Meeting"}</button>}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Calendar Panel ───────────────────────────────────────────────────────────
@@ -354,49 +420,96 @@ function CalendarPanel({cards,meetings,admins,calMonth,setCalMonth,calSelected,s
   const selMeetings=meetings.filter(m=>m.date===calSelected).sort((a,b)=>a.startTime.localeCompare(b.startTime));
   const dueTiles=cards.filter(c=>c.dueDate===calSelected);
   const selLabel=new Date(calSelected).toLocaleDateString("en-US",{weekday:"short",month:"long",day:"numeric"});
-  const navBtn:React.CSSProperties={background:"none",border:"1px solid #2a2a2a",borderRadius:6,width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#555",fontSize:13};
-  return(<div style={{display:"flex",flexDirection:"column",overflow:"hidden",...(compact?{flex:1}:{width:268,minWidth:268,maxWidth:268,flexShrink:0,borderLeft:"1px solid #1a1a1a",alignSelf:"stretch"}),background:"#0a0a0a"}}>
-    <div style={{padding:"14px 14px 10px",borderBottom:"1px solid #1a1a1a",flexShrink:0}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:14,fontWeight:700,color:"#ededed",letterSpacing:-0.3}}>Calendar</div><div style={{fontSize:11,color:"#444",marginTop:1}}>{selLabel}</div></div>
-        <button onClick={()=>onSchedule(calSelected)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Meet</button>
+  return(
+    <div className={`flex flex-col overflow-hidden bg-surface ${compact?"flex-1":"w-67 min-w-67 max-w-67 shrink-0 border-l border-line self-stretch"}`}>
+      <div className="px-3.5 pt-3.5 pb-2.5 border-b border-line-soft shrink-0">
+        <div className="flex items-center justify-between">
+          <div><div className="section-title">Calendar</div><div className="text-[12px] text-fg-4 mt-px">{selLabel}</div></div>
+          <button onClick={()=>onSchedule(calSelected)} className="btn btn-primary btn-sm"><PlusIcon/>Meet</button>
+        </div>
       </div>
-    </div>
-    <div style={{padding:"12px 12px 8px",flexShrink:0}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-        <span style={{fontSize:12.5,fontWeight:700,color:"#ededed"}}>{monthLabel}</span>
-        <div style={{display:"flex",gap:4}}><button style={navBtn} onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1))}>&#8249;</button><button style={navBtn} onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1))}>&#8250;</button></div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1}}>
-        {["Mo","Tu","We","Th","Fr","Sa","Su"].map(d=><div key={d} style={{fontSize:9,fontWeight:700,color:"#444",textAlign:"center",padding:"2px 0",textTransform:"uppercase"}}>{d}</div>)}
-        {days.map(({date,day,cur})=>{const isT=date===NOW_ISO,isSel=date===calSelected&&!isT,hasEv=eventDates.has(date);return(<div key={date} onClick={()=>setCalSelected(date)} style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,borderRadius:6,cursor:"pointer",position:"relative",fontWeight:isT?700:500,color:!cur?"#333":isT?"#fff":isSel?"#4F6FF0":"#888",background:isT?"linear-gradient(135deg,#4F6FF0,#7C4FE0)":isSel?"rgba(79,111,240,0.15)":"transparent"}}>{day}{hasEv&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:3,height:3,borderRadius:"50%",background:isT?"#fff":"#4F6FF0"}}/>}</div>);})}</div>
-    </div>
-    <div style={{flex:1,overflowY:"auto",padding:"0 12px 12px"}}>
-      {selMeetings.length===0&&dueTiles.length===0&&<div style={{padding:16,textAlign:"center",fontSize:11,color:"#444"}}>Nothing scheduled.<br/><button onClick={()=>onSchedule(calSelected)} style={{marginTop:8,fontSize:11,fontWeight:600,color:"#4F6FF0",background:"none",border:"none",cursor:"pointer"}}>+ Schedule a meeting</button></div>}
-      {selMeetings.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,fontWeight:700,color:"#444",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6,paddingTop:4}}>Meetings</div>
-        {selMeetings.map(m=>{const pm=PLATFORM_META[m.platform];return(<div key={m.id} style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:10,padding:"10px 11px",marginBottom:7,cursor:"pointer"}} onClick={()=>onEditMeeting(m)}>
-          <div style={{display:"flex",alignItems:"flex-start",gap:8}}><div style={{width:32,height:32,borderRadius:8,background:pm.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><PlatformIcon p={m.platform} size={16}/></div>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"#ededed",marginBottom:2}}>{m.title}</div><div style={{fontSize:10.5,color:"#555",marginBottom:6}}>{m.startTime} - {m.endTime}</div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><AttendeeStack ids={m.attendeeIds} admins={admins}/><a href={m.joinUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 9px",borderRadius:6,fontSize:11,fontWeight:700,textDecoration:"none",background:pm.btnBg,color:"#fff"}}>Join →</a></div>
-            </div>
+      <div className="px-3 pt-3 pb-2 shrink-0">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-[13px] font-semibold text-fg">{monthLabel}</span>
+          <div className="flex gap-1">
+            <button aria-label="Previous month" className="btn btn-ghost btn-sm btn-icon" onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1))}><ChevronIcon dir="left"/></button>
+            <button aria-label="Next month" className="btn btn-ghost btn-sm btn-icon" onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1))}><ChevronIcon dir="right"/></button>
           </div>
-        </div>);})}</div>}
-      {dueTiles.length>0&&<div><div style={{fontSize:10,fontWeight:700,color:"#444",textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:6,paddingTop:4}}>Due Tasks</div>
-        {dueTiles.map(c=>{const emp=empById(admins,c.assigneeId);return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 9px",background:"#111",borderRadius:8,marginBottom:5}}><div style={{width:28,height:28,borderRadius:7,background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#555",flexShrink:0}}>DUE</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:"#ededed",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.title}</div><div style={{fontSize:10,color:"#444",marginTop:1}}>Due today{emp?` - ${emp.name}`:""}</div></div></div>);})}</div>}
+        </div>
+        <div className="grid grid-cols-7 gap-px">
+          {["Mo","Tu","We","Th","Fr","Sa","Su"].map(d=><div key={d} className="text-[11px] font-semibold text-fg-5 text-center py-0.5 uppercase">{d}</div>)}
+          {days.map(({date,day,cur})=>{
+            const isT=date===NOW_ISO,isSel=date===calSelected&&!isT,hasEv=eventDates.has(date);
+            const tone=isT?"bg-brand text-white font-semibold":isSel?"bg-brand-soft text-brand-fg font-medium":!cur?"text-fg-5 font-medium hover:bg-hover":"text-fg-3 font-medium hover:bg-hover";
+            return(
+              <div key={date} onClick={()=>setCalSelected(date)} className={`aspect-square flex items-center justify-center text-[11px] rounded-md cursor-pointer relative transition-colors ${tone}`}>
+                {day}
+                {hasEv&&<div className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-0.75 h-0.75 rounded-full ${isT?"bg-current":"bg-brand"}`}/>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
+        {selMeetings.length===0&&dueTiles.length===0&&<div className="p-4 text-center text-[12px] text-fg-5">Nothing scheduled.<br/><button onClick={()=>onSchedule(calSelected)} className="link text-[12px] mt-2">+ Schedule a meeting</button></div>}
+        {selMeetings.length>0&&<div className="mb-2.5"><div className="label pt-1 mb-1.5">Meetings</div>
+          {selMeetings.map(m=>{const pm=PLATFORM_META[m.platform];return(
+            <div key={m.id} className="bg-raised border border-line rounded-lg px-3 py-2.5 mb-2 cursor-pointer hover:border-line-hover transition-colors" onClick={()=>onEditMeeting(m)}>
+              <div className="flex items-start gap-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{background:pm.bg}}><PlatformIcon p={m.platform} size={16}/></div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-semibold text-fg mb-0.5">{m.title}</div>
+                  <div className="text-[11px] text-fg-4 mb-1.5">{m.startTime} - {m.endTime}</div>
+                  <div className="flex items-center justify-between">
+                    <AttendeeStack ids={m.attendeeIds} admins={admins}/>
+                    <a href={m.joinUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-sm text-white no-underline" style={{background:pm.btnBg}}>Join →</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );})}
+        </div>}
+        {dueTiles.length>0&&<div><div className="label pt-1 mb-1.5">Due Tasks</div>
+          {dueTiles.map(c=>{const emp=empById(admins,c.assigneeId);return(
+            <div key={c.id} className="flex items-center gap-2 px-2.5 py-2 bg-raised rounded-lg mb-1.5">
+              <div className="w-7 h-7 rounded-md bg-raised-2 flex items-center justify-center text-[11px] font-semibold text-fg-4 shrink-0">DUE</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-semibold text-fg truncate">{c.title}</div>
+                <div className="text-[11px] text-fg-5 mt-px">Due today{emp?` - ${emp.name}`:""}</div>
+              </div>
+            </div>
+          );})}
+        </div>}
+      </div>
     </div>
-  </div>);
+  );
 }
 
 // ─── Meetings Panel (mobile) ──────────────────────────────────────────────────
 function MeetingsPanel({meetings,admins,onSchedule,onEdit}:{meetings:Meeting[];admins:Employee[];onSchedule:(d:string)=>void;onEdit:(m:Meeting)=>void;}){
   const sorted=[...meetings].sort((a,b)=>a.date.localeCompare(b.date)||a.startTime.localeCompare(b.startTime));
-  return(<div style={{flex:1,overflowY:"auto",padding:14,background:"#000"}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><span style={{fontSize:14,fontWeight:700,color:"#ededed"}}>All Meetings</span><button onClick={()=>onSchedule(NOW_ISO)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Schedule</button></div>
-    {sorted.map(m=>{const pm=PLATFORM_META[m.platform];const dl=new Date(m.date).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});return(<div key={m.id} style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:12,padding:"12px 14px",marginBottom:10,cursor:"pointer"}} onClick={()=>onEdit(m)}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:9,background:pm.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><PlatformIcon p={m.platform} size={18}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#ededed"}}>{m.title}</div><div style={{fontSize:11,color:"#555"}}>{dl} - {m.startTime}-{m.endTime}</div></div><a href={m.joinUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{padding:"5px 12px",borderRadius:7,fontSize:12,fontWeight:700,textDecoration:"none",background:pm.btnBg,color:"#fff",flexShrink:0}}>Join</a></div>
-      <AttendeeStack ids={m.attendeeIds} max={7} admins={admins}/>
-    </div>);})}
-  </div>);
+  return(
+    <div className="flex-1 overflow-y-auto p-3.5 bg-canvas">
+      <div className="flex items-center justify-between mb-3.5">
+        <span className="section-title">All Meetings</span>
+        <button onClick={()=>onSchedule(NOW_ISO)} className="btn btn-primary btn-sm"><PlusIcon/>Schedule</button>
+      </div>
+      {sorted.map(m=>{
+        const pm=PLATFORM_META[m.platform];
+        const dl=new Date(m.date).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+        return(
+          <div key={m.id} className="card px-3.5 py-3 mb-2.5 cursor-pointer" onClick={()=>onEdit(m)}>
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{background:pm.bg}}><PlatformIcon p={m.platform} size={18}/></div>
+              <div className="flex-1"><div className="text-[13px] font-semibold text-fg">{m.title}</div><div className="text-[12px] text-fg-4">{dl} - {m.startTime}-{m.endTime}</div></div>
+              <a href={m.joinUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="btn btn-sm text-white no-underline shrink-0" style={{background:pm.btnBg}}>Join</a>
+            </div>
+            <AttendeeStack ids={m.attendeeIds} max={7} admins={admins}/>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Card Tile ────────────────────────────────────────────────────────────────
@@ -407,54 +520,62 @@ function KanbanCardTile({card,colId,isDragging,admins,onDragStart,onClick}:{card
   const totalSubs=card.subtasks?.length??0;
   const progress=totalSubs?doneSubs/totalSubs:0;
   const score=calcScore(card.valueScore,card.effortScore);
-  const scoreColor=score!==null?(score>=15?"#3ecf8e":score>=8?"#f5a623":"#f44"):"#555";
+  const scoreColor=score!==null?(score>=15?"var(--success-fg)":score>=8?"var(--warning-fg)":"var(--danger-fg)"):"var(--fg-4)";
   const due=card.dueDate?formatDue(card.dueDate):null;
   const commentCount=card.commentList?.length??0;
   const linkCount=card.links?.length??0;
   const cycleTime=card.inProgressAt&&card.completedAt?cycleHours(card.inProgressAt,card.completedAt):card.inProgressAt?cycleHours(card.inProgressAt,new Date().toISOString()):null;
-  return(<div draggable onDragStart={e=>onDragStart(e,card.id,colId)} onClick={()=>onClick(card,colId)}
-    style={{background:card.lockedBy?"rgba(245,166,35,0.06)":"#111",border:`1px solid ${card.lockedBy?"rgba(245,166,35,0.3)":"#1a1a1a"}`,borderRadius:10,padding:"11px 12px",cursor:card.lockedBy?"default":"grab",opacity:isDragging?0.35:1,userSelect:"none",transition:"box-shadow 0.15s,transform 0.15s"}}
-    onMouseEnter={e=>{if(!card.lockedBy){const el=e.currentTarget as HTMLElement;el.style.boxShadow="0 4px 14px rgba(79,111,240,0.1)";el.style.transform="translateY(-1px)";}}}
-    onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.boxShadow="none";el.style.transform="none";}}>
-    {card.lockedBy&&<div style={{fontSize:10,color:"#D97706",fontWeight:600,marginBottom:5}}>🔒 {card.lockedBy} is editing</div>}
-    {card.labels.length>0&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:7}}>{card.labels.map(l=>{const lm=LABEL_META[l];return<span key={l} style={{fontSize:9.5,fontWeight:700,padding:"2px 5px",borderRadius:4,color:lm.color,background:lm.bg}}>{lm.label}</span>;})}</div>}
-    {card.blockedBy&&<div style={{background:"rgba(255,68,68,0.08)",borderLeft:"3px solid #f44",borderRadius:"0 4px 4px 0",padding:"3px 7px",fontSize:10,color:"#f44",fontWeight:600,marginBottom:6}}>Blocked: {card.blockedBy}</div>}
-    <div style={{fontSize:12.5,fontWeight:600,color:"#ededed",lineHeight:1.4,marginBottom:card.story?4:6}}>{card.title}</div>
-    {card.story&&<div style={{fontSize:10.5,color:"#555",fontStyle:"italic",marginBottom:7,paddingLeft:8,borderLeft:"2px solid #2a2a2a",lineHeight:1.5}}>{card.story.length>70?card.story.slice(0,70)+"...":card.story}</div>}
-    {linkCount>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:7}}>{card.links!.map(lk=><a key={lk.id} href={lk.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:9.5,fontWeight:600,color:"#4F6FF0",background:"#EEF2FF",padding:"2px 6px",borderRadius:4,textDecoration:"none"}}>🔗 {lk.label}</a>)}</div>}
-    {totalSubs>0&&<div style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:9.5,color:"#555",fontWeight:500}}>{doneSubs}/{totalSubs} tasks</span><span style={{fontSize:9.5,fontWeight:700,color:progress===1?"#3ecf8e":"#555"}}>{Math.round(progress*100)}%</span></div><div style={{height:3,background:"#1a1a1a",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${progress*100}%`,borderRadius:99,transition:"width 0.3s",background:progress===1?"linear-gradient(90deg,#3ecf8e,#10B981)":"linear-gradient(90deg,#4F6FF0,#7C4FE0)"}}/></div></div>}
-    <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-      <span style={{fontSize:9.5,fontWeight:700,padding:"2px 5px",borderRadius:4,color:pm.color,background:pm.bg}}>{pm.label}</span>
-      {due&&<span style={{fontSize:9.5,fontWeight:600,padding:"2px 5px",borderRadius:4,color:due.overdue?"#f44":due.soon?"#f5a623":"#555",background:due.overdue?"rgba(255,68,68,0.08)":due.soon?"rgba(245,166,35,0.08)":"#111"}}>{due.label}</span>}
+  return(
+    <div draggable onDragStart={e=>onDragStart(e,card.id,colId)} onClick={()=>onClick(card,colId)}
+      className={`rounded-lg border px-3 py-2.5 select-none transition-[box-shadow,transform,border-color] duration-150 ${card.lockedBy?"bg-warning-soft border-warning-line cursor-default":"bg-surface border-line hover:border-line-hover cursor-grab"}`}
+      style={{opacity:isDragging?0.35:1}}
+      onMouseEnter={e=>{if(!card.lockedBy){const el=e.currentTarget as HTMLElement;el.style.boxShadow="0 4px 14px -6px var(--scrim)";el.style.transform="translateY(-1px)";}}}
+      onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.boxShadow="none";el.style.transform="none";}}>
+      {card.lockedBy&&<div className="text-[11px] text-warning-fg font-semibold mb-1.5">🔒 {card.lockedBy} is editing</div>}
+      {card.labels.length>0&&<div className="flex gap-1 flex-wrap mb-2">{card.labels.map(l=>{const lm=LABEL_META[l];return<span key={l} className={`badge ${lm.badge}`}>{lm.label}</span>;})}</div>}
+      {card.blockedBy&&<div className="bg-danger-soft border-l-[3px] border-l-danger rounded-r px-2 py-0.5 text-[11px] text-danger-fg font-semibold mb-1.5">Blocked: {card.blockedBy}</div>}
+      <div className={`text-[13px] font-semibold text-fg leading-snug ${card.story?"mb-1":"mb-1.5"}`}>{card.title}</div>
+      {card.story&&<div className="text-[12px] text-fg-4 italic mb-2 pl-2 border-l-2 border-line leading-normal">{card.story.length>70?card.story.slice(0,70)+"...":card.story}</div>}
+      {linkCount>0&&<div className="flex gap-1 flex-wrap mb-2">{card.links!.map(lk=><a key={lk.id} href={lk.url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="badge badge-brand no-underline">🔗 {lk.label}</a>)}</div>}
+      {totalSubs>0&&<div className="mb-2">
+        <div className="flex justify-between mb-1"><span className="text-[11px] text-fg-4 font-medium">{doneSubs}/{totalSubs} tasks</span><span className={`text-[11px] font-semibold ${progress===1?"text-success-fg":"text-fg-4"}`}>{Math.round(progress*100)}%</span></div>
+        <div className="h-0.75 bg-raised-2 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-[width] duration-300 ${progress===1?"bg-success":"bg-brand"}`} style={{width:`${progress*100}%`}}/></div>
+      </div>}
+      <div className="flex items-center gap-1 flex-wrap">
+        <span className={`badge ${pm.badge}`}>{pm.label}</span>
+        {due&&<span className={`badge ${due.overdue?"badge-danger":due.soon?"badge-warning":"badge-neutral"}`}>{due.label}</span>}
 
-      <div style={{flex:1}}/>
-      {commentCount>0&&<span style={{fontSize:9.5,color:"#555"}}>{commentCount} cmts</span>}
-      {linkCount>0&&<span style={{fontSize:9.5,color:"#555"}}>{linkCount} lnks</span>}
-      {cycleTime!==null&&<Tooltip text={`Cycle time: ${cycleTime}h${card.completedAt?" (completed)":"  in progress"}`}><span style={{fontSize:9.5,color:"#94A3B8",cursor:"default"}}>⏱{cycleTime}h</span></Tooltip>}
-      {score!==null&&<Tooltip text={`Priority Score: ${score}/100 (Value ${card.valueScore} ÷ Effort ${card.effortScore} × 10). Higher = do it sooner.`}><span style={{fontSize:9.5,fontWeight:700,color:scoreColor,cursor:"default"}}>⚡{score}</span></Tooltip>}
-      {emp&&<Avatar name={emp.name} color={emp.color} size={20}/>}
+        <div className="flex-1"/>
+        {commentCount>0&&<span className="text-[11px] text-fg-4">{commentCount} cmts</span>}
+        {linkCount>0&&<span className="text-[11px] text-fg-4">{linkCount} lnks</span>}
+        {cycleTime!==null&&<Tooltip text={`Cycle time: ${cycleTime}h${card.completedAt?" (completed)":"  in progress"}`}><span className="text-[11px] text-fg-4 cursor-default">⏱{cycleTime}h</span></Tooltip>}
+        {score!==null&&<Tooltip text={`Priority Score: ${score}/100 (Value ${card.valueScore} ÷ Effort ${card.effortScore} × 10). Higher = do it sooner.`}><span className="text-[11px] font-semibold cursor-default" style={{color:scoreColor}}>⚡{score}</span></Tooltip>}
+        {emp&&<Avatar name={emp.name} color={emp.color} size={20}/>}
+      </div>
     </div>
-  </div>);
+  );
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
 function Column({col,dragOverColId,draggingCardId,admins,onDragStart,onDragOver,onDrop,onDragLeave,onAddCard,onEditCard}:{col:KanbanColumn;dragOverColId:string|null;draggingCardId:string|null;admins:Employee[];onDragStart:(e:React.DragEvent,cid:string,colId:string)=>void;onDragOver:(e:React.DragEvent,colId:string)=>void;onDrop:(e:React.DragEvent,colId:string)=>void;onDragLeave:()=>void;onAddCard:(colId:string)=>void;onEditCard:(card:KanbanCard,colId:string)=>void;}){
   const isDragOver=dragOverColId===col.id;
   const overLimit=col.limit!==undefined&&col.cards.length>col.limit;
-  return(<div onDragOver={e=>onDragOver(e,col.id)} onDrop={e=>onDrop(e,col.id)} onDragLeave={onDragLeave}
-    style={{display:"flex",flex:1,flexDirection:"column",minWidth:0,height:"100%",background:isDragOver?"rgba(79,111,240,0.1)":"#050505",border:isDragOver?"1.5px dashed #4F6FF0":"1.5px solid #1a1a1a",borderRadius:12,transition:"background 0.15s,border 0.15s"}}>
-    <div style={{height:36,minHeight:36,padding:"0 10px 0 12px",display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
-      <div style={{width:8,height:8,borderRadius:"50%",background:col.color,flexShrink:0}}/>
-      <span style={{fontSize:12,fontWeight:700,color:"#888",flex:1,lineHeight:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{col.title}</span>
-      <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,lineHeight:1.4,flexShrink:0,background:overLimit?"rgba(255,68,68,0.12)":"#1a1a1a",color:overLimit?"#f44":"#555"}}>{col.cards.length}{col.limit?`/${col.limit}`:""}</span>
-      <button onClick={()=>onAddCard(col.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#444",width:22,height:22,borderRadius:5,fontSize:15,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
+  return(
+    <div onDragOver={e=>onDragOver(e,col.id)} onDrop={e=>onDrop(e,col.id)} onDragLeave={onDragLeave}
+      className={`flex flex-1 flex-col min-w-0 h-full rounded-xl border transition-colors duration-150 ${isDragOver?"bg-brand-soft border-dashed border-brand":"bg-subtle border-line"}`}>
+      <div className="h-9 min-h-9 pl-3 pr-1.5 flex items-center gap-2 shrink-0">
+        <div className="w-2 h-2 rounded-full shrink-0" style={{background:col.color}}/>
+        <span className="text-[12px] font-semibold text-fg-3 flex-1 leading-none truncate">{col.title}</span>
+        <span className={`badge shrink-0 ${overLimit?"badge-danger":"badge-neutral"}`}>{col.cards.length}{col.limit?`/${col.limit}`:""}</span>
+        <button onClick={()=>onAddCard(col.id)} aria-label="Add card" className="btn btn-ghost btn-sm btn-icon shrink-0"><PlusIcon/></button>
+      </div>
+      <div className="h-5.5 min-h-5.5 px-3 flex items-center shrink-0">{col.desc&&<span className="text-[11px] text-fg-5 italic leading-none">{col.desc}</span>}</div>
+      <div className="flex-1 overflow-y-auto px-2 pb-2 flex flex-col gap-1.5">
+        {col.cards.length===0?<div className="border border-dashed border-line rounded-lg py-5 px-3 text-center text-[12px] text-fg-5">Drop cards here</div>
+        :col.cards.map(card=><KanbanCardTile key={card.id} card={card} colId={col.id} isDragging={draggingCardId===card.id} admins={admins} onDragStart={onDragStart} onClick={onEditCard}/>)}
+      </div>
     </div>
-    <div style={{height:22,minHeight:22,padding:"0 12px",display:"flex",alignItems:"center",flexShrink:0}}>{col.desc&&<span style={{fontSize:10,color:"#444",fontStyle:"italic",lineHeight:1}}>{col.desc}</span>}</div>
-    <div style={{flex:1,overflowY:"auto",padding:"0 8px 8px",display:"flex",flexDirection:"column",gap:6}}>
-      {col.cards.length===0?<div style={{border:"1.5px dashed #2a2a2a",borderRadius:8,padding:"20px 12px",textAlign:"center",fontSize:11,color:"#444"}}>Drop cards here</div>
-      :col.cards.map(card=><KanbanCardTile key={card.id} card={card} colId={col.id} isDragging={draggingCardId===card.id} admins={admins} onDragStart={onDragStart} onClick={onEditCard}/>)}
-    </div>
-  </div>);
+  );
 }
 
 // ─── Card Modal ───────────────────────────────────────────────────────────────
@@ -483,7 +604,7 @@ function CardModal({card,colId,columns,isNew,me,admins,onClose,onSave,onDelete,o
   const [tab,setTab]=useState<"details"|"comments"|"links">("details");
   const [showAI,setShowAI]=useState(false);
   const score=effort>0?Math.round((value/effort)*10):0;
-  const scoreColor=score>=15?"#3ecf8e":score>=8?"#f5a623":"#f44";
+  const scoreColor=score>=15?"var(--success-fg)":score>=8?"var(--warning-fg)":"var(--danger-fg)";
   const isDone=targetCol==="done";
   const toggleLabel=(l:LabelKey)=>setLabels(prev=>prev.includes(l)?prev.filter(x=>x!==l):[...prev,l]);
   const addComment=async()=>{
@@ -511,78 +632,137 @@ function CardModal({card,colId,columns,isNew,me,admins,onClose,onSave,onDelete,o
       actualHours:isDone&&actualHours>0?actualHours:card?.actualHours,
     },targetCol);
   };
-  const fi:React.CSSProperties={display:"block",width:"100%",border:"1.5px solid #2a2a2a",borderRadius:8,padding:"7px 10px",fontSize:12.5,fontFamily:"inherit",outline:"none",color:"#ededed",background:"#0a0a0a"};
-  const fl:React.CSSProperties={fontSize:10,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.05em",display:"block",marginBottom:5};
-  const tabBtn=(t:typeof tab,label:string)=>(<button onClick={()=>setTab(t)} style={{padding:"5px 14px",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer",border:"none",background:tab===t?"rgba(79,111,240,0.12)":"transparent",color:tab===t?"#4F6FF0":"#555"}}>{label}</button>);
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{background:"#0a0a0a",border:"1px solid #1a1a1a",borderRadius:14,width:580,maxWidth:"94vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.6)"}}>
-      <div style={{padding:"18px 22px 12px",borderBottom:"1px solid #1a1a1a",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#ededed"}}>{isNew?"New Card":"Edit Card"}</div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {!isNew&&title&&<Tooltip text="Let AI auto-fill the user story, subtasks, and effort/value scores based on the card title"><button onClick={()=>setShowAI(a=>!a)} style={{fontSize:11.5,fontWeight:600,padding:"4px 10px",borderRadius:7,border:"1.5px solid rgba(79,111,240,0.3)",background:showAI?"rgba(79,111,240,0.12)":"#0a0a0a",color:"#4F6FF0",cursor:"pointer"}}>AI</button></Tooltip>}
-            <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"#555",fontSize:18,lineHeight:1}}>x</button>
-          </div>
-        </div>
-        <div style={{display:"flex",gap:2,background:"#111",borderRadius:8,padding:3,width:"fit-content"}}>{tabBtn("details","Details")}{tabBtn("comments",`Comments${comments.length?` (${comments.length})`:""}`)}{ tabBtn("links",`Links${links.length?` (${links.length})`:""}`)} </div>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
-        {showAI&&title&&<AIAssistant title={title} onClose={()=>setShowAI(false)} onResult={r=>{setStory(r.story);setSubtasks(r.subtasks);setEffort(r.effortScore);setValue(r.valueScore);setShowAI(false);}}/>}
-        {tab==="details"&&(<>
-          <div style={{marginBottom:13}}><label style={fl}>Title *</label><textarea value={title} onChange={e=>setTitle(e.target.value)} rows={2} style={{...fi,resize:"vertical" as const}}/></div>
-          <div style={{marginBottom:13}}><label style={fl}>User Story</label><textarea value={story} onChange={e=>setStory(e.target.value)} rows={2} placeholder="As a [user], I want [goal] so that [reason]…" style={{...fi,resize:"vertical" as const}}/></div>
-          <div style={{marginBottom:13}}><label style={fl}>Description / Acceptance Criteria</label><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={2} placeholder="Technical notes, DoD…" style={{...fi,resize:"vertical" as const}}/></div>
-          <div style={{marginBottom:13}}><label style={fl}>Priority</label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(["critical","high","medium","low"] as Priority[]).map(p=>{const pm=PRIORITY_META[p],act=priority===p;return<button key={p} onClick={()=>setPriority(p)} style={{padding:"5px 10px",borderRadius:6,fontSize:11.5,fontWeight:600,cursor:"pointer",border:act?`1.5px solid ${pm.color}`:"1.5px solid #2a2a2a",background:act?pm.bg:"#111",color:act?pm.color:"#555"}}>{pm.label}</button>;})}</div></div>
-          <div style={{marginBottom:13}}><label style={fl}>Labels</label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(Object.keys(LABEL_META) as LabelKey[]).map(l=>{const lm=LABEL_META[l],act=labels.includes(l);return<button key={l} onClick={()=>toggleLabel(l)} style={{padding:"4px 9px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:act?`1.5px solid ${lm.color}`:"1.5px solid #2a2a2a",background:act?lm.bg:"#111",color:act?lm.color:"#444"}}>{lm.label}</button>;})}</div></div>
-          <div style={{marginBottom:13}}><label style={fl}>Assignee</label>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              <button onClick={()=>setAssigneeId("")} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",borderRadius:8,border:assigneeId===""?"1.5px solid #4F6FF0":"1.5px solid #2a2a2a",background:assigneeId===""?"rgba(79,111,240,0.12)":"#111",cursor:"pointer"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#555"}}>-</div><span style={{fontSize:11.5,fontWeight:600,color:assigneeId===""?"#4F6FF0":"#888"}}>Unassigned</span></button>
-              {admins.map(emp=>{const act=assigneeId===emp.id;return(<button key={emp.id} onClick={()=>setAssigneeId(emp.id)} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",borderRadius:8,border:act?"1.5px solid #4F6FF0":"1.5px solid #2a2a2a",background:act?"rgba(79,111,240,0.12)":"#111",cursor:"pointer"}}><Avatar name={emp.name} color={emp.color} size={22}/><div><div style={{fontSize:11.5,fontWeight:600,color:act?"#4F6FF0":"#888"}}>{emp.name}</div><div style={{fontSize:10,color:"#444"}}>{emp.role}</div></div></button>);})}
+  const tabBtn=(t:typeof tab,label:string)=>(<button onClick={()=>setTab(t)} className={`seg-item ${tab===t?"seg-item-active":""}`}>{label}</button>);
+  const chipCls=(act:boolean,on:string)=>`h-7 px-2.5 rounded-lg border cursor-pointer text-[12px] font-semibold transition-colors ${act?on:"border-line bg-raised text-fg-4 hover:text-fg-2 hover:border-line-hover"}`;
+  return(
+    <div className={`${BACKDROP} z-1000`} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="popover animate-pop-in w-145 max-w-[94vw] max-h-[90vh] flex flex-col">
+        <div className="px-5 pt-4 pb-3 border-b border-line-soft shrink-0">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="section-title">{isNew?"New Card":"Edit Card"}</div>
+            <div className="flex gap-2 items-center">
+              {!isNew&&title&&<Tooltip text="Let AI auto-fill the user story, subtasks, and effort/value scores based on the card title"><button onClick={()=>setShowAI(a=>!a)} className={`btn btn-sm btn-secondary ${showAI?"btn-on":""}`}>AI</button></Tooltip>}
+              <button onClick={onClose} aria-label="Close" className="btn btn-ghost btn-sm btn-icon"><XIcon/></button>
             </div>
           </div>
-          <div style={{display:"flex",gap:10,marginBottom:13}}>
-            <div style={{flex:1}}><label style={fl}>Effort (1–10)</label><input type="number" min={1} max={10} value={effort} onChange={e=>setEffort(Number(e.target.value))} style={fi}/></div>
-            <div style={{flex:1}}><label style={fl}>Value (1–10)</label><input type="number" min={1} max={10} value={value} onChange={e=>setValue(Number(e.target.value))} style={fi}/></div>
-            <div style={{flex:1}}><label style={fl}><Tooltip text="Priority Score = Value ÷ Effort × 10. Score above 15 = high priority, 8-14 = medium, below 8 = low.">⚡ Score ℹ</Tooltip></label><div style={{height:34,display:"flex",alignItems:"center",fontSize:20,fontWeight:700,color:scoreColor}}>{score}</div></div>
+          <div className="seg">{tabBtn("details","Details")}{tabBtn("comments",`Comments${comments.length?` (${comments.length})`:""}`)}{tabBtn("links",`Links${links.length?` (${links.length})`:""}`)}</div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {showAI&&title&&<AIAssistant title={title} onClose={()=>setShowAI(false)} onResult={r=>{setStory(r.story);setSubtasks(r.subtasks);setEffort(r.effortScore);setValue(r.valueScore);setShowAI(false);}}/>}
+          {tab==="details"&&(<>
+            <div className="mb-3.5"><label className="field-label">Title *</label><textarea value={title} onChange={e=>setTitle(e.target.value)} rows={2} className="field min-h-0"/></div>
+            <div className="mb-3.5"><label className="field-label">User Story</label><textarea value={story} onChange={e=>setStory(e.target.value)} rows={2} placeholder="As a [user], I want [goal] so that [reason]…" className="field min-h-0"/></div>
+            <div className="mb-3.5"><label className="field-label">Description / Acceptance Criteria</label><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={2} placeholder="Technical notes, DoD…" className="field min-h-0"/></div>
+            <div className="mb-3.5"><label className="field-label">Priority</label>
+              <div className="flex gap-1.5 flex-wrap">{(["critical","high","medium","low"] as Priority[]).map(p=>{const pm=PRIORITY_META[p],act=priority===p;return<button key={p} onClick={()=>setPriority(p)} className={chipCls(act,pm.on)}>{pm.label}</button>;})}</div>
+            </div>
+            <div className="mb-3.5"><label className="field-label">Labels</label>
+              <div className="flex gap-1.5 flex-wrap">{(Object.keys(LABEL_META) as LabelKey[]).map(l=>{const lm=LABEL_META[l],act=labels.includes(l);return<button key={l} onClick={()=>toggleLabel(l)} className={chipCls(act,lm.on)}>{lm.label}</button>;})}</div>
+            </div>
+            <div className="mb-3.5"><label className="field-label">Assignee</label>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={()=>setAssigneeId("")} className={pickCls(assigneeId==="")}>
+                  <div className="w-5.5 h-5.5 rounded-full bg-raised-2 flex items-center justify-center text-[11px] text-fg-4">-</div>
+                  <span className={`text-[12px] font-semibold ${assigneeId===""?"text-brand-fg":"text-fg-3"}`}>Unassigned</span>
+                </button>
+                {admins.map(emp=>{const act=assigneeId===emp.id;return(
+                  <button key={emp.id} onClick={()=>setAssigneeId(emp.id)} className={pickCls(act)}>
+                    <Avatar name={emp.name} color={emp.color} size={22}/>
+                    <div className="text-left"><div className={`text-[12px] font-semibold ${act?"text-brand-fg":"text-fg-3"}`}>{emp.name}</div><div className="text-[11px] text-fg-5">{emp.role}</div></div>
+                  </button>
+                );})}
+              </div>
+            </div>
+            <div className="flex gap-2.5 mb-3.5">
+              <div className="flex-1"><label className="field-label">Effort (1–10)</label><input type="number" min={1} max={10} value={effort} onChange={e=>setEffort(Number(e.target.value))} className="field"/></div>
+              <div className="flex-1"><label className="field-label">Value (1–10)</label><input type="number" min={1} max={10} value={value} onChange={e=>setValue(Number(e.target.value))} className="field"/></div>
+              <div className="flex-1"><label className="field-label"><Tooltip text="Priority Score = Value ÷ Effort × 10. Score above 15 = high priority, 8-14 = medium, below 8 = low.">⚡ Score ℹ</Tooltip></label><div className="h-9 flex items-center text-[20px] font-semibold num" style={{color:scoreColor}}>{score}</div></div>
 
-          </div>
-          <div style={{display:"flex",gap:10,marginBottom:13}}>
-            <div style={{flex:1}}><label style={fl}>Due Date</label><input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)} style={fi}/></div>
-            {isDone&&<div style={{flex:1}}><label style={fl}><Tooltip text="How many hours did this card actually take? Used to build velocity data and improve future estimates.">⏱ Actual Hours ℹ</Tooltip></label><input type="number" min={0} value={actualHours} onChange={e=>setActualHours(Number(e.target.value))} placeholder="e.g. 12" style={fi}/></div>}
-          </div>
-          <div style={{marginBottom:13}}><label style={fl}>Blocked By</label><input value={String(blockedBy??"")} onChange={e=>setBlockedBy(e.target.value)} placeholder="Describe blocker (leave empty if none)…" style={fi}/></div>
-          <div style={{marginBottom:13}}>
-            <label style={fl}>Subtasks</label>
-            {subtasks.map((s,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><input type="checkbox" checked={s.done} onChange={()=>toggleSubtask(i)} style={{cursor:"pointer",width:14,height:14,flexShrink:0}}/><span style={{flex:1,fontSize:12.5,textDecoration:s.done?"line-through":"none",color:s.done?"#444":"#ccc"}}>{s.label}</span><button onClick={()=>removeSubtask(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#333",fontSize:14,padding:2}}>x</button></div>)}
-            <div style={{display:"flex",gap:6,marginTop:6}}><input value={newSubtask} onChange={e=>setNewSubtask(e.target.value)} placeholder="Add subtask..." onKeyDown={e=>{if(e.key==="Enter")addSubtask();}} style={{...fi,flex:1}}/><button onClick={addSubtask} disabled={!newSubtask.trim()} style={{padding:"7px 12px",borderRadius:8,border:"none",background:"rgba(79,111,240,0.12)",color:"#4F6FF0",fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>Add</button></div>
-          </div>
-          <div><label style={fl}>Column</label><Select value={targetCol} onChange={e=>setTargetCol(e.target.value)} className="h-9.5 rounded-lg text-[13px] bg-[#111]">{columns.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</Select></div>
-        </>)}
-        {tab==="comments"&&<div>
-          {comments.length===0&&<div style={{textAlign:"center",padding:"28px 0",fontSize:12,color:"#444"}}>No comments yet. Use @Name to mention teammates.</div>}
-          {comments.map(cm=><div key={cm.id} style={{display:"flex",gap:10,marginBottom:16}}><Avatar name={cm.author} color={cm.authorColor} size={28}/><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:4}}><span style={{fontSize:12.5,fontWeight:700,color:"#ededed"}}>{cm.author}</span><span style={{fontSize:10.5,color:"#444"}}>{cm.createdAt}</span>{cm.author===me.name&&<button onClick={()=>card&&onDeleteComment(card.id,colId??columns[0].id,cm.id)} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"#333",fontSize:11,padding:0}}>Delete</button>}</div><div style={{fontSize:12.5,color:"#aaa",lineHeight:1.6,background:"#111",borderRadius:8,padding:"8px 12px",border:"1px solid #1a1a1a"}}>{cm.text.split(/(@\w+)/g).map((part,i)=>part.startsWith("@")?<span key={i} style={{color:"#4F6FF0",fontWeight:700}}>{part}</span>:<span key={i}>{part}</span>)}</div></div></div>)}
-          <div style={{display:"flex",gap:10,marginTop:8,paddingTop:14,borderTop:"1px solid #1a1a1a"}}><Avatar name={me.name} color={me.color} size={28}/><div style={{flex:1}}><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))addComment();}} placeholder="Write a comment... Use @Name to notify." rows={3} style={{...fi,resize:"vertical" as const,marginBottom:8}}/><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:10.5,color:"#444"}}>@mention to notify teammates</span><button onClick={addComment} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",fontSize:12,fontWeight:700,cursor:commentText.trim()?"pointer":"not-allowed",opacity:commentText.trim()?1:0.45}}>Post</button></div></div></div>
-        </div>}
-        {tab==="links"&&<div>
-          {links.length===0&&!showLinkForm&&<div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"#444"}}>No links attached yet.</div>}
-          {links.map(lk=><div key={lk.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#111",border:"1px solid #1a1a1a",borderRadius:9,marginBottom:8}}><div style={{width:32,height:32,borderRadius:8,background:"rgba(79,111,240,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0,color:"#4F6FF0"}}>lk</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:"#ededed",marginBottom:2}}>{lk.label}</div><a href={lk.url} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#4F6FF0",textDecoration:"none",wordBreak:"break-all"}}>{lk.url}</a></div><button onClick={()=>setLinks(prev=>prev.filter(l=>l.id!==lk.id))} style={{background:"none",border:"none",cursor:"pointer",color:"#333",fontSize:16,padding:4}}>x</button></div>)}
-          {showLinkForm?<div style={{background:"#111",border:"1.5px solid #2a2a2a",borderRadius:10,padding:"14px 14px 12px",marginTop:4}}><div style={{marginBottom:9}}><label style={fl}>Label</label><input value={linkLabel} onChange={e=>setLinkLabel(e.target.value)} placeholder="e.g. PR #247, Figma..." style={fi}/></div><div style={{marginBottom:12}}><label style={fl}>URL</label><input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://..." style={fi} onKeyDown={e=>{if(e.key==="Enter")addLink();}}/></div><div style={{display:"flex",gap:8}}><button onClick={()=>setShowLinkForm(false)} style={{padding:"6px 12px",borderRadius:7,border:"1.5px solid #2a2a2a",background:"#0a0a0a",color:"#555",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button><button onClick={addLink} disabled={!linkLabel.trim()||!linkUrl.trim()} style={{padding:"6px 16px",borderRadius:7,border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",fontSize:12,fontWeight:700,cursor:(linkLabel.trim()&&linkUrl.trim())?"pointer":"not-allowed",opacity:(linkLabel.trim()&&linkUrl.trim())?1:0.45}}>Add</button></div></div>
-          :<button onClick={()=>setShowLinkForm(true)} style={{marginTop:4,display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:"1.5px dashed #2a2a2a",background:"transparent",color:"#555",fontSize:12,fontWeight:600,cursor:"pointer",width:"100%"}}>+ Attach a link</button>}
-        </div>}
-      </div>
-      <div style={{padding:"12px 22px 16px",borderTop:"1px solid #1a1a1a",display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
-        {!isNew&&card&&<button onClick={async()=>{if(await confirmDialog({title:"Delete this card?",message:`"${card.title}" and its comments will be removed. This cannot be undone.`,confirmLabel:"Delete card",tone:"danger"}))onDelete(card.id);}} style={{padding:"7px 13px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid rgba(255,68,68,0.2)",background:"rgba(255,68,68,0.06)",color:"#f44",marginRight:"auto"}}>Delete Card</button>}
-        <button onClick={onClose} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid #2a2a2a",background:"#111",color:"#555"}}>Cancel</button>
-        <button onClick={handleSave} disabled={!title.trim()} style={{padding:"7px 18px",borderRadius:8,fontSize:12,fontWeight:700,cursor:title.trim()?"pointer":"not-allowed",border:"none",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",opacity:title.trim()?1:0.45}}>{isNew?"Add Card":"Save Card"}</button>
+            </div>
+            <div className="flex gap-2.5 mb-3.5">
+              <div className="flex-1"><label className="field-label">Due Date</label><input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)} className="field"/></div>
+              {isDone&&<div className="flex-1"><label className="field-label"><Tooltip text="How many hours did this card actually take? Used to build velocity data and improve future estimates.">⏱ Actual Hours ℹ</Tooltip></label><input type="number" min={0} value={actualHours} onChange={e=>setActualHours(Number(e.target.value))} placeholder="e.g. 12" className="field"/></div>}
+            </div>
+            <div className="mb-3.5"><label className="field-label">Blocked By</label><input value={String(blockedBy??"")} onChange={e=>setBlockedBy(e.target.value)} placeholder="Describe blocker (leave empty if none)…" className="field"/></div>
+            <div className="mb-3.5">
+              <label className="field-label">Subtasks</label>
+              {subtasks.map((s,i)=>(
+                <div key={i} className="flex items-center gap-2 mb-1">
+                  <Checkbox checked={s.done} onChange={()=>toggleSubtask(i)} label={s.label}/>
+                  <span className={`flex-1 text-[13px] ${s.done?"line-through text-fg-5":"text-fg-2"}`}>{s.label}</span>
+                  <button onClick={()=>removeSubtask(i)} aria-label="Remove subtask" className="btn btn-ghost btn-sm btn-icon"><XIcon/></button>
+                </div>
+              ))}
+              <div className="flex gap-1.5 mt-1.5">
+                <input value={newSubtask} onChange={e=>setNewSubtask(e.target.value)} placeholder="Add subtask..." onKeyDown={e=>{if(e.key==="Enter")addSubtask();}} className="field flex-1"/>
+                <button onClick={addSubtask} disabled={!newSubtask.trim()} className="btn btn-secondary h-9 shrink-0">Add</button>
+              </div>
+            </div>
+            <div><label className="field-label">Column</label><Select value={targetCol} onChange={e=>setTargetCol(e.target.value)}>{columns.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</Select></div>
+          </>)}
+          {tab==="comments"&&<div>
+            {comments.length===0&&<div className="empty">No comments yet. Use @Name to mention teammates.</div>}
+            {comments.map(cm=>(
+              <div key={cm.id} className="flex gap-2.5 mb-4">
+                <Avatar name={cm.author} color={cm.authorColor} size={28}/>
+                <div className="flex-1">
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-[13px] font-semibold text-fg">{cm.author}</span>
+                    <span className="text-[11px] text-fg-5">{cm.createdAt}</span>
+                    {cm.author===me.name&&<button onClick={()=>card&&onDeleteComment(card.id,colId??columns[0].id,cm.id)} className="btn btn-ghost btn-sm ml-auto h-6 px-2">Delete</button>}
+                  </div>
+                  <div className="text-[13px] text-fg-3 leading-relaxed bg-subtle rounded-lg px-3 py-2 border border-line-soft">{cm.text.split(/(@\w+)/g).map((part,i)=>part.startsWith("@")?<span key={i} className="text-brand-fg font-semibold">{part}</span>:<span key={i}>{part}</span>)}</div>
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2.5 mt-2 pt-3.5 border-t border-line-soft">
+              <Avatar name={me.name} color={me.color} size={28}/>
+              <div className="flex-1">
+                <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))addComment();}} placeholder="Write a comment... Use @Name to notify." rows={3} className="field mb-2"/>
+                <div className="flex items-center justify-between">
+                  <span className="text-caption">@mention to notify teammates</span>
+                  <button onClick={addComment} disabled={!commentText.trim()} className="btn btn-primary btn-sm">Post</button>
+                </div>
+              </div>
+            </div>
+          </div>}
+          {tab==="links"&&<div>
+            {links.length===0&&!showLinkForm&&<div className="empty">No links attached yet.</div>}
+            {links.map(lk=>(
+              <div key={lk.id} className="flex items-center gap-2.5 px-3 py-2.5 bg-subtle border border-line-soft rounded-lg mb-2">
+                <div className="w-8 h-8 rounded-lg bg-brand-soft text-brand-fg flex items-center justify-center text-[13px] shrink-0">lk</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-fg mb-0.5">{lk.label}</div>
+                  <a href={lk.url} target="_blank" rel="noreferrer" className="text-[12px] text-brand-fg no-underline break-all hover:underline">{lk.url}</a>
+                </div>
+                <button onClick={()=>setLinks(prev=>prev.filter(l=>l.id!==lk.id))} aria-label="Remove link" className="btn btn-ghost btn-sm btn-icon"><XIcon/></button>
+              </div>
+            ))}
+            {showLinkForm?<div className="bg-subtle border border-line-soft rounded-lg p-3.5 mt-1">
+              <div className="mb-2.5"><label className="field-label">Label</label><input value={linkLabel} onChange={e=>setLinkLabel(e.target.value)} placeholder="e.g. PR #247, Figma..." className="field"/></div>
+              <div className="mb-3"><label className="field-label">URL</label><input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://..." className="field" onKeyDown={e=>{if(e.key==="Enter")addLink();}}/></div>
+              <div className="flex gap-2">
+                <button onClick={()=>setShowLinkForm(false)} className="btn btn-secondary btn-sm">Cancel</button>
+                <button onClick={addLink} disabled={!linkLabel.trim()||!linkUrl.trim()} className="btn btn-primary btn-sm">Add</button>
+              </div>
+            </div>
+            :<button onClick={()=>setShowLinkForm(true)} className="btn btn-secondary w-full mt-1 justify-start border-dashed"><PlusIcon/>Attach a link</button>}
+          </div>}
+        </div>
+        <div className="px-5 py-3 border-t border-line-soft flex gap-2 justify-end shrink-0">
+          {!isNew&&card&&<button onClick={async()=>{if(await confirmDialog({title:"Delete this card?",message:`"${card.title}" and its comments will be removed. This cannot be undone.`,confirmLabel:"Delete card",tone:"danger"}))onDelete(card.id);}} className="btn btn-danger mr-auto">Delete Card</button>}
+          <button onClick={onClose} className="btn btn-secondary">Cancel</button>
+          <button onClick={handleSave} disabled={!title.trim()} className="btn btn-primary">{isNew?"Add Card":"Save Card"}</button>
+        </div>
       </div>
     </div>
-  </div>);
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── Main KanbanTab ───────────────────────────────────────────────────────────
 export default function KanbanTab({token="",currentUser}:{token?:string;currentUser?:{uid:string;name:string;email:string;color?:string};}){
-  const me:Employee=currentUser?{id:currentUser.uid,name:currentUser.name||currentUser.email||"Admin",role:"Admin",color:currentUser.color??"#4F6FF0",email:currentUser.email||""}:FALLBACK_ME;
+  const me:Employee=currentUser?{id:currentUser.uid,name:currentUser.name||currentUser.email||"Admin",role:"Admin",color:currentUser.color??"#5b6cff",email:currentUser.email||""}:FALLBACK_ME;
 
   const [columns,      setColumns]      = useState<KanbanColumn[]>(JSON.parse(JSON.stringify(EMPTY_COLUMNS)));
   // Starts empty: the sample meetings looked like real ones. Meetings live
@@ -690,47 +870,47 @@ export default function KanbanTab({token="",currentUser}:{token?:string;currentU
   const handleMeetSave=(m:Meeting)=>{setMeetings(prev=>{const idx=prev.findIndex(x=>x.id===m.id);if(idx>=0){const n=[...prev];n[idx]=m;return n;}return[...prev,m];});setMeetModal(null);};
   const handleMeetDelete=(id:string)=>{setMeetings(prev=>prev.filter(m=>m.id!==id));setMeetModal(null);};
 
-  const toolbar=(<div style={{background:"#0a0a0a",borderBottom:"1px solid #1a1a1a",padding:"0 16px",height:48,display:"flex",alignItems:"center",gap:8,flexShrink:0,overflowX:"auto"}}>
-    <span style={{fontSize:14,fontWeight:700,color:"#ededed",letterSpacing:-0.2}}>Board</span>
-    <span style={{fontSize:10,fontWeight:700,background:"rgba(79,111,240,0.12)",color:"#4F6FF0",padding:"2px 7px",borderRadius:99,flexShrink:0}}>{totalCards}</span>
-    <div style={{width:1,height:18,background:"#1a1a1a",margin:"0 2px",flexShrink:0}}/>
-    <Tooltip text="Search cards by title"><div style={{position:"relative",flexShrink:0}}><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#555"}}>🔍</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{paddingLeft:24,paddingRight:8,height:30,borderRadius:7,border:"1px solid #2a2a2a",fontSize:12,color:"#ededed",width:120,outline:"none",fontFamily:"inherit",background:"#0a0a0a"}}/></div></Tooltip>
-    <Tooltip text="Filter cards by priority level"><Select value={filterPri} onChange={e=>setFilterPri(e.target.value as Priority|"all")} aria-label="Filter by priority" wrapperClassName="w-auto shrink-0" className="h-7.5 rounded-[7px] text-[11px] text-[#888] pl-2 pr-1.5 gap-1.5"><option value="all">Priority</option>{(["critical","high","medium","low"] as Priority[]).map(p=><option key={p} value={p}>{PRIORITY_META[p].label}</option>)}</Select></Tooltip>
-    <Tooltip text="Filter cards by label type"><Select value={filterLabel} onChange={e=>setFilterLabel(e.target.value as LabelKey|"all")} aria-label="Filter by label" wrapperClassName="w-auto shrink-0" className="h-7.5 rounded-[7px] text-[11px] text-[#888] pl-2 pr-1.5 gap-1.5"><option value="all">Label</option>{(Object.keys(LABEL_META) as LabelKey[]).map(l=><option key={l} value={l}>{LABEL_META[l].label}</option>)}</Select></Tooltip>
-    <Tooltip text="Show only cards assigned to you across all columns"><button onClick={()=>setFocusMe(f=>!f)} style={{height:30,borderRadius:7,border:`1px solid ${focusMe?"#4F6FF0":"#2a2a2a"}`,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"0 8px",background:focusMe?"rgba(79,111,240,0.12)":"#0a0a0a",color:focusMe?"#4F6FF0":"#888",flexShrink:0,display:"flex",alignItems:"center",gap:4}}><Avatar name={me.name} color={me.color} size={16}/>{!isMobile&&"My Cards"}</button></Tooltip>
-    <Tooltip text="Sort the To Do column by Priority Score (Value / Effort x 10). Highest value, lowest effort cards float to the top."><button onClick={()=>setSortByScore(s=>!s)} style={{height:30,borderRadius:7,border:`1px solid ${sortByScore?"#a855f7":"#2a2a2a"}`,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"0 8px",background:sortByScore?"rgba(168,85,247,0.1)":"#0a0a0a",color:sortByScore?"#a855f7":"#888",flexShrink:0}}>Score Sort</button></Tooltip>
-    {blockedCount>0&&<Tooltip text={`${blockedCount} card${blockedCount>1?"s are":" is"} currently blocked`}><span style={{fontSize:11,color:"#f44",fontWeight:700,flexShrink:0,cursor:"default"}}>Blocked: {blockedCount}</span></Tooltip>}
-    <div style={{flex:1}}/>
-    {!isMobile&&avgCycle!==null&&<Tooltip text="Average cycle time - how long cards typically spend from In Progress to Done"><span style={{fontSize:10.5,color:"#555",flexShrink:0,cursor:"default"}}>Avg cycle <b style={{color:"#ededed"}}>{avgCycle}h</b></span></Tooltip>}
+  const toolbar=(<div className="toolbar flex-nowrap overflow-x-auto bg-surface h-12 min-h-12 py-0 px-4 shrink-0">
+    <span className="section-title">Board</span>
+    <span className="badge badge-brand shrink-0">{totalCards}</span>
+    <div className="w-px h-4.5 bg-line mx-0.5 shrink-0"/>
+    <Tooltip text="Search cards by title"><div className="relative shrink-0"><SearchIcon/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" className="field field-sm pl-8 w-35"/></div></Tooltip>
+    <Tooltip text="Filter cards by priority level"><Select value={filterPri} onChange={e=>setFilterPri(e.target.value as Priority|"all")} aria-label="Filter by priority" wrapperClassName="w-auto shrink-0" className="h-7 rounded-[7px] text-[12px] text-fg-3 pl-2.5 pr-2 gap-1.5"><option value="all">Priority</option>{(["critical","high","medium","low"] as Priority[]).map(p=><option key={p} value={p}>{PRIORITY_META[p].label}</option>)}</Select></Tooltip>
+    <Tooltip text="Filter cards by label type"><Select value={filterLabel} onChange={e=>setFilterLabel(e.target.value as LabelKey|"all")} aria-label="Filter by label" wrapperClassName="w-auto shrink-0" className="h-7 rounded-[7px] text-[12px] text-fg-3 pl-2.5 pr-2 gap-1.5"><option value="all">Label</option>{(Object.keys(LABEL_META) as LabelKey[]).map(l=><option key={l} value={l}>{LABEL_META[l].label}</option>)}</Select></Tooltip>
+    <Tooltip text="Show only cards assigned to you across all columns"><button onClick={()=>setFocusMe(f=>!f)} className={`btn btn-sm btn-secondary shrink-0 ${focusMe?"btn-on":""}`}><Avatar name={me.name} color={me.color} size={16}/>{!isMobile&&"My Cards"}</button></Tooltip>
+    <Tooltip text="Sort the To Do column by Priority Score (Value / Effort x 10). Highest value, lowest effort cards float to the top."><button onClick={()=>setSortByScore(s=>!s)} className={`btn btn-sm btn-secondary shrink-0 ${sortByScore?"btn-on":""}`}>Score Sort</button></Tooltip>
+    {blockedCount>0&&<Tooltip text={`${blockedCount} card${blockedCount>1?"s are":" is"} currently blocked`}><span className="text-[12px] text-danger-fg font-semibold shrink-0 cursor-default">Blocked: {blockedCount}</span></Tooltip>}
+    <div className="flex-1"/>
+    {!isMobile&&avgCycle!==null&&<Tooltip text="Average cycle time - how long cards typically spend from In Progress to Done"><span className="text-[12px] text-fg-4 shrink-0 cursor-default">Avg cycle <b className="text-fg num">{avgCycle}h</b></span></Tooltip>}
 
-    {!isMobile&&<Tooltip text="Toggle 7-day burndown chart - cards completed per day this sprint"><button onClick={()=>setShowBurndown(s=>!s)} style={{height:30,borderRadius:7,border:"1px solid #2a2a2a",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"0 8px",background:showBurndown?"rgba(79,111,240,0.12)":"#0a0a0a",color:showBurndown?"#4F6FF0":"#888",flexShrink:0}}>Burndown</button></Tooltip>}
-    {!isMobile&&<Tooltip text="Launch fullscreen standup mode - shows your Done, In Progress, and Blocked cards for the daily standup"><button onClick={()=>setShowStandup(true)} style={{height:30,borderRadius:7,border:"1px solid #2a2a2a",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"0 8px",background:"#0a0a0a",color:"#888",flexShrink:0}}>Standup</button></Tooltip>}
-    <Tooltip text="Create a new card in the To Do column"><button onClick={()=>setCardModal({card:null,colId:columns[0]?.id??null,isNew:true})} style={{height:30,borderRadius:7,border:"none",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"0 12px",background:"linear-gradient(135deg,#4F6FF0,#7C4FE0)",color:"#fff",flexShrink:0}}>+ Card</button></Tooltip>
+    {!isMobile&&<Tooltip text="Toggle 7-day burndown chart - cards completed per day this sprint"><button onClick={()=>setShowBurndown(s=>!s)} className={`btn btn-sm btn-secondary shrink-0 ${showBurndown?"btn-on":""}`}>Burndown</button></Tooltip>}
+    {!isMobile&&<Tooltip text="Launch fullscreen standup mode - shows your Done, In Progress, and Blocked cards for the daily standup"><button onClick={()=>setShowStandup(true)} className="btn btn-sm btn-secondary shrink-0">Standup</button></Tooltip>}
+    <Tooltip text="Create a new card in the To Do column"><button onClick={()=>setCardModal({card:null,colId:columns[0]?.id??null,isNew:true})} className="btn btn-sm btn-primary shrink-0"><PlusIcon/>Card</button></Tooltip>
   </div>);
 
-  const burndownBar=showBurndown&&!isMobile&&(<div style={{background:"#0a0a0a",borderBottom:"1px solid #1a1a1a",padding:"8px 16px",display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
-    <span style={{fontSize:10,fontWeight:700,color:"#444",textTransform:"uppercase",letterSpacing:"0.05em"}}>7-Day Burndown</span>
+  const burndownBar=showBurndown&&!isMobile&&(<div className="bg-surface border-b border-line-soft px-4 py-2 flex items-center gap-4 shrink-0">
+    <span className="label">7-Day Burndown</span>
     <BurndownChart data={burndown}/>
-    <span style={{fontSize:11,color:"#555"}}>Completed: <b style={{color:"#ededed"}}>{burndown.reduce((a,d)=>a+d.completed,0)}</b></span>
-    <button onClick={()=>setShowBurndown(false)} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"#555",fontSize:16}}>✕</button>
+    <span className="text-[12px] text-fg-4">Completed: <b className="text-fg num">{burndown.reduce((a,d)=>a+d.completed,0)}</b></span>
+    <button onClick={()=>setShowBurndown(false)} aria-label="Hide burndown" className="btn btn-ghost btn-sm btn-icon ml-auto"><XIcon/></button>
   </div>);
 
-  const boardArea=(<div style={{flex:1,display:"flex",gap:isMobile?8:10,padding:isMobile?10:14,overflow:isMobile?"auto":"hidden",alignItems:isMobile?"flex-start":"stretch",minWidth:0,...(isMobile?{flexDirection:"column" as const,overflowX:"hidden",overflowY:"auto"}:{})}}>
+  const boardArea=(<div className={isMobile?"flex-1 flex flex-col gap-2 p-2.5 items-start min-w-0 overflow-x-hidden overflow-y-auto":"flex-1 flex gap-2.5 p-3.5 overflow-hidden items-stretch min-w-0"}>
     {filteredCols.map(col=>(
-      <div key={col.id} style={isMobile?{width:"100%",minWidth:0}:{display:"flex",flex:1,minWidth:0}}>
+      <div key={col.id} className={isMobile?"w-full min-w-0":"flex flex-1 min-w-0"}>
         <Column col={col} dragOverColId={dragOverColId} draggingCardId={dragCardId} admins={admins} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragLeave={onDragLeave} onAddCard={colId=>setCardModal({card:null,colId,isNew:true})} onEditCard={(card,colId)=>setCardModal({card,colId,isNew:false})}/>
       </div>
     ))}
   </div>);
 
-  const velocityBar=showVelocity&&!isMobile&&(<div style={{height:42,background:"#0a0a0a",borderTop:"1px solid #1a1a1a",display:"flex",alignItems:"center",gap:16,padding:"0 16px",flexShrink:0}}>
-    <span style={{fontSize:10,fontWeight:700,color:"#444",textTransform:"uppercase",letterSpacing:"0.05em"}}>Sprint Health</span>
-    {[{color:"#3ecf8e",label:"Done",val:doneCount},{color:"#f5a623",label:"In Progress",val:inProgCount},{color:"#f44",label:"Blocked",val:blockedCount}].map(({color,label,val})=>(
-      <div key={label} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#555"}}><div style={{width:8,height:8,borderRadius:2,background:color}}/>{label}:<b style={{color:label==="Blocked"&&val>0?"#f44":"#ededed"}}>{val}</b></div>
+  const velocityBar=showVelocity&&!isMobile&&(<div className="h-10.5 bg-surface border-t border-line-soft flex items-center gap-4 px-4 shrink-0">
+    <span className="label">Sprint Health</span>
+    {[{dot:"bg-success",label:"Done",val:doneCount},{dot:"bg-warning",label:"In Progress",val:inProgCount},{dot:"bg-danger",label:"Blocked",val:blockedCount}].map(({dot,label,val})=>(
+      <div key={label} className="flex items-center gap-1.5 text-[12px] text-fg-4"><div className={`w-2 h-2 rounded-sm ${dot}`}/>{label}:<b className={`num ${label==="Blocked"&&val>0?"text-danger-fg":"text-fg"}`}>{val}</b></div>
     ))}
-    <div style={{flex:1}}/>
-    <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11,color:"#555"}}>Completion<div style={{width:80,height:5,background:"#1a1a1a",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,#4F6FF0,#3ecf8e)",borderRadius:99,transition:"width 0.4s"}}/></div><b style={{color:"#ededed"}}>{pct}%</b></div>
-    <button onClick={()=>setShowVelocity(false)} style={{background:"none",border:"none",cursor:"pointer",color:"#444",fontSize:14}}>✕</button>
+    <div className="flex-1"/>
+    <div className="flex items-center gap-2 text-[12px] text-fg-4">Completion<div className="w-20 h-1.25 bg-raised-2 rounded-full overflow-hidden"><div className="h-full bg-brand rounded-full transition-[width] duration-400" style={{width:`${pct}%`}}/></div><b className="text-fg num">{pct}%</b></div>
+    <button onClick={()=>setShowVelocity(false)} aria-label="Hide sprint health" className="btn btn-ghost btn-sm btn-icon"><XIcon/></button>
   </div>);
 
   const modals=(<>
@@ -739,29 +919,27 @@ export default function KanbanTab({token="",currentUser}:{token?:string;currentU
     {showStandup&&<StandupMode columns={columns} admins={admins} me={me} onClose={()=>setShowStandup(false)}/>}
   </>);
 
-  if(isMobile)return(<div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden",background:"#000"}}>
-    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  if(isMobile)return(<div className="flex flex-col h-full overflow-hidden bg-canvas">
     {toolbar}
-    <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-      {mobileTab==="board"&&<div style={{flex:1,overflowY:"auto",background:"#000"}}>{boardArea}</div>}
+    <div className="flex-1 overflow-hidden flex flex-col">
+      {mobileTab==="board"&&<div className="flex-1 overflow-y-auto bg-canvas">{boardArea}</div>}
       {mobileTab==="calendar"&&<CalendarPanel cards={allCards} meetings={meetings} admins={admins} calMonth={calMonth} setCalMonth={setCalMonth} calSelected={calSelected} setCalSelected={setCalSelected} onSchedule={d=>setMeetModal({meeting:null,defaultDate:d})} onEditMeeting={m=>setMeetModal({meeting:m})} compact/>}
       {mobileTab==="meetings"&&<MeetingsPanel meetings={meetings} admins={admins} onSchedule={d=>setMeetModal({meeting:null,defaultDate:d})} onEdit={m=>setMeetModal({meeting:m})}/>}
-      {mobileTab==="standup"&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",background:"#000"}}><button onClick={()=>setShowStandup(true)} style={{padding:"14px 28px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#0F172A,#1E293B)",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>Standup Mode</button></div>}
+      {mobileTab==="standup"&&<div className="flex-1 flex items-center justify-center bg-canvas"><button onClick={()=>setShowStandup(true)} className="btn btn-primary btn-lg">Standup Mode</button></div>}
     </div>
-    <div style={{height:56,background:"#0a0a0a",borderTop:"1px solid #1a1a1a",display:"flex",alignItems:"stretch",flexShrink:0}}>
+    <div className="h-14 bg-surface border-t border-line flex items-stretch shrink-0">
       {([{id:"board" as MobileTab,label:"Board",icon:"▦"},{id:"calendar" as MobileTab,label:"Calendar",icon:"📅"},{id:"meetings" as MobileTab,label:"Meetings",icon:"📹"},{id:"standup" as MobileTab,label:"Standup",icon:"🏃"}]).map(t=>(
-        <button key={t.id} onClick={()=>setMobileTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:mobileTab===t.id?"#4F6FF0":"#555"}}>
-          <span style={{fontSize:18}}>{t.icon}</span><span style={{fontSize:10,fontWeight:mobileTab===t.id?700:500}}>{t.label}</span>
+        <button key={t.id} onClick={()=>setMobileTab(t.id)} className={`flex-1 flex flex-col items-center justify-center gap-0.5 bg-transparent border-0 cursor-pointer transition-colors ${mobileTab===t.id?"text-brand-fg":"text-fg-4"}`}>
+          <span className="text-[18px]">{t.icon}</span><span className={`text-[11px] ${mobileTab===t.id?"font-semibold":"font-medium"}`}>{t.label}</span>
         </button>
       ))}
     </div>
     {modals}
   </div>);
 
-  return(<div style={{display:"flex",width:"100%",height:"100%",overflow:"hidden",flex:1,background:"#000"}}>
-    {boardError&&<div role="alert" style={{position:"fixed",top:12,left:"50%",transform:"translateX(-50%)",zIndex:900,padding:"8px 14px",borderRadius:8,border:"1px solid rgba(255,68,68,0.3)",background:"#1a0a0a",color:"#f44",fontSize:12,fontWeight:600}}>{boardLoaded?boardError:`The board could not be loaded (${boardError}). Changes will not be saved until you refresh.`}</div>}
-    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#000",minWidth:0,minHeight:0}}>
+  return(<div className="flex w-full h-full overflow-hidden flex-1 bg-canvas">
+    {boardError&&<div role="alert" className="popover fixed top-3 left-1/2 -translate-x-1/2 z-900 px-3.5 py-2 rounded-lg! border-danger-line text-danger-fg text-[12px] font-semibold">{boardLoaded?boardError:`The board could not be loaded (${boardError}). Changes will not be saved until you refresh.`}</div>}
+    <div className="flex-1 flex flex-col overflow-hidden bg-canvas min-w-0 min-h-0">
       {toolbar}{burndownBar}{boardArea}{velocityBar}
     </div>
     <CalendarPanel cards={allCards} meetings={meetings} admins={admins} calMonth={calMonth} setCalMonth={setCalMonth} calSelected={calSelected} setCalSelected={setCalSelected} onSchedule={d=>setMeetModal({meeting:null,defaultDate:d})} onEditMeeting={m=>setMeetModal({meeting:m})}/>

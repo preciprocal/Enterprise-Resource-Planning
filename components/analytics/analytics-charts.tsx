@@ -14,8 +14,8 @@ import { LineChart as MuiLineChart } from "@mui/x-charts/LineChart";
 
 // ─── Shared design tokens ─────────────────────────────────────────────────────
 
-const AXIS  = "#9CA3AF";
-const GRID  = "#F3F4F6";
+const AXIS  = "var(--fg-4)";
+const GRID  = "var(--line-soft)";
 const FONT  = "'Inter',-apple-system,sans-serif";
 
 const TICK  = { fontSize: 10, fill: AXIS, fontFamily: FONT } as const;
@@ -29,7 +29,7 @@ const CHART_SX = {
     fontSize: 11,
     borderRadius: 6,
     boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
-    background: "rgba(17,24,39,0.95)",
+    background: "var(--raised)",
   },
   "& text": { fontFamily: `${FONT} !important` },
 } as const;
@@ -256,7 +256,7 @@ export function BubbleChart({
           />
           <text
             x={sx(p.x)} y={sy(p.y) - Math.max(4, p.r) - 4}
-            fontSize="9" textAnchor="middle" fill="#374151" fontWeight="500"
+            fontSize="9" textAnchor="middle" fill="var(--fg-2)" fontWeight="500"
           >{p.label}</text>
         </g>
       ))}
@@ -290,10 +290,10 @@ export function Waterfall({
 
   steps.forEach(s => {
     if (s.type === "start") {
-      bars.push({ base: 0, top: s.value, color: "#6B7280", label: s.label, value: s.value });
+      bars.push({ base: 0, top: s.value, color: "#9aa3b2", label: s.label, value: s.value });
       running = s.value;
     } else if (s.type === "end") {
-      bars.push({ base: 0, top: running, color: "#6B7280", label: s.label, value: running });
+      bars.push({ base: 0, top: running, color: "#9aa3b2", label: s.label, value: running });
     } else {
       const next = running + s.value;
       bars.push({
@@ -344,7 +344,7 @@ export function Waterfall({
         <line key={i}
           x1={sx(i) + barW / 2} x2={sx(i + 1) - barW / 2}
           y1={sy(b.top)} y2={sy(b.top)}
-          stroke="#D1D5DB" strokeWidth="1" strokeDasharray="2 2"
+          stroke="var(--line-hover)" strokeWidth="1" strokeDasharray="2 2"
         />
       ))}
       {/* bars */}
@@ -383,7 +383,7 @@ export function Waterfall({
 // ─── Sparkline — SVG polyline ─────────────────────────────────────────────────
 
 export function Sparkline({
-  data, color = "#6366F1", width = 80, height = 24,
+  data, color = "#5b6cff", width = 80, height = 24,
 }: {
   data:    number[];
   color?:  string;
@@ -414,28 +414,32 @@ export function Sparkline({
 
 // ─── HeatCell ─────────────────────────────────────────────────────────────────
 
+/** Retention heat scale, red → amber → green; also drawn as the legend in RetentionSub. */
+export const HEAT_STEPS: { bg: string; fg: string }[] = [
+  { bg: "var(--danger-soft)",                                  fg: "var(--danger-fg)"  },
+  { bg: "color-mix(in srgb, var(--danger) 24%, transparent)",  fg: "var(--danger-fg)"  },
+  { bg: "var(--warning-soft)",                                 fg: "var(--warning-fg)" },
+  { bg: "color-mix(in srgb, var(--warning) 28%, transparent)", fg: "var(--warning-fg)" },
+  { bg: "var(--success-soft)",                                 fg: "var(--success-fg)" },
+  { bg: "color-mix(in srgb, var(--success) 30%, transparent)", fg: "var(--success-fg)" },
+  { bg: "var(--success)",                                      fg: "#fff"              },
+];
+
 export function HeatCell({ value, max = 100 }: { value: number | null; max?: number }) {
   if (value === null) {
     return (
       <div
-        className="bg-gray-50 text-gray-300 text-[10px] flex items-center justify-center rounded"
+        className="bg-subtle text-fg-4 text-[11px] flex items-center justify-center rounded"
         style={{ height: 32 }}
       >—</div>
     );
   }
   const ratio = Math.min(1, value / max);
-  const bg =
-    value === 0 ? "#FEF2F2" :
-    value < 10  ? "#FEE2E2" :
-    value < 25  ? "#FEF3C7" :
-    value < 40  ? "#FDE68A" :
-    value < 55  ? "#A7F3D0" :
-    value < 70  ? "#6EE7B7" :
-                  "#10B981";
-  const text =
-    value < 25 ? "#7F1D1D" :
-    value < 55 ? "#78350F" :
-                 "#064E3B";
+  const step = HEAT_STEPS[
+    value === 0 ? 0 : value < 10 ? 1 : value < 25 ? 2 : value < 40 ? 3 : value < 55 ? 4 : value < 70 ? 5 : 6
+  ];
+  const bg = step.bg;
+  const text = step.fg;
   return (
     <div
       className="text-[11px] font-bold flex items-center justify-center rounded transition-colors"
@@ -464,7 +468,7 @@ interface BoxPlotProps {
 
 export function BoxPlot({ rows, height = 240 }: BoxPlotProps) {
   if (!rows.length) {
-    return <div className="text-xs text-gray-400 py-8 text-center">No data.</div>;
+    return <div className="text-xs text-fg-4 py-8 text-center">No data.</div>;
   }
   const W      = 600;
   const rowH   = 36;
@@ -485,7 +489,7 @@ export function BoxPlot({ rows, height = 240 }: BoxPlotProps) {
         const y = 24 + i * rowH;
         return (
           <g key={r.label}>
-            <text x={labelW - 8} y={y + 14} fontSize="11" textAnchor="end" fill="#374151" fontWeight="500">
+            <text x={labelW - 8} y={y + 14} fontSize="11" textAnchor="end" fill="var(--fg-2)" fontWeight="500">
               {r.label}{" "}
               <tspan fill={AXIS} fontWeight="400">({r.sample})</tspan>
             </text>
@@ -497,14 +501,14 @@ export function BoxPlot({ rows, height = 240 }: BoxPlotProps) {
             <rect
               x={sx(r.q1)} y={y + 4}
               width={sx(r.q3) - sx(r.q1)} height={20}
-              fill="#6366F1" fillOpacity="0.15"
-              stroke="#6366F1" strokeWidth="1" rx="2"
+              fill="#5b6cff" fillOpacity="0.15"
+              stroke="#5b6cff" strokeWidth="1" rx="2"
             />
             {/* median */}
             <line
               x1={sx(r.median)} x2={sx(r.median)}
               y1={y + 4} y2={y + 24}
-              stroke="#6366F1" strokeWidth="2"
+              stroke="#5b6cff" strokeWidth="2"
             />
           </g>
         );
