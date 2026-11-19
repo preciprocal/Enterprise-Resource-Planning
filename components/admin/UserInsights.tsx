@@ -8,6 +8,7 @@ import { ReactNode, useCallback, useEffect, useState } from "react";
 import type { User360 } from "@/lib/user-360";
 import { User, fmt, fmtFull, daysAgo } from "./admin-shared";
 import { Block, Empty, Stat, Table, Pill, Muted, dash, human, Primary } from "./ui-kit";
+import { ClickstreamView, ExtensionView, CareerToolsView, JobSearchExtras, ConnectionsView, BillingExtrasView, SourcesView } from "./UserPanels";
 
 // ─── Data hook ────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,7 @@ function signals(user: User, d: User360): { tone: "warn" | "good" | "info"; text
 const KIND_COLOR: Record<string, string> = {
   account: "var(--fg)", session: "var(--fg-4)", resume: "#5b6cff", interview: "#f59e0b", application: "#10b981", cover_letter: "#3b82f6",
   debrief: "#a855f7", support: "#3b82f6", feedback: "#a855f7", email: "var(--fg-3)", billing: "#10b981", risk: "#ef4444",
+  networking: "var(--info)", career: "var(--violet)", extension: "var(--brand)",
 };
 
 export function OverviewPanel({ user, d, loading, error, reload }: PanelProps) {
@@ -228,7 +230,7 @@ export function JobSearchPanel(p: PanelProps) {
               <Stat label="Best resume score" value={s.bestResumeScore ?? "—"} sub={`${s.resumes} resume${s.resumes === 1 ? "" : "s"}`} tone={scoreTone(s.bestResumeScore)} />
             </div>
 
-            {s.extensionJobs > 0 && (
+            {(s.extensionJobs > 0 || s.extensionInstalls > 0) && (
               <p className="text-[12px] text-fg-3 -mt-3">
                 Uses the Chrome extension · <span className="text-fg">{s.extensionJobs}</span> job{s.extensionJobs === 1 ? "" : "s"} saved with it
                 {s.extensionLastAt ? <> · last used <span title={fmtFull(s.extensionLastAt)}>{daysAgo(s.extensionLastAt)}</span></> : null}
@@ -294,6 +296,8 @@ export function JobSearchPanel(p: PanelProps) {
                 ]} />
               </Block>
             </div>
+
+            <JobSearchExtras d={d} />
 
             <Block title="Study plans & networking">
               <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-line-soft">
@@ -363,7 +367,9 @@ export function ActivityPanel(p: PanelProps) {
               ]} />
             </Block>
 
-            <Block title="Product usage" count={d.features.length ? `${d.features.length} areas` : undefined}>
+            <ClickstreamView d={d} />
+
+            <Block title="Usage by area" count={d.features.length ? `${d.features.length} areas · last 90 days` : undefined}>
               <Table rows={d.features} rowKey={f => f.feature} empty="No click analytics for this user yet" cols={[
                 { label: "Area", cell: f => <span className="text-fg-2 capitalize">{f.feature.replace(/[-_]/g, " ")}</span> },
                 { label: "Page views", cell: f => <span className="tabular-nums">{f.views}</span> },
@@ -526,6 +532,19 @@ export function SupportPanel(p: PanelProps) {
       )}
     </Guard>
   );
+}
+
+// ─── Panels rendered from UserPanels.tsx ──────────────────────────────────────
+
+export const ExtensionPanel   = (p: PanelProps) => <Guard {...p}>{d => <ExtensionView d={d} />}</Guard>;
+export const CareerToolsPanel = (p: PanelProps) => <Guard {...p}>{d => <CareerToolsView d={d} />}</Guard>;
+export const BillingExtrasPanel = (p: PanelProps) => <Guard {...p}>{d => <BillingExtrasView d={d} />}</Guard>;
+export function ConnectionsCard(p: PanelProps) {
+  if (p.error || !p.d) return null;
+  return <ConnectionsView d={p.d} />;
+}
+export function SourcesPanel(p: PanelProps & { onOpen?: (tab: string) => void }) {
+  return <Guard {...p}>{d => <SourcesView d={d} onOpen={p.onOpen} />}</Guard>;
 }
 
 // ─── About (read-only career profile, shown on the Profile tab) ───────────────

@@ -154,7 +154,7 @@ function summarisePacks(rows: PackRow[]): PackSummary {
 
 export async function loadUsers(sb: SupabaseClient) {
   const today = new Date().toISOString().slice(0, 10);
-  const [profiles, subs, counters, packs, metas, sessions, students, origins] = await Promise.all([
+  const [profiles, subs, counters, packs, metas, sessions, students, origins, extInstalls] = await Promise.all([
     fetchAll<ProfileRow>((a, b) => sb.from("profiles").select("user_id,name,email,provider,is_admin,created_at,updated_at,last_login,weekly_digest_opt_out,activation_email_opt_out,application_email_opt_out").range(a, b)),
     fetchAll<SubRow>((a, b) => sb.from("subscriptions").select("*").range(a, b)),
     fetchAll<Row>((a, b) => sb.from("usage_counters").select("*").gte("period_end", today).range(a, b)),
@@ -167,7 +167,18 @@ export async function loadUsers(sb: SupabaseClient) {
       .catch(() => [] as StudentRow[]),
     // Where each account came from (profiles.signup_attribution, Dashboard migration 0071).
     loadOrigins(sb).catch(() => new Map<string, Origin>()),
+    // Chrome extension installs (Dashboard migration 0072; missing until applied). Small: one row per browser.
+    fetchAll<{ user_id: string | null; last_seen_at: string; uninstalled_at: string | null }>((a, b) => sb.from("extension_installs")
+      .select("user_id,last_seen_at,uninstalled_at").not("user_id", "is", null).range(a, b)).catch(() => []),
   ]);
+  const extBy = new Map<string, { installs: number; active: number; lastSeenAt: string }>();
+  extInstalls.forEach(i => {
+    if (!i.user_id) return;
+    const v = extBy.get(i.user_id) ?? { installs: 0, active: 0, lastSeenAt: i.last_seen_at };
+    v.installs++; if (!i.uninstalled_at) v.active++;
+    if (i.last_seen_at > v.lastSeenAt) v.lastSeenAt = i.last_seen_at;
+    extBy.set(i.user_id, v);
+  });
   const studentBy = new Map(students.map(s => [s.user_id, s]));
 
   const subBy  = new Map(subs.map(s => [s.user_id, s]));
@@ -228,6 +239,7 @@ export async function loadUsers(sb: SupabaseClient) {
       packs: summarisePacks(packsBy.get(p.user_id) ?? []),
       student: studentInfo(studentBy.get(p.user_id), sub),
       origin: origins.get(p.user_id),
+      extension: extBy.get(p.user_id),
     };
   });
 }

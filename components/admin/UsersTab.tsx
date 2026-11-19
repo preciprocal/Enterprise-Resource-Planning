@@ -7,13 +7,13 @@ import {
   User, AnalyticsData, PLANS, USAGE_FIELDS, LIMITS,
   planColor, statusColor, fmtFull, daysAgo,
   Avatar, CodeRef, Spinner, HBar, StatusDot, StudentChip, Checkbox,
-  inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable, OriginBadge,
+  inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable, OriginBadge, ExtensionChip,
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel } from "./StripeTab";
 import { FollowUpPanel, EmailComposer, recipientFromUser } from "./FollowUp";
 import { BonusPanel } from "./BonusPanel";
 import { FEATURE_LABELS } from "@/lib/packs";
-import { useUser360, OverviewPanel, JobSearchPanel, ActivityPanel, SupportPanel, AboutCard } from "./UserInsights";
+import { useUser360, OverviewPanel, JobSearchPanel, ActivityPanel, SupportPanel, AboutCard, ExtensionPanel, CareerToolsPanel, BillingExtrasPanel, ConnectionsCard, SourcesPanel } from "./UserInsights";
 
 // student_verifications.verification_method values written by the Dashboard
 const STUDENT_METHOD_LABELS: Record<string, string> = {
@@ -58,6 +58,23 @@ export default function UsersTab({
   sortF, setSortF, sortD, setSortD, saveUser, saving, msg, token = "",
 }: Props) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [initialTab, setInitialTab] = useState<DetailTab | undefined>(undefined);
+
+  // Deep link from other pages: /?tab=users&user=<id>[&utab=extension]
+  const [deepLinked, setDeepLinked] = useState(false);
+  useEffect(() => {
+    if (deepLinked || !users.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("user");
+    void Promise.resolve().then(() => {
+      setDeepLinked(true);
+      if (!id) return;
+      const u = users.find(x => x.id === id);
+      const t = params.get("utab");
+      if (u) { setInitialTab(DETAIL_TABS.some(x => x.id === t) ? t as DetailTab : undefined); setSelectedUser(u); }
+      window.history.replaceState({}, "", window.location.pathname);
+    });
+  }, [users, deepLinked]);
   // Users ticked for a group email, by id.
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [composing, setComposing] = useState(false);
@@ -115,7 +132,8 @@ export default function UsersTab({
       <UserDetail
         allUsers={users}
         user={selectedUser}
-        onClose={() => setSelectedUser(null)}
+        initialTab={initialTab}
+        onClose={() => { setSelectedUser(null); setInitialTab(undefined); }}
         onUserUpdate={u => setSelectedUser(u)}
         saveUser={saveUser}
         saving={saving}
@@ -238,6 +256,7 @@ export default function UsersTab({
                           <span className="badge badge-success">Stripe</span>
                         )}
                         <StudentChip student={u.student} />
+                        <ExtensionChip ext={u.extension} />
                         {u.origin && <OriginBadge origin={u.origin} compact />}
                       </div>
                     </div>
@@ -314,6 +333,7 @@ export default function UsersTab({
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                             <span className="text-[14px] font-semibold text-fg truncate leading-tight shrink-0 max-w-full">{u.name ?? "Unknown"}</span>
                             <StudentChip student={u.student} compact className="shrink-0" />
+                            <ExtensionChip ext={u.extension} />
                             {(u.emailOptOuts?.length ?? 0) > 0 && (
                               <span title={`Turned off: ${u.emailOptOuts!.join(", ")}`}
                                 className="badge badge-warning shrink-0">
@@ -460,6 +480,24 @@ const DETAIL_TABS = [
     ),
   },
   {
+    id: "careertools",
+    label: "Career tools",
+    icon: (
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
+  {
+    id: "extension",
+    label: "Extension",
+    icon: (
+      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M20 12h-2V8a2 2 0 0 0-2-2h-4V4a2 2 0 1 0-4 0v2H4v4h1a2 2 0 1 1 0 4H4v6h6v-1a2 2 0 1 1 4 0v1h4v-4h2a2 2 0 1 0 0-4z"/>
+      </svg>
+    ),
+  },
+  {
     id: "activity",
     label: "Activity",
     icon: (
@@ -502,16 +540,16 @@ const DETAIL_TABS = [
 type DetailTab = typeof DETAIL_TABS[number]["id"];
 
 function UserDetail({
-  user: initialUser, onClose, onUserUpdate, saveUser, saving, msg, token = "", allUsers,
+  user: initialUser, onClose, onUserUpdate, saveUser, saving, msg, token = "", allUsers, initialTab,
 }: {
-  user: User; onClose: () => void; onUserUpdate?: (u: User) => void;
+  user: User; onClose: () => void; onUserUpdate?: (u: User) => void; initialTab?: DetailTab;
   saveUser: (u: User) => Promise<void>; saving: boolean; msg: string; token?: string;
   allUsers?: User[];
 }) {
   const isMobile = useIsMobile();
   const [user, setUser] = useState<User>(initialUser);
   const [edit, setEdit] = useState<User>(JSON.parse(JSON.stringify(initialUser)));
-  const [tab, setTab]   = useState<DetailTab>("overview");
+  const [tab, setTab]   = useState<DetailTab>(initialTab ?? "overview");
   const insights        = useUser360(initialUser.id, token);
   const panelProps      = { user, d: insights.data, loading: insights.loading, error: insights.error, reload: insights.reload, token };
   const [coupons, setCoupons]           = useState<StripeCoupon[]>([]);
@@ -756,6 +794,8 @@ function UserDetail({
           {tab === "jobsearch" && <JobSearchPanel {...panelProps} />}
           {tab === "activity"  && <ActivityPanel  {...panelProps} />}
           {tab === "support"   && <SupportPanel   {...panelProps} />}
+          {tab === "careertools" && <CareerToolsPanel {...panelProps} />}
+          {tab === "extension" && <ExtensionPanel {...panelProps} />}
 
           {/* ── Profile ── */}
           {tab === "profile" && (
@@ -836,6 +876,7 @@ function UserDetail({
 
           {/* Read-only career profile under the editable identity fields */}
           {tab === "profile" && <AboutCard {...panelProps} />}
+          {tab === "profile" && <ConnectionsCard {...panelProps} />}
 
           {/* ── Subscription ── */}
           {tab === "subscription" && (
@@ -935,6 +976,9 @@ function UserDetail({
                 ))}
               </Card>
 
+              {/* Credit transfers, group packs, feedback rewards */}
+              <BillingExtrasPanel {...panelProps} />
+
               {/* .edu student perk (student_verifications) */}
               <Card>
                 <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
@@ -1024,6 +1068,7 @@ function UserDetail({
           )}
 
           {/* ── Raw ── */}
+          {tab === "raw" && <SourcesPanel {...panelProps} onOpen={t => { if (DETAIL_TABS.some(x => x.id === t)) setTab(t as DetailTab); }} />}
           {tab === "raw" && (
             <Section
               title={<><code className="font-mono text-brand-fg text-[12px] normal-case">profiles/{user.id}</code><CodeRef k="erpData" /></>}

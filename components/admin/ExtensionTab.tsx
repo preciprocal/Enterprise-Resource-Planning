@@ -1,13 +1,15 @@
 // components/admin/ExtensionTab.tsx
 // Growth → Extension: who uses the Chrome extension, how much, and what each
 // person did with it. Data: /api/admin?action=extension (lib/extension-usage.ts).
-// An extension user is someone who saved at least one job through it; installs
-// and job analyses leave no trace server-side, so they can't be counted.
+// Job-based numbers: an extension user is someone who saved a job through it.
+// Install and usage numbers come from extension_installs / extension_events
+// (Dashboard migration 0072, extension 1.13+) and are hidden until that exists.
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { LineChart } from "./admin-shared";
-import { Block, Empty, Stat, human } from "./ui-kit";
+import { Block, Empty, Stat, Table, human, dash } from "./ui-kit";
+import { EXT_AUTOFILL_NOTE, EXT_TRACKING_NOTE, EXT_USE_EVENTS, extEventLabel, EXT_LIFECYCLE_EVENTS } from "@/lib/extension-events";
 
 // ─── Types / data ─────────────────────────────────────────────────────────────
 
@@ -25,7 +27,23 @@ interface Overview {
   statuses: { status: string; n: number }[];
   upsell: { shown: number; dismissed: number; clicked: number };
   users: ExtUser[];
+  telemetry: Telemetry;
 }
+interface Telemetry {
+  available: boolean; eventsCapped: boolean;
+  installs: { total: number; live: number; active7: number; active30: number; uninstalled: number; uninstallRatePct: number | null;
+    signedIn: number; anonymous: number; newInRange: number; uninstalledInRange: number };
+  versions: { version: string; installs: number; active30: number }[];
+  browsers: { name: string; n: number }[];
+  events: { event: string; n: number; users: number; failed: number }[];
+  usePlatforms: { platform: string; n: number; users: number; failed: number }[];
+  useHosts: { host: string; n: number; users: number; failed: number }[];
+  upsell: { shown: number; dismissed: number; clicked: number };
+  useTimes: { at: string; userId: string }[];
+  users: { id: string; name: string | null; email: string | null; plan: string; version: string | null; browser: string | null;
+    installs: number; uninstalled: number; installedAt: string | null; lastSeenAt: string; counts: Record<string, number>; total: number; jobsSaved: number }[];
+}
+const userHref = (id: string) => `/?tab=users&user=${encodeURIComponent(id)}&utab=extension`;
 interface Activity {
   jobs: { id: string; company: string | null; title: string | null; status: string | null; platform: string; url: string | null;
     savedAt: string; firstResponseAt: string | null; reachedInterviewAt: string | null }[];
@@ -118,6 +136,8 @@ export default function ExtensionTab({ token }: { token: string }) {
   const q = useAdmin<Overview>(`action=extension&days=${days}`, token);
   const d = q.data, t = d?.totals;
   const chart = useMemo(() => d ? series(d.saves, d.range.days) : null, [d]);
+  const useChart = useMemo(() => d?.telemetry?.available ? series(d.telemetry.useTimes, d.range.days) : null, [d]);
+  const tm = d?.telemetry;
   const rangeLabel = RANGES.find(r => r.v === days)?.l.toLowerCase() ?? "";
 
   return (
@@ -156,6 +176,9 @@ export default function ExtensionTab({ token }: { token: string }) {
               <Stat label="Reached interview" value={n(t.interviewsInRange)} sub={`${n(t.respondedInRange)} got a response`} tone={t.interviewsInRange ? "var(--success-fg)" : undefined} />
             </div>
 
+            {tm?.available ? <TelemetrySection tm={tm} chart={useChart} rangeLabel={rangeLabel} /> : <Note>{EXT_TRACKING_NOTE}</Note>}
+
+            <h2 className="section-title mt-2">Jobs saved through the extension</h2>
             <Block title={chart?.weekly ? "Jobs saved per week" : "Jobs saved per day"}>
               {chart && chart.labels.length > 1 && t.jobsInRange > 0 ? (
                 <div className="px-2 pt-2">
@@ -177,7 +200,7 @@ export default function ExtensionTab({ token }: { token: string }) {
               </Block>
             </div>
 
-            {(d.upsell.shown + d.upsell.clicked + d.upsell.dismissed) > 0 && (
+            {!tm?.available && (d.upsell.shown + d.upsell.clicked + d.upsell.dismissed) > 0 && (
               <Block title="Pro prompt in the extension">
                 <div className="px-4 py-3 text-[13px] text-fg-2">
                   Shown {n(d.upsell.shown)} · dismissed {n(d.upsell.dismissed)} · clicked <span className="text-success-fg">{n(d.upsell.clicked)}</span>
@@ -189,8 +212,8 @@ export default function ExtensionTab({ token }: { token: string }) {
             <UsersBlock users={d.users} token={token} />
 
             <Note>
-              <b className="text-fg-3 font-medium">How this is measured.</b>{" "}An extension user is anyone who saved at least one job through it.
-              The extension signs in with the user&apos;s normal session, so installing or connecting it isn&apos;t recorded, and neither are job analyses or auto-apply runs.
+              <b className="text-fg-3 font-medium">How this is measured.</b>{" "}Installs, versions and actions come from extension_installs and extension_events (extension 1.13 and later; older versions report actions without an install or version).
+              An install is active if it checked in within the period; anonymous installs haven&apos;t signed in yet. In the job section, an extension user is anyone who saved at least one job through it.
               Saves are recognised by the platform label the extension writes (LinkedIn, Greenhouse, Ashby, Workday…); a job typed into the tracker by hand with the exact same label would also count.
             </Note>
           </>)}
@@ -257,6 +280,7 @@ function UserActivity({ user, token }: { user: ExtUser; token: string }) {
     <div className="px-4 py-4 flex flex-col gap-3">
       <div className="text-[12px] text-fg-4">
         First used {when(user.firstUsedAt)} · last used {when(user.lastUsedAt)} · {n(user.jobs)} job{user.jobs === 1 ? "" : "s"} saved
+        <a href={userHref(user.id)} className="link ml-2 text-[12px]">Open user</a>
       </div>
       <ol className="relative border-l border-line ml-1.5 flex flex-col gap-3.5">
         {items.map((it, i) => (
@@ -289,5 +313,106 @@ function UserActivity({ user, token }: { user: ExtUser; token: string }) {
       </ol>
       {q.data.jobs.length >= 200 && <Note>Showing the 200 most recent saves.</Note>}
     </div>
+  );
+}
+
+// ─── Install and usage telemetry ──────────────────────────────────────────────
+
+function TelemetrySection({ tm, chart, rangeLabel }: { tm: Telemetry; chart: ReturnType<typeof series> | null; rangeLabel: string }) {
+  const i = tm.installs;
+  const use = tm.events.filter(e => !EXT_LIFECYCLE_EVENTS.has(e.event) && !e.event.startsWith("upsell_"));
+  const life = tm.events.filter(e => EXT_LIFECYCLE_EVENTS.has(e.event));
+  const useTotal = use.reduce((s, e) => s + e.n, 0);
+  const funnel = tm.upsell;
+  return (
+    <>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat label="Installed" value={n(i.live)} sub={`${n(i.total)} ever · ${n(i.newInRange)} new ${rangeLabel}`} />
+        <Stat label="Active installs" value={n(i.active7)} sub={`last 7 days · ${n(i.active30)} in 30 days`} />
+        <Stat label="Uninstalled" value={n(i.uninstalled)} sub={i.uninstallRatePct != null ? `${i.uninstallRatePct}% of installs · ${n(i.uninstalledInRange)} ${rangeLabel}` : "none"}
+          tone={i.uninstallRatePct != null && i.uninstallRatePct >= 30 ? "var(--warning-fg)" : undefined} />
+        <Stat label="Signed in" value={n(i.signedIn)} sub={`${n(i.anonymous)} anonymous install${i.anonymous === 1 ? "" : "s"}`} />
+      </div>
+
+      <Block title={chart?.weekly ? "Extension actions per week" : "Extension actions per day"} count={useTotal ? `${n(useTotal)} ${rangeLabel}` : undefined}>
+        {chart && chart.labels.length > 1 && useTotal > 0 ? (
+          <div className="px-2 pt-2">
+            <LineChart data={[chart.jobs, chart.users]} labels={chart.labels} h={200} area smooth={false} />
+            <div className="flex gap-4 px-3 pb-3 text-[11px] text-fg-4">
+              <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-brand rounded-full" />Actions</span>
+              <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-success rounded-full" />People / installs</span>
+            </div>
+          </div>
+        ) : <Empty>No extension actions {rangeLabel}</Empty>}
+      </Block>
+      {tm.eventsCapped && <Note>Only the 25,000 most recent events in this range are counted.</Note>}
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <Block title="What people use it for" count={use.length || undefined}>
+          <Bars items={use.map(e => ({ label: extEventLabel(e.event), value: e.n,
+            right: <>{n(e.n)} · {n(e.users)} user{e.users === 1 ? "" : "s"}{e.failed ? <span className="text-danger-fg"> · {n(e.failed)} failed</span> : null}</> }))} />
+        </Block>
+        <Block title="Pro prompt funnel">
+          {funnel.shown + funnel.dismissed + funnel.clicked === 0 ? <Empty>No Pro prompts {rangeLabel}</Empty> : (
+            <Bars items={[
+              { label: "Shown", value: funnel.shown, right: n(funnel.shown) },
+              { label: "Dismissed", value: funnel.dismissed, right: <>{n(funnel.dismissed)}{funnel.shown ? <span className="text-fg-4"> · {Math.round((100 * funnel.dismissed) / funnel.shown)}%</span> : null}</> },
+              { label: "Clicked", value: funnel.clicked, right: <span className="text-success-fg">{n(funnel.clicked)}{funnel.shown ? ` · ${Math.round((100 * funnel.clicked) / funnel.shown)}%` : ""}</span> },
+            ]} />
+          )}
+        </Block>
+      </div>
+      {use.some(e => e.event === "autofill") && <Note>{EXT_AUTOFILL_NOTE}</Note>}
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <Block title="Where they use it" count={tm.usePlatforms.length || undefined}>
+          <Bars items={tm.usePlatforms.slice(0, 12).map(p => ({ label: p.platform, value: p.n, right: <>{n(p.n)} · {n(p.users)} user{p.users === 1 ? "" : "s"}</> }))} />
+        </Block>
+        <Block title="Top sites" count={tm.useHosts.length || undefined}>
+          <Bars items={tm.useHosts.map(h => ({ label: h.host, value: h.n, right: <>{n(h.n)} · {n(h.users)} user{h.users === 1 ? "" : "s"}</> }))} />
+        </Block>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <Block title="Versions installed" count={tm.versions.length || undefined}>
+          <Bars items={tm.versions.map(v => ({ label: v.version === "Unknown" ? "Unknown" : `v${v.version}`, value: v.installs, right: <>{n(v.installs)} · {n(v.active30)} active</> }))} />
+        </Block>
+        <Block title="Browsers">
+          <Bars items={tm.browsers.slice(0, 8).map(b => ({ label: b.name, value: b.n, right: n(b.n) }))} />
+        </Block>
+        <Block title="Lifecycle">
+          <Bars items={life.map(e => ({ label: extEventLabel(e.event), value: e.n, right: <>{n(e.n)} · {n(e.users)}</> }))} />
+        </Block>
+      </div>
+
+      <TelemetryUsers users={tm.users} rangeLabel={rangeLabel} />
+    </>
+  );
+}
+
+type TeleUser = Telemetry["users"][number];
+
+function TelemetryUsers({ users, rangeLabel }: { users: TeleUser[]; rangeLabel: string }) {
+  const [search, setSearch] = useState("");
+  const list = users.filter(u => !search.trim() || `${u.name ?? ""} ${u.email ?? ""}`.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <Block title="People with the extension" count={users.length}
+      action={users.length > 5 ? (
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users…" aria-label="Search people with the extension" className="field field-sm w-44" />
+      ) : undefined}>
+      <Table rows={list} rowKey={u => u.id} limit={25} empty={users.length ? "No users match" : "No signed-in installs yet"} cols={[
+        { label: "User", cell: u => (
+          <div className="min-w-0">
+            <a href={userHref(u.id)} className="block text-[13px] text-fg-2 truncate max-w-[260px] hover:underline">{u.name ?? u.email ?? u.id.slice(0, 8)}</a>
+            <span className="block text-[12px] text-fg-4 truncate max-w-[260px]">{[u.email, human(u.plan)].filter(Boolean).join(" · ")}</span>
+          </div>
+        ) },
+        { label: "Version", cell: u => u.version ? <span className="num">{u.version}</span> : dash },
+        { label: "Installed", hide: "md", cell: u => u.installedAt ? day(u.installedAt) : dash },
+        { label: "Last used", cell: u => <span title={when(u.lastSeenAt)}>{ago(u.lastSeenAt)}{u.installs > 0 && u.uninstalled === u.installs ? <span className="text-fg-4"> · removed</span> : null}</span> },
+        ...EXT_USE_EVENTS.map(e => ({ label: extEventLabel(e).replace(" profile loaded", ""), hide: "lg" as const, cell: (u: TeleUser) => u.counts[e] ? <span className="num text-fg-2">{n(u.counts[e])}</span> : dash })),
+        { label: `Total ${rangeLabel}`, cell: (u: TeleUser) => <span className="num">{n(u.total)}</span> },
+      ]} />
+    </Block>
   );
 }

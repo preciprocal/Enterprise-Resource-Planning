@@ -49,6 +49,8 @@ export interface User {
   subscription?: Subscription; usage?: Usage; packs?: PackSummary; student?: StudentInfo;
   /** Where they came from at sign-up; absent for accounts created before it was recorded. */
   origin?: Origin;
+  /** Chrome extension installs (extension_installs); absent when none or not tracked yet. */
+  extension?: { installs: number; active: number; lastSeenAt: string };
   [key: string]: unknown;
 }
 // Mirrors Origin in lib/attribution.ts (server-only, so it can't be imported here).
@@ -864,6 +866,18 @@ export const CHANNEL_COLOR: Record<string, string> = {
 export const channelLabel = (c?: string) => CHANNEL_LABEL[c ?? "direct"] ?? (c ? c[0].toUpperCase() + c.slice(1) : "Direct");
 
 /** "Google · Search", tinted by channel. Shows "Not recorded" for accounts from before tracking. */
+/** Small "Extension" chip for the users list. */
+export function ExtensionChip({ ext }: { ext?: User["extension"] }) {
+  if (!ext) return null;
+  const on = ext.active > 0;
+  return (
+    <span className={`badge ${on ? "badge-brand" : "badge-neutral"} shrink-0`}
+      title={`${on ? `Chrome extension installed (${ext.active} browser${ext.active === 1 ? "" : "s"})` : "Chrome extension uninstalled"} · last seen ${daysAgo(ext.lastSeenAt)}`}>
+      {on ? "Extension" : "Ext. removed"}
+    </span>
+  );
+}
+
 export function OriginBadge({ origin, compact = false }: { origin?: Origin; compact?: boolean }) {
   if (!origin) return <span className="text-[12px] text-fg-5" title="Signed up before sources were recorded">Not recorded</span>;
   const label = origin.source === "Direct" || origin.source.toLowerCase() === channelLabel(origin.channel).toLowerCase()
