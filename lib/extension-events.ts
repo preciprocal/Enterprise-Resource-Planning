@@ -19,12 +19,12 @@ export const EXT_UPSELL_EVENTS = ["upsell_shown", "upsell_dismissed", "upsell_cl
 export const extEventLabel = (e: string) => EXT_EVENT_LABEL[e] ?? e.replace(/[-_]+/g, " ").replace(/^\w/, c => c.toUpperCase());
 
 /** autofill = the extension fetched the autofill profile (auto-apply route),
- *  not a confirmed form fill. Before 1.13.0 the LinkedIn banner also
+ *  not a confirmed form fill. Before 1.14.0 the LinkedIn banner also
  *  prefetched it on every job page, so older counts run high. */
-export const EXT_AUTOFILL_NOTE = "Autofill counts the times the extension loaded the autofill profile, not confirmed form fills. Before 1.13.0 the LinkedIn banner prefetched it on every job page, so counts from older versions run high.";
+export const EXT_AUTOFILL_NOTE = "Autofill counts the times the extension loaded the autofill profile, not confirmed form fills. Before 1.14.0 the LinkedIn banner prefetched it on every job page, so counts from older versions run high.";
 
 /** First version the telemetry ships in; shown while the tables are empty or missing. */
-export const EXT_TRACKING_NOTE = "Install and usage tracking starts with extension 1.13. Until then only jobs saved through the extension are visible.";
+export const EXT_TRACKING_NOTE = "Install and usage tracking starts with extension 1.14. Until then only jobs saved through the extension are visible.";
 
 /** "1.13.2" > "1.9.0" */
 export function compareVersions(a: string, b: string) {

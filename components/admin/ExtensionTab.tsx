@@ -3,7 +3,7 @@
 // person did with it. Data: /api/admin?action=extension (lib/extension-usage.ts).
 // Job-based numbers: an extension user is someone who saved a job through it.
 // Install and usage numbers come from extension_installs / extension_events
-// (Dashboard migration 0072, extension 1.13+) and are hidden until that exists.
+// (Dashboard migration 0072, extension 1.14+) and are hidden until that exists.
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
@@ -212,7 +212,7 @@ export default function ExtensionTab({ token }: { token: string }) {
             <UsersBlock users={d.users} token={token} />
 
             <Note>
-              <b className="text-fg-3 font-medium">How this is measured.</b>{" "}Installs, versions and actions come from extension_installs and extension_events (extension 1.13 and later; older versions report actions without an install or version).
+              <b className="text-fg-3 font-medium">How this is measured.</b>{" "}Installs, versions and actions come from extension_installs and extension_events (extension 1.14 and later; older versions report actions without an install or version).
               An install is active if it checked in within the period; anonymous installs haven&apos;t signed in yet. In the job section, an extension user is anyone who saved at least one job through it.
               Saves are recognised by the platform label the extension writes (LinkedIn, Greenhouse, Ashby, Workday…); a job typed into the tracker by hand with the exact same label would also count.
             </Note>

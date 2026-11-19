@@ -11,7 +11,7 @@
 // So an "extension user" here is someone who saved at least one job through it.
 //
 // ─── Install and usage telemetry (Dashboard migration 0072) ─────────────────
-// From extension 1.13 the Dashboard also writes:
+// From extension 1.14 the Dashboard also writes:
 //   extension_installs  one row per browser install (version, browser, last seen, uninstalled)
 //   extension_events    one row per thing the extension did (lib/extension-events.ts)
 // Until that migration is applied both tables are missing; every read below
