@@ -7,7 +7,7 @@ import {
   User, AnalyticsData, PLANS, USAGE_FIELDS, LIMITS,
   planColor, statusColor, fmtFull, daysAgo,
   Avatar, CodeRef, Spinner, HBar, StatusDot, StudentChip, Checkbox,
-  inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable,
+  inputCls, Select, useIsMobile, Card, CardTitle, FRow, SkeletonTable, OriginBadge,
 } from "./admin-shared";
 import { StripeCoupon, PlanEditorPanel, CouponPanel } from "./StripeTab";
 import { FollowUpPanel, EmailComposer, recipientFromUser } from "./FollowUp";
@@ -81,6 +81,7 @@ export default function UsersTab({
     { key: "plan",      label: "Plan"   },
     { key: "status",    label: "Status" },
     { key: "stripe",    label: "Stripe" },
+    { key: "source",    label: "Source" },
     { key: "createdAt", label: "Joined" },
   ] as const;
 
@@ -202,7 +203,7 @@ export default function UsersTab({
       {/* ── List ── */}
       <div className="flex-1 overflow-auto bg-canvas">
         {loading ? (
-          <SkeletonTable rows={8} cols={5} />
+          <SkeletonTable rows={8} cols={6} />
         ) : isMobile ? (
           /* Mobile cards */
           <div className="flex flex-col divide-y divide-line-soft">
@@ -237,6 +238,7 @@ export default function UsersTab({
                           <span className="badge badge-success">Stripe</span>
                         )}
                         <StudentChip student={u.student} />
+                        {u.origin && <OriginBadge origin={u.origin} compact />}
                       </div>
                     </div>
                     <svg className="text-fg-5 shrink-0 mt-1" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -253,11 +255,12 @@ export default function UsersTab({
           <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
             <colgroup>
               <col style={{ width: "44px" }} />
-              <col style={{ width: "37%" }} />
+              <col style={{ width: "31%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "13%" }} />
-              <col style={{ width: "15%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "18%" }} />
               <col style={{ width: "14%" }} />
-              <col style={{ width: "21%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-surface border-b border-line-soft">
@@ -352,6 +355,10 @@ export default function UsersTab({
                         <span className="text-[14px] text-fg-5">—</span>
                       )}
                     </td>
+                    {/* Source */}
+                    <td className="px-4 py-3.5">
+                      <OriginBadge origin={u.origin} compact />
+                    </td>
                     {/* Joined */}
                     <td className="px-4 py-3.5">
                       <span className="text-[13px] font-medium text-fg-4">{daysAgo(u.createdAt)}</span>
@@ -360,7 +367,7 @@ export default function UsersTab({
                 );
               })}
               {!filtered.length && (
-                <tr><td colSpan={6}><EmptyState search={search} /></td></tr>
+                <tr><td colSpan={7}><EmptyState search={search} /></td></tr>
               )}
             </tbody>
           </table>
@@ -599,6 +606,34 @@ function UserDetail({
             <div className="text-[13px] font-semibold text-fg-2 capitalize truncate">{value || <span className="text-fg-5">—</span>}</div>
           </div>
         ))}
+      </div>
+
+      {/* Where they came from */}
+      <div className="px-4 py-4 border-b border-line-soft">
+        <div className="label mb-2.5">Signed up from</div>
+        {user.origin ? (
+          <div className="bg-surface border border-line-soft rounded-lg overflow-hidden divide-y divide-line-soft">
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <span className="label">Source</span>
+              <OriginBadge origin={user.origin} />
+            </div>
+            {[
+              { label: "Campaign",   value: user.origin.campaign },
+              { label: "Medium",     value: user.origin.medium },
+              { label: "Referrer",   value: user.origin.referrerHost },
+              { label: "First page", value: user.origin.landing, mono: true },
+              { label: "Path",       value: user.origin.via === "site" ? "preciprocal.com → app" : "Straight to the app" },
+              { label: "First visit", value: fmtFull(user.origin.at) },
+            ].filter(r => r.value).map(({ label, value, mono }) => (
+              <div key={label} className="flex items-center justify-between gap-3 px-3 py-2">
+                <span className="label shrink-0">{label}</span>
+                <span className={`truncate text-right ${mono ? "font-mono text-[11px] text-fg-3" : "text-[12px] font-medium text-fg-3"}`} title={value}>{value}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-caption">Not recorded. This account was created before sign-up sources were tracked.</div>
+        )}
       </div>
 
       {/* Subscription summary */}

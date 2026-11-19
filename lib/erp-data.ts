@@ -3,12 +3,14 @@
 // camelCase User shape the ERP UI was built around (originally one Firestore
 // users/{uid} doc, now split across profiles / subscriptions / usage_counters).
 import "server-only";
+import { loadOrigins, type Origin } from "./attribution";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 // ─── Usage counters ───────────────────────────────────────────────────────────
 
 /** ERP usage key → usage_counters column. */
 export const USAGE_COLUMNS: Record<string, string> = {
+  applicationsUsed:          "applications_used",
   resumesUsed:               "resumes_used",
   coverLettersUsed:          "cover_letters_used",
   studyPlansUsed:            "study_plans_used",
@@ -152,7 +154,7 @@ function summarisePacks(rows: PackRow[]): PackSummary {
 
 export async function loadUsers(sb: SupabaseClient) {
   const today = new Date().toISOString().slice(0, 10);
-  const [profiles, subs, counters, packs, metas, sessions, students] = await Promise.all([
+  const [profiles, subs, counters, packs, metas, sessions, students, origins] = await Promise.all([
     fetchAll<ProfileRow>((a, b) => sb.from("profiles").select("user_id,name,email,provider,is_admin,created_at,updated_at,last_login,weekly_digest_opt_out,activation_email_opt_out,application_email_opt_out").range(a, b)),
     fetchAll<SubRow>((a, b) => sb.from("subscriptions").select("*").range(a, b)),
     fetchAll<Row>((a, b) => sb.from("usage_counters").select("*").gte("period_end", today).range(a, b)),
@@ -163,6 +165,8 @@ export async function loadUsers(sb: SupabaseClient) {
     fetchAll<StudentRow>((a, b) => sb.from("student_verifications")
       .select("user_id,edu_email,email_domain,verification_method,verified_at,edu_perk_redeemed,redeemed_at,attempts,created_at").range(a, b))
       .catch(() => [] as StudentRow[]),
+    // Where each account came from (profiles.signup_attribution, Dashboard migration 0071).
+    loadOrigins(sb).catch(() => new Map<string, Origin>()),
   ]);
   const studentBy = new Map(students.map(s => [s.user_id, s]));
 
@@ -223,6 +227,7 @@ export async function loadUsers(sb: SupabaseClient) {
       usage,
       packs: summarisePacks(packsBy.get(p.user_id) ?? []),
       student: studentInfo(studentBy.get(p.user_id), sub),
+      origin: origins.get(p.user_id),
     };
   });
 }

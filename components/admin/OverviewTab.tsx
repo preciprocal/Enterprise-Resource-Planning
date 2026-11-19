@@ -5,6 +5,7 @@ import {
   AnalyticsData, User, USAGE_FIELDS,
   MetricCard, HBar, Donut, BarChart, SL, Spinner,
   SkeletonMetricCard, useIsMobile, Select,
+  OriginBadge, CHANNEL_COLOR, channelLabel,
 } from "./admin-shared";
 import PacksPanel from "./PacksPanel";
 
@@ -209,6 +210,12 @@ export default function OverviewTab({ analytics, users, loading, token = "" }: P
           <MetricCard label="Dormant"       value={analytics.dormant}              sub="Zero usage" />
           <MetricCard label="Conversion"    value={`${analytics.conversionRate}%`} color="var(--success-fg)" sub="Free → paid" />
         </div>
+      </section>
+
+      {/* Acquisition */}
+      <section>
+        <SL>Where signups come from</SL>
+        <SignupSources users={users} />
       </section>
 
       {/* Trends */}
@@ -467,5 +474,95 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
       wrapperClassName="w-auto" className="h-8 rounded-lg text-[12px] font-medium text-fg-2">
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </Select>
+  );
+}
+
+// ─── Signup sources ───────────────────────────────────────────────────────────
+// Grouped from each user's sign-up origin (lib/attribution.ts). Accounts made
+// before origins were recorded are counted separately, not as "Direct".
+
+type SourceRange = "30" | "90" | "all";
+
+function SignupSources({ users }: { users: User[] }) {
+  const [range, setRange] = useState<SourceRange>("30");
+  const [now] = useState(() => Date.now());
+  const { rows, channels, tracked, untracked } = useMemo(() => {
+    const since = range === "all" ? 0 : now - Number(range) * 86_400_000;
+    const inRange = users.filter(u => u.createdAt && Date.parse(u.createdAt) >= since);
+    const withOrigin = inRange.filter(u => u.origin);
+    const bySource = new Map<string, { origin: NonNullable<User["origin"]>; signups: number; paid: number }>();
+    const byChannel = new Map<string, number>();
+    for (const u of withOrigin) {
+      const o = u.origin!;
+      const key = `${o.source} ${o.channel}`;
+      const r = bySource.get(key) ?? { origin: o, signups: 0, paid: 0 };
+      r.signups++;
+      if ((u.subscription?.plan ?? "free") !== "free") r.paid++;
+      bySource.set(key, r);
+      byChannel.set(o.channel, (byChannel.get(o.channel) ?? 0) + 1);
+    }
+    return {
+      rows: [...bySource.values()].sort((a, b) => b.signups - a.signups),
+      channels: [...byChannel.entries()].sort((a, b) => b[1] - a[1]),
+      tracked: withOrigin.length,
+      untracked: inRange.length - withOrigin.length,
+    };
+  }, [users, range, now]);
+
+  const seg = (
+    <div className="seg">
+      {([["30", "30 days"], ["90", "90 days"], ["all", "All time"]] as const).map(([v, l]) => (
+        <button key={v} onClick={() => setRange(v)} className={`seg-item ${range === v ? "seg-item-active" : ""}`}>{l}</button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-2">
+        <SectionCard title="Signups by source" action={seg} flush>
+          {rows.length === 0 ? (
+            <div className="empty">
+              {untracked > 0
+                ? `${untracked} signup${untracked === 1 ? "" : "s"} in this range, all from before sources were recorded.`
+                : "No signups in this range."}
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead><tr><th>Source</th><th className="text-right">Signups</th><th className="text-right">Paid</th><th className="text-right hidden sm:table-cell">Conversion</th></tr></thead>
+              <tbody>
+                {rows.slice(0, 12).map(r => (
+                  <tr key={`${r.origin.source}-${r.origin.channel}`}>
+                    <td><OriginBadge origin={r.origin} /></td>
+                    <td className="text-right num font-semibold text-fg!">{r.signups}</td>
+                    <td className="text-right num">{r.paid}</td>
+                    <td className="text-right num hidden sm:table-cell">{Math.round((r.paid / r.signups) * 100)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </SectionCard>
+      </div>
+      <SectionCard title="By channel">
+        <div className="flex flex-col gap-3">
+          {channels.map(([c, n]) => (
+            <div key={c}>
+              <div className="flex justify-between text-[13px] mb-1.5">
+                <span className="text-fg-2">{channelLabel(c)}</span>
+                <span className="num text-fg-3">{n} · {Math.round((n / tracked) * 100)}%</span>
+              </div>
+              <HBar pct={(n / tracked) * 100} color={CHANNEL_COLOR[c] ?? "#9aa3b2"} height={6} />
+            </div>
+          ))}
+          {!channels.length && <div className="text-caption">Nothing recorded yet.</div>}
+          {untracked > 0 && (
+            <div className="text-caption pt-2 border-t border-line-soft">
+              {untracked} older signup{untracked === 1 ? "" : "s"} in this range have no source recorded.
+            </div>
+          )}
+        </div>
+      </SectionCard>
+    </div>
   );
 }

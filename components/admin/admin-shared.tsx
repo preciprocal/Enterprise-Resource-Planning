@@ -23,7 +23,7 @@ export interface Subscription {
   [key: string]: unknown;
 }
 export interface Usage {
-  resumesUsed?: number; coverLettersUsed?: number; studyPlansUsed?: number;
+  applicationsUsed?: number; resumesUsed?: number; coverLettersUsed?: number; studyPlansUsed?: number;
   interviewsUsed?: number; interviewDebriefsUsed?: number; debriefAnalysesUsed?: number;
   linkedinOptimisationsUsed?: number; coldOutreachUsed?: number; findContactsUsed?: number;
   jobTrackerUsed?: number; jobAnalysesUsed?: number;
@@ -46,7 +46,16 @@ export interface User {
   lastContactedAt?: string; lastContactSubject?: string;
   /** Optional emails turned off, e.g. ["weekly digest", "coaching"]. */
   emailOptOuts?: string[];
-  subscription?: Subscription; usage?: Usage; packs?: PackSummary; student?: StudentInfo; [key: string]: unknown;
+  subscription?: Subscription; usage?: Usage; packs?: PackSummary; student?: StudentInfo;
+  /** Where they came from at sign-up; absent for accounts created before it was recorded. */
+  origin?: Origin;
+  [key: string]: unknown;
+}
+// Mirrors Origin in lib/attribution.ts (server-only, so it can't be imported here).
+export interface Origin {
+  source: string; channel: string; via: "site" | "app";
+  campaign?: string; medium?: string; referrerHost?: string; landing?: string;
+  visitorKey?: string; visitorPersistent?: boolean; at?: string;
 }
 
 const STUDENT_META: Record<StudentInfo["status"], { label: string; tw: string; title: string }> = {
@@ -123,21 +132,52 @@ export const PRICE_IDS_MAP: Record<string, { plan: string; billing: string; pric
 const PLAN_PRICES: Record<string, number> = { free: 0, pro: 9.99, premium: 24.99 };
 export function planMonthlyPrice(plan?: string): number { return PLAN_PRICES[plan ?? "free"] ?? 0; }
 
+// Monthly quotas — mirrors USAGE_LIMITS in the Dashboard's lib/config/usage-limits.ts. -1 = unlimited.
+// Pack credits (User.packs.balance) are spent only after these run out.
+// Journal entries and the job tracker are unlimited on every plan.
+export const LIMITS: Record<string, Record<string, number>> = {
+  free:       { applicationsUsed:1,  resumesUsed:2,  coverLettersUsed:2,  studyPlansUsed:1, interviewsUsed:1, interviewDebriefsUsed:-1, debriefAnalysesUsed:1, linkedinOptimisationsUsed:1, coldOutreachUsed:2,  findContactsUsed:2,  jobTrackerUsed:-1 },
+  pro:        { applicationsUsed:6,  resumesUsed:10, coverLettersUsed:10, studyPlansUsed:3, interviewsUsed:3, interviewDebriefsUsed:-1, debriefAnalysesUsed:2, linkedinOptimisationsUsed:3, coldOutreachUsed:10, findContactsUsed:10, jobTrackerUsed:-1 },
+  premium:    { applicationsUsed:12, resumesUsed:20, coverLettersUsed:20, studyPlansUsed:5, interviewsUsed:5, interviewDebriefsUsed:-1, debriefAnalysesUsed:4, linkedinOptimisationsUsed:5, coldOutreachUsed:20, findContactsUsed:20, jobTrackerUsed:-1 },
+  enterprise: { applicationsUsed:-1, resumesUsed:-1, coverLettersUsed:-1, studyPlansUsed:-1, interviewsUsed:-1, interviewDebriefsUsed:-1, debriefAnalysesUsed:-1, linkedinOptimisationsUsed:-1, coldOutreachUsed:-1, findContactsUsed:-1, jobTrackerUsed:-1 },
+};
+
+// Plan-card lines, built from LIMITS in the Dashboard's display order and wording
+// (lib/config/plan-features.ts) so the ERP can't advertise a different number.
+const FEATURE_ORDER: [string, string, string][] = [
+  ["applicationsUsed",          "tailored application",  "tailored applications"],
+  ["resumesUsed",               "resume analysis",       "resume analyses"],
+  ["coverLettersUsed",          "cover letter",          "cover letters"],
+  ["interviewsUsed",            "mock interview",        "mock interviews"],
+  ["studyPlansUsed",            "study plan",            "study plans"],
+  ["linkedinOptimisationsUsed", "LinkedIn optimisation", "LinkedIn optimisations"],
+  ["coldOutreachUsed",          "outreach message",      "outreach messages"],
+  ["findContactsUsed",          "contact search",        "contact searches"],
+  ["debriefAnalysesUsed",       "AI analysis of your real interviews", "AI analyses of your real interviews"],
+];
+function planFeatureLines(plan: string): string[] {
+  const l = LIMITS[plan];
+  return [
+    ...FEATURE_ORDER.map(([k, one, many]) => l[k] < 0 ? `Unlimited ${many}` : `${l[k]} ${l[k] === 1 ? one : many} / month`),
+    "Unlimited interview journal", "Unlimited job tracker",
+  ];
+}
+
 export const PLAN_FEATURES: Record<string, { features: string[]; price: string; annualPrice: string; tagline: string; cta: string; popular?: boolean; customPricing?: boolean; securityFeatures?: string[] }> = {
   free: {
     tagline: "Get started and feel the value.",
     price: "$0", annualPrice: "$0", cta: "Current plan",
-    features: ["3 resume analyses / month","5 cover letters / month","1 mock interview / month","2 study plans / month","2 LinkedIn optimisations / month","2 interview debriefs / month","3 cold outreach messages / month","3 find contacts / month","Job tracker (10 jobs)"],
+    features: planFeatureLines("free"),
   },
   pro: {
     tagline: "Everything an active job seeker needs.",
     price: "$9.99/mo", annualPrice: "—", cta: "Start Pro", popular: true,
-    features: ["20 resume analyses / month","30 cover letters / month","3 mock interviews / month","10 study plans / month","5 LinkedIn optimisations / month","5 interview debriefs / month","20 cold outreach messages / month","15 find contacts / month","Unlimited job tracker"],
+    features: planFeatureLines("pro"),
   },
   premium: {
     tagline: "For serious candidates.",
     price: "$24.99/mo", annualPrice: "—", cta: "Start Premium",
-    features: ["50 resume analyses / month","80 cover letters / month","5 mock interviews / month","25 study plans / month","15 LinkedIn optimisations / month","10 interview debriefs / month","60 cold outreach messages / month","50 find contacts / month","Unlimited job tracker"],
+    features: planFeatureLines("premium"),
   },
   enterprise: {
     tagline: "For teams, hiring pipelines & organisations.",
@@ -166,26 +206,18 @@ export const WEBHOOK_EVENTS = [
 export const PLANS = ["free", "pro", "premium", "enterprise"] as const;
 
 export const USAGE_FIELDS: { key: keyof Usage; label: string; color: string }[] = [
-  { key: "resumesUsed",               label: "Resumes",       color: "#5b6cff" },
+  { key: "applicationsUsed",          label: "Applications",  color: "#5b6cff" },
+  { key: "resumesUsed",               label: "Resumes",       color: "#3b82f6" },
   { key: "coverLettersUsed",          label: "Cover Letters", color: "#10b981" },
   { key: "studyPlansUsed",            label: "Study Plans",   color: "#50e3c2" },
   { key: "interviewsUsed",            label: "Interviews",    color: "#f59e0b" },
-  { key: "interviewDebriefsUsed",     label: "Debriefs",      color: "#a855f7" },
-  { key: "debriefAnalysesUsed",       label: "Debrief AI",    color: "#c084fc" },
+  { key: "interviewDebriefsUsed",     label: "Journal",       color: "#a855f7" },
+  { key: "debriefAnalysesUsed",       label: "Interview AI",  color: "#c084fc" },
   { key: "linkedinOptimisationsUsed", label: "LinkedIn",      color: "#38bdf8" },
   { key: "coldOutreachUsed",          label: "Cold Outreach", color: "#f472b6" },
   { key: "findContactsUsed",          label: "Find Contacts", color: "#2dd4bf" },
   { key: "jobTrackerUsed",            label: "Job Tracker",   color: "#fb923c" },
 ];
-
-// Monthly quotas — mirrors USAGE_LIMITS in the Dashboard's lib/config/usage-limits.ts. -1 = unlimited.
-// Pack credits (User.packs.balance) are spent only after these run out.
-export const LIMITS: Record<string, Record<string, number>> = {
-  free:       { resumesUsed:3,  coverLettersUsed:5,  studyPlansUsed:2,  interviewsUsed:1, interviewDebriefsUsed:2,  debriefAnalysesUsed:1,  linkedinOptimisationsUsed:2,  coldOutreachUsed:3,  findContactsUsed:3,  jobTrackerUsed:10 },
-  pro:        { resumesUsed:20, coverLettersUsed:30, studyPlansUsed:10, interviewsUsed:3, interviewDebriefsUsed:5,  debriefAnalysesUsed:4,  linkedinOptimisationsUsed:5,  coldOutreachUsed:20, findContactsUsed:15, jobTrackerUsed:-1 },
-  premium:    { resumesUsed:50, coverLettersUsed:80, studyPlansUsed:25, interviewsUsed:5, interviewDebriefsUsed:10, debriefAnalysesUsed:12, linkedinOptimisationsUsed:15, coldOutreachUsed:60, findContactsUsed:50, jobTrackerUsed:-1 },
-  enterprise: { resumesUsed:-1, coverLettersUsed:-1, studyPlansUsed:-1, interviewsUsed:-1, interviewDebriefsUsed:-1, debriefAnalysesUsed:-1, linkedinOptimisationsUsed:-1, coldOutreachUsed:-1, findContactsUsed:-1, jobTrackerUsed:-1 },
-};
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -812,4 +844,33 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 
 export function CardTitle({ children }: { children: ReactNode }) {
   return <div className="section-title mb-4">{children}</div>;
+}
+
+// ─── Origin (where a user came from) ──────────────────────────────────────────
+
+export const CHANNEL_LABEL: Record<string, string> = {
+  organic: "Search", paid: "Paid", social: "Social", ai: "AI assistant", email: "Email",
+  referral: "Referral", campaign: "Campaign", affiliate: "Affiliate", direct: "Direct",
+};
+const CHANNEL_TONE: Record<string, string> = {
+  organic: "badge-success", paid: "badge-warning", social: "badge-info", ai: "badge-violet",
+  email: "badge-brand", campaign: "badge-brand", affiliate: "badge-warning", referral: "badge-neutral", direct: "badge-neutral",
+};
+/** Series colour per channel, for charts and bars. */
+export const CHANNEL_COLOR: Record<string, string> = {
+  organic: "#10b981", paid: "#f59e0b", social: "#3b82f6", ai: "#a855f7", email: "#5b6cff",
+  campaign: "#5b6cff", affiliate: "#f59e0b", referral: "#9aa3b2", direct: "#6b7486",
+};
+export const channelLabel = (c?: string) => CHANNEL_LABEL[c ?? "direct"] ?? (c ? c[0].toUpperCase() + c.slice(1) : "Direct");
+
+/** "Google · Search", tinted by channel. Shows "Not recorded" for accounts from before tracking. */
+export function OriginBadge({ origin, compact = false }: { origin?: Origin; compact?: boolean }) {
+  if (!origin) return <span className="text-[12px] text-fg-5" title="Signed up before sources were recorded">Not recorded</span>;
+  const label = origin.source === "Direct" || origin.source.toLowerCase() === channelLabel(origin.channel).toLowerCase()
+    ? channelLabel(origin.channel)
+    : compact ? origin.source : `${origin.source} · ${channelLabel(origin.channel)}`;
+  const title = [`${origin.source} (${channelLabel(origin.channel)})`, origin.campaign && `Campaign: ${origin.campaign}`,
+    origin.landing && `First page: ${origin.landing}`, origin.via === "site" ? "Came through preciprocal.com" : "Went straight to the app"]
+    .filter(Boolean).join("\n");
+  return <span className={`badge ${CHANNEL_TONE[origin.channel] ?? "badge-neutral"} max-w-[180px]`} title={title}><span className="truncate">{label}</span></span>;
 }

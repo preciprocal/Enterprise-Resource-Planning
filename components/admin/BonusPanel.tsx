@@ -19,7 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 import { User, inputCls, fmtFull } from "./admin-shared";
 import { Block, Empty } from "./ui-kit";
 import { confirmDialog } from "@/components/ui/dialog-host";
-import { PACKS, PACK_KEYS, FEATURE_LABELS, STANDALONE_KEY, STANDALONE_BASE, STANDALONE_MAX, type PackKey } from "@/lib/packs";
+import { PACKS, SINGLE_PACK_KEYS, FEATURE_LABELS, STANDALONE_KEY, STANDALONE_BASE, STANDALONE_MAX, type PackKey } from "@/lib/packs";
 
 const PRESETS = [
   { id: "low", label: "Low", pct: 25 },
@@ -137,7 +137,7 @@ export function BonusPanel({ user, token = "" }: { user: User; token?: string })
           <div>
             <span className={L}>Based on</span>
             <div className="flex flex-wrap gap-1.5">
-              {([...PACK_KEYS, STANDALONE_KEY] as Source[]).map(k => (
+              {([...SINGLE_PACK_KEYS, STANDALONE_KEY] as Source[]).map(k => (
                 <button key={k} onClick={() => choosePack(k)}
                   className={`btn btn-secondary ${k === STANDALONE_KEY ? "ml-1.5 " : ""}${packKey === k ? "btn-on" : ""}`}>
                   {k === STANDALONE_KEY ? "Standalone (any feature)" : PACKS[k].name}
